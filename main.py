@@ -190,8 +190,15 @@ async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.callback_query.answer("Operation cancel kar diya gaya hai.")
         try:
-            await update.callback_query.edit_message_text("Operation cancel kar diya gaya hai. Aap /start se shuru kar sakte hain.")
-        except Exception:
+            # Check karo ki message photo hai ya text
+            if update.callback_query.message.photo:
+                # Agar photo hai (like Poster), toh text edit nahi kar sakte, naya message bhejo
+                await context.bot.send_message(chat_id=user_id, text="Operation cancel kar diya gaya hai. Aap /start se shuru kar sakte hain.")
+                await update.callback_query.message.delete()
+            else:
+                await update.callback_query.edit_message_text("Operation cancel kar diya gaya hai. Aap /start se shuru kar sakte hain.")
+        except Exception as e:
+            logger.warning(f"Cancel me error: {e}")
             pass 
             
     if update.message and update.message.text and update.message.text.startswith('/'):
@@ -705,6 +712,9 @@ async def post_gen_final_episode(update: Update, context: ContextTypes.DEFAULT_T
 async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     try:
+        # NAYA: Bot username zaroori hai (Donate ke liye)
+        bot_username = (await context.bot.get_me()).username
+        
         config = await get_config()
         anime_name = context.user_data['anime_name']
         season_name = context.user_data.get('season_name')
@@ -723,10 +733,13 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         
         links = config.get('links', {})
         
-        # NAYA: Callback data (dl_)
+        # NAYA: Download ke liye Callback data
         dl_callback_data = f"dl_{anime_name}"
         if season_name: dl_callback_data += f"__{season_name}" 
         if ep_num: dl_callback_data += f"__{ep_num}"
+        
+        # NAYA: Donate ke liye URL (Redirect)
+        donate_url = f"https://t.me/{bot_username}?start=donate" 
         
         backup_url = links.get('backup')
         if not backup_url or not backup_url.startswith(("http", "t.me")):
@@ -737,7 +750,7 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
             support_url = "https://t.me/"
             
         btn_backup = InlineKeyboardButton("Backup", url=backup_url)
-        btn_donate = InlineKeyboardButton("Donate", callback_data="user_show_donate_channel") # NAYA: Callback
+        btn_donate = InlineKeyboardButton("Donate", url=donate_url) # NAYA: URL
         btn_support = InlineKeyboardButton("Support", url=support_url)
         
         btn_download = InlineKeyboardButton("Download", callback_data=dl_callback_data) # NAYA: Callback
@@ -1166,16 +1179,20 @@ async def bot_messages_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text += f"**Warning:** `{messages.get('file_warning', 'N/A')}`"
     
     if query: 
-        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        if query.message.photo:
+            await query.message.delete()
+            await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        else:
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
     else: 
         await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
     
 # --- User Handlers ---
 
-# NAYA: Deep Link (`/start` command) ab zaroori nahi hai download ke liye
-# Lekin Donate ke liye zaroori hai agar post mein URL button hai
+# NAYA: Yeh function ab sirf "Donate" URL se /start ko handle karega
 async def handle_deep_link_donate(user: User, context: ContextTypes.DEFAULT_TYPE):
     """Deep link se /start=donate ko handle karega"""
+    logger.info(f"User {user.id} ne Donate deep link use kiya.")
     try:
         config = await get_config()
         qr_id = config.get('donate_qr_id')
@@ -1225,7 +1242,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if payload == "donate":
             await handle_deep_link_donate(user, context)
             
-        return 
+        return # Deep link ke baad menu nahi dikhana
     
     if await is_admin(user_id):
         logger.info("Admin detected. Admin panel dikha raha hoon.")
@@ -1297,10 +1314,9 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from_
         await update.message.reply_text(menu_text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
-# NAYA: Yeh function ab 'Donate' (menu se) aur 'Donate' (channel se) dono ko handle karega
-async def user_show_donate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def user_show_donate_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/menu se Donate button ko handle karega (DM bhejega)"""
     query = update.callback_query
-    from_channel = query.data == "user_show_donate_channel"
     
     config = await get_config()
     qr_id = config.get('donate_qr_id')
@@ -1312,30 +1328,22 @@ async def user_show_donate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "❤️ **Support Us!**\n\nAgar aapko hamara kaam pasand aata hai, toh aap humein support kar sakte hain."
     
     try:
-        if from_channel:
-            # Channel se click hua -> Sirf DM bhejo aur alert dikhao
-            await context.bot.send_photo(chat_id=query.from_user.id, photo=qr_id, caption=text, parse_mode='Markdown')
-            await query.answer("✅ Donation info aapke DM (private chat) mein bhej di gayi hai!", show_alert=True)
-        else:
-            # /menu se click hua -> DM bhejo aur menu ko replace karo
-            keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data="user_back_menu")]]
-            await query.message.reply_photo(
-                photo=qr_id,
-                caption=text,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='Markdown'
-            )
-            await query.message.delete() # Purana /menu delete karo
-            await query.answer()
+        # /menu se click hua -> DM bhejo aur menu ko replace karo
+        keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data="user_back_menu")]]
+        await query.message.reply_photo(
+            photo=qr_id,
+            caption=text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+        await query.message.delete() # Purana /menu delete karo
+        await query.answer()
 
         context.job_queue.run_once(send_donate_thank_you, 60, chat_id=query.from_user.id)
 
     except Exception as e:
         logger.error(f"Donate QR bhejte waqt error: {e}")
-        if "blocked" in str(e):
-            await query.answer("❌ Error! Bot ko DM mein /start karein.", show_alert=True)
-        else:
-            await query.answer("❌ Error! Dobara try karein.", show_alert=True)
+        await query.answer("❌ Error! Dobara try karein.", show_alert=True)
 
 
 # --- Admin Panel ---
@@ -1372,16 +1380,16 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
     admin_menu_text = f"Salaam, Admin Boss! 👑\nAapka control panel taiyyar hai."
     
     if from_callback:
+        query = update.callback_query
         try:
-            # Agar purana message photo tha, toh usse delete karke naya bhejo
             if query.message.photo:
                 await query.message.delete()
                 await query.message.reply_text(admin_menu_text, reply_markup=reply_markup, parse_mode='Markdown')
             else:
-                await update.callback_query.edit_message_text(admin_menu_text, reply_markup=reply_markup, parse_mode='Markdown')
+                await query.edit_message_text(admin_menu_text, reply_markup=reply_markup, parse_mode='Markdown')
         except Exception as e:
             logger.warning(f"Admin menu edit nahi kar paya (shayad message same tha): {e}")
-            await update.callback_query.answer()
+            await query.answer()
     else:
         await update.message.reply_text(admin_menu_text, reply_markup=reply_markup, parse_mode='Markdown')
 
@@ -1430,10 +1438,14 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             return
             
         # Step 2: User Subscribed Hai
+        
         is_in_dm = query.message.chat.type == 'private'
+        
+        # Agar channel se click kiya hai, toh "Check DM" alert dikhao
         if not is_in_dm:
             await query.answer("✅ Check your DM (private chat) with me!", show_alert=True)
         else:
+            # Agar DM mein pehle se hai (button click), toh sirf acknowledge karo
             await query.answer() 
         
         parts = query.data.split('__')
@@ -1460,6 +1472,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                     msg_template = config.get("messages", {}).get("file_warning")
                     caption += f"\n\n{msg_template.replace('{minutes}', str(delete_minutes))}"
                     
+                    # Purana message (jo Poster wala tha) delete karo
                     await query.message.delete()
                     
                     sent_message = await context.bot.send_video(
@@ -1498,6 +1511,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                 keyboard.append([InlineKeyboardButton(q, callback_data=cb_data)])
             keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data=f"dl_{anime_name}__{season_name}")])
             
+            # DM mein Poster message ko Edit karo
             await query.edit_message_caption(
                 caption=f"**{anime_name}** | **Season {season_name}** | **Episode {ep_num}**\n\nQuality select karein:",
                 reply_markup=InlineKeyboardMarkup(keyboard),
@@ -1518,6 +1532,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                 keyboard.append([InlineKeyboardButton(f"Episode {ep}", callback_data=cb_data)])
             keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data=f"dl_{anime_name}")])
             
+            # DM mein Poster message ko Edit karo
             await query.edit_message_caption(
                 caption=f"**{anime_name}** | **Season {season_name}**\n\nEpisode select karein:",
                 reply_markup=InlineKeyboardMarkup(keyboard),
@@ -1526,25 +1541,28 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             return
             
         # Case 1: Sirf Anime click hua hai (Channel se) -> Season Bhejo
-        seasons = anime_doc.get("seasons", {})
-        if not seasons:
-            await context.bot.send_message(user_id, "❌ Error: Is anime ke liye seasons nahi mile.")
-            return
-        keyboard = []
-        sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
-        for s in sorted_seasons:
-            cb_data = f"dl_{anime_name}__{s}"
-            keyboard.append([InlineKeyboardButton(f"Season {s}", callback_data=cb_data)])
-        
-        keyboard.append([InlineKeyboardButton("⬅️ Back to Bot Menu", callback_data="user_back_menu")])
-        
-        await context.bot.send_photo(
-            chat_id=user_id,
-            photo=anime_doc['poster_id'],
-            caption=f"**{anime_name}**\n\nSeason select karein:",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
+        # Yeh tabhi run hoga jab user channel mein click karega
+        if not is_in_dm:
+            seasons = anime_doc.get("seasons", {})
+            if not seasons:
+                await context.bot.send_message(user_id, "❌ Error: Is anime ke liye seasons nahi mile.")
+                return
+            keyboard = []
+            sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+            for s in sorted_seasons:
+                cb_data = f"dl_{anime_name}__{s}"
+                keyboard.append([InlineKeyboardButton(f"Season {s}", callback_data=cb_data)])
+            
+            keyboard.append([InlineKeyboardButton("⬅️ Back to Bot Menu", callback_data="user_back_menu")])
+            
+            # NAYA: Poster ke saath naya message bhejo
+            await context.bot.send_photo(
+                chat_id=user_id,
+                photo=anime_doc['poster_id'],
+                caption=f"**{anime_name}**\n\nSeason select karein:",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
         return
 
     except Exception as e:
@@ -1675,9 +1693,9 @@ def main():
     application.add_handler(CallbackQueryHandler(user_subscribe_start, pattern="^user_subscribe$"))
     application.add_handler(CallbackQueryHandler(admin_reject_user, pattern="^admin_reject_"))
     
-    # NAYA: Dono button (menu aur channel) ek hi function use karenge
-    application.add_handler(CallbackQueryHandler(user_show_donate, pattern="^user_show_donate_menu$"))
-    application.add_handler(CallbackQueryHandler(user_show_donate, pattern="^user_show_donate_channel$"))
+    # NAYA: Donate button (menu se)
+    application.add_handler(CallbackQueryHandler(user_show_donate_menu, pattern="^user_show_donate_menu$"))
+    # NAYA: Donate button (channel se) - Iski zaroorat nahi, yeh 'start' command handle karega
     
     # NAYA: Download handler (channel + DM)
     application.add_handler(CallbackQueryHandler(download_button_handler, pattern="^dl_"))
