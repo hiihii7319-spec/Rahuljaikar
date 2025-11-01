@@ -170,45 +170,67 @@ async def send_donate_thank_you(context: ContextTypes.DEFAULT_TYPE):
 (M_GET_DONATE_THANKS, M_GET_SUB_PENDING, M_GET_SUB_APPROVED, M_GET_SUB_REJECTED, M_GET_FILE_WARNING) = range(31, 36)
 (CS_GET_DELETE_TIME,) = range(36, 37)
 
-# --- Common Conversation Fallbacks ---
+# --- Common Conversation Fallbacks (NAYA GLOBAL CANCEL FIX) ---
 async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     logger.info(f"User {user_id} ne conversation cancel/reset kiya.")
     
     current_state = context.user_data.get(ConversationHandler.STATE)
     if not current_state:
+        # User conversation me nahi tha, bas /cancel likha
         if update.message:
             await update.message.reply_text("Aap kisi active operation mein nahi hain.")
         else:
             await update.callback_query.answer("Aap kisi active operation mein nahi hain.", show_alert=True)
-        return ConversationHandler.END
+        return ConversationHandler.END # Conversation me nahi tha, bas end karo
 
+    # User conversation me tha, data clear karo
     context.user_data.clear() 
     
+    cancel_text = "Operation cancel kar diya gaya hai. Menu dikha raha hoon..."
+    is_command_cancel = False # Flag to check if /cancel was typed
+    
     if update.message:
-        await update.message.reply_text("Operation cancel kar diya gaya hai. Aap /start se shuru kar sakte hain.")
+        # Agar /cancel, /start etc. type kiya
+        await update.message.reply_text(cancel_text)
+        if update.message.text == '/cancel':
+            is_command_cancel = True
     else:
-        await update.callback_query.answer("Operation cancel kar diya gaya hai.")
+        # Agar button dabaya (jaise Back button)
+        query = update.callback_query
+        await query.answer("Operation cancel kar diya gaya hai.")
         try:
             # Check karo ki message photo hai ya text
-            if update.callback_query.message.photo:
-                # Agar photo hai (like Poster), toh text edit nahi kar sakte, naya message bhejo
-                await context.bot.send_message(chat_id=user_id, text="Operation cancel kar diya gaya hai. Aap /start se shuru kar sakte hain.")
-                await update.callback_query.message.delete()
+            if query.message.photo:
+                # Agar photo hai (like Poster/QR), toh text edit nahi kar sakte, naya message bhejo
+                await query.message.delete()
+                await context.bot.send_message(chat_id=user_id, text=cancel_text)
             else:
-                await update.callback_query.edit_message_text("Operation cancel kar diya gaya hai. Aap /start se shuru kar sakte hain.")
+                await query.edit_message_text(cancel_text)
         except Exception as e:
-            logger.warning(f"Cancel me error: {e}")
-            pass 
+            logger.warning(f"Cancel me edit nahi kar paya: {e}")
+            try:
+                # Failsafe
+                await context.bot.send_message(chat_id=user_id, text=cancel_text)
+            except Exception: pass
             
-    if update.message and update.message.text and update.message.text.startswith('/'):
-        await asyncio.sleep(0.1)
-        if update.message.text == '/start':
-            await start_command(update, context)
-        elif update.message.text == '/menu':
-            await menu_command(update, context)
-        elif update.message.text == '/admin':
-            await admin_command(update, context)
+    # --- YEH HAI NAYA FIX ---
+    # Conversation end karne ke baad, check karo user admin hai ya nahi
+    await asyncio.sleep(0.1) # Delay for ConversationHandler.END to process
+    
+    is_admin_user = await is_admin(user_id)
+    
+    # NAYA FIX: Agar user ne /cancel type kiya hai, toh use manually menu dikhao
+    if is_command_cancel:
+        if is_admin_user:
+            await admin_command(update, context, from_callback=False) # from_callback=False kyunki yeh ek message se trigger hua
+        else:
+            await menu_command(update, context, from_callback=False)
+    
+    # Agar user ne /cancel nahi, balki /start ya /admin type kiya hai,
+    # ya naya menu button dabaya hai, toh yeh function END return karega
+    # aur doosra handler (start_command/admin_command/post_gen_menu etc.)
+    # automatically chal jaayega.
             
     return ConversationHandler.END
 
@@ -689,8 +711,14 @@ async def post_gen_select_episode(update: Update, context: ContextTypes.DEFAULT_
     season_name = query.data.replace("post_season_", "")
     context.user_data['season_name'] = season_name
     anime_name = context.user_data['anime_name']
+    
+    # NAYA FIX: Agar user "Season Post" generate kar raha hai, toh episode nahi pucho
     if context.user_data['post_type'] == 'post_gen_season':
+        # Episode number ko None set karo
+        context.user_data['ep_num'] = None
         return await generate_post_ask_chat(update, context)
+        
+    # Agar "Episode Post" hai, toh episode pucho
     anime_doc = animes_collection.find_one({"name": anime_name})
     episodes = anime_doc.get("seasons", {}).get(season_name, {})
     if not episodes:
@@ -718,13 +746,15 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         config = await get_config()
         anime_name = context.user_data['anime_name']
         season_name = context.user_data.get('season_name')
-        ep_num = context.user_data.get('ep_num')
+        ep_num = context.user_data.get('ep_num') # Yeh 'None' ho sakta hai
         anime_doc = animes_collection.find_one({"name": anime_name})
         
         if ep_num:
+            # Episode Post
             caption = f"✨ **Episode {ep_num} Added** ✨\n\n🎬 **Anime:** {anime_name}\n➡️ **Season:** {season_name}\n\nNeeche [Download] button dabake download karein!"
             poster_id = anime_doc['poster_id']
         else:
+            # Season Post
             caption = f"✅ **{anime_name}**\n"
             if season_name: caption += f"**[ S{season_name} ]**\n\n"
             if anime_doc.get('description'): caption += f"**📖 Synopsis:**\n{anime_doc['description']}\n\n"
@@ -733,10 +763,9 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         
         links = config.get('links', {})
         
-        # NAYA: Download ke liye Callback data
+        # NAYA FIX: Download button hamesha Anime Name se start hoga
+        # User DM mein jaake Season/Ep select karega
         dl_callback_data = f"dl_{anime_name}"
-        if season_name: dl_callback_data += f"__{season_name}" 
-        if ep_num: dl_callback_data += f"__{ep_num}"
         
         # NAYA: Donate ke liye URL (Redirect)
         donate_url = f"https://t.me/{bot_username}?start=donate" 
@@ -766,7 +795,7 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         )
         return PG_GET_CHAT
     except Exception as e:
-        logger.error(f"Post generate karne me error: {e}")
+        logger.error(f"Post generate karne me error: {e}", exc_info=True)
         await query.answer("Error! Post generate nahi kar paya.", show_alert=True)
         await query.edit_message_text("❌ **Error!** Post generate nahi ho paya. Logs check karein.")
         context.user_data.clear()
@@ -1588,15 +1617,22 @@ def main():
     logger.info("Bot Application ban raha hai...")
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # --- Global Fallbacks ---
+    # --- NAYA: Global Fallbacks (Poore bot ko 'stuck' hone se bachane ke liye) ---
     global_fallbacks = [
         CommandHandler("start", conv_cancel),
         CommandHandler("menu", conv_cancel),
         CommandHandler("admin", conv_cancel),
-        CommandHandler("cancel", conv_cancel)
+        CommandHandler("cancel", conv_cancel),
+        # Agar user kisi conversation me hai aur naya button dabata hai
+        CallbackQueryHandler(conv_cancel, pattern="^admin_menu_"),
+        CallbackQueryHandler(conv_cancel, pattern="^admin_add_"),
+        CallbackQueryHandler(conv_cancel, pattern="^admin_del_"),
+        CallbackQueryHandler(conv_cancel, pattern="^admin_set_"),
+        CallbackQueryHandler(conv_cancel, pattern="^admin_post_gen$"),
+        CallbackQueryHandler(conv_cancel, pattern="^msg_"),
     ]
     
-    # Local Fallbacks
+    # Local Fallbacks (Sirf "Back" buttons ke liye)
     admin_menu_fallback = [CallbackQueryHandler(back_to_admin_menu, pattern="^admin_menu$")]
     add_content_fallback = [CallbackQueryHandler(back_to_add_content_menu, pattern="^back_to_add_content$")]
     manage_fallback = [CallbackQueryHandler(back_to_manage_menu, pattern="^back_to_manage$")]
@@ -1661,6 +1697,8 @@ def main():
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("admin", admin_command))
     application.add_handler(CommandHandler("menu", menu_command))
+    application.add_handler(CommandHandler("cancel", conv_cancel)) # NAYA: Global cancel
+    
     application.add_handler(CallbackQueryHandler(admin_command, pattern="^admin_menu$"))
     application.add_handler(CallbackQueryHandler(back_to_user_menu, pattern="^user_back_menu$"))
     
@@ -1695,7 +1733,6 @@ def main():
     
     # NAYA: Donate button (menu se)
     application.add_handler(CallbackQueryHandler(user_show_donate_menu, pattern="^user_show_donate_menu$"))
-    # NAYA: Donate button (channel se) - Iski zaroorat nahi, yeh 'start' command handle karega
     
     # NAYA: Download handler (channel + DM)
     application.add_handler(CallbackQueryHandler(download_button_handler, pattern="^dl_"))
