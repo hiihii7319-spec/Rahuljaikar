@@ -124,7 +124,10 @@ async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Operation cancel kar diya gaya hai.")
     else:
         await update.callback_query.answer("Operation cancel kar diya gaya hai.")
-        await update.callback_query.edit_message_text("Operation cancel kar diya gaya hai.")
+        try:
+            await update.callback_query.edit_message_text("Operation cancel kar diya gaya hai.")
+        except Exception:
+            pass # Agar message edit nahi ho paya (e.g. photo thi)
     context.user_data.clear() 
     return ConversationHandler.END
 
@@ -974,21 +977,31 @@ async def user_show_donate_qr(update: Update, context: ContextTypes.DEFAULT_TYPE
     keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data="user_back_menu")]]
     
     try:
+        # DM mein bhej rahe hain, isliye reply_photo nahi, seedha send_photo
         if qr_id:
-            await query.message.reply_photo(
+            await context.bot.send_photo(
+                chat_id=query.from_user.id,
                 photo=qr_id,
                 caption=text,
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
         elif link: 
             text += f"\n\nAap is link par donate kar sakte hain: {link}"
-            await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True)
+            await context.bot.send_message(
+                chat_id=query.from_user.id,
+                text=text, 
+                reply_markup=InlineKeyboardMarkup(keyboard), 
+                disable_web_page_preview=True
+            )
         
         await query.answer()
-        await query.message.delete() 
+        await query.message.delete() # Purana menu delete kar do
     except Exception as e:
         logger.error(f"Donate QR bhejte waqt error: {e}")
-        await query.answer("❌ Error! Bot ko start karke try karein.", show_alert=True)
+        if "blocked" in str(e):
+            await query.answer("❌ Error! Bot ko DM mein /start karein.", show_alert=True)
+        else:
+            await query.answer("❌ Error! Dobara try karein.", show_alert=True)
 
 # --- Admin Panel ---
 async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from_callback: bool = False):
@@ -1045,17 +1058,38 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
     user = query.from_user
     user_id = user.id
     
+    # (FIXED) Non-subscriber check
     if not await check_subscription(user_id):
-        await query.answer("❌ Access Denied! Aapko pehle subscribe karna hoga.", show_alert=True)
+        await query.answer("❌ Access Denied! Subscribe karne ke liye DM check karein.", show_alert=True)
+        
+        config = await get_config()
+        qr_id = config.get('sub_qr_id')
+        price = config.get('price')
+
+        if not qr_id or not price:
+            try:
+                await context.bot.send_message(user_id, "❌ Subscription system abhi setup nahi hua hai. Admin se baat karein.")
+            except Exception as e: logger.warning(f"Error sending sub error to user {user_id}: {e}")
+            return
+
+        text = f"**Subscription Plan**\n\n**Price:** {price}\n\n"
+        text += "Aapko download karne ke liye subscribe karna hoga.\n\nIs QR code par payment karein aur payment ka **screenshot** bhejne ke liye, bot ko DM mein /menu likhein aur 'Subscribe Now' -> 'Upload Screenshot' button dabayein."
+        
         try:
-            await context.bot.send_message(
+            # User ko DM mein QR Bhejo
+            await context.bot.send_photo(
                 chat_id=user_id,
-                text="Aapko anime download karne ke liye subscribe karna hoga. /menu se 'Subscribe Now' button dabayein."
+                photo=qr_id, 
+                caption=text, 
+                parse_mode='Markdown'
             )
         except Exception as e:
-            logger.warning(f"User {user_id} ko sub prompt DM nahi kar paya: {e}")
+            logger.error(f"User {user_id} ko DM me QR bhejte waqt error: {e}")
+            if "blocked" in str(e):
+                 await query.answer("❌ Error! Subscribe karne ke liye bot ko DM me /start karein.", show_alert=True)
         return
         
+    # Agar subscribed hai toh...
     await query.answer("Fetching details...")
     
     parts = query.data.split('__')
@@ -1146,9 +1180,8 @@ async def back_to_user_menu_from_channel(update: Update, context: ContextTypes.D
     query = update.callback_query
     await query.answer()
     await query.message.delete()
-    # User ko DM me menu bhejo
-    # Iske liye user ka bot ko start karna zaroori hai
     try:
+        # User ko DM me naya menu bhejo
         await menu_command(update, context, from_callback=False)
     except Exception as e:
         logger.warning(f"User ko DM me menu nahi bhej paya: {e}")
@@ -1210,7 +1243,7 @@ def main():
     application.add_handler(CommandHandler("menu", menu_command))
     application.add_handler(CallbackQueryHandler(admin_command, pattern="^admin_menu$"))
     application.add_handler(CallbackQueryHandler(back_to_user_menu, pattern="^user_back_menu$"))
-    application.add_handler(CallbackQueryHandler(back_to_user_menu_from_channel, pattern="^user_back_menu_from_channel$")) # NAYA
+    application.add_handler(CallbackQueryHandler(back_to_user_menu_from_channel, pattern="^user_back_menu_from_channel$")) 
     
     # Admin Sub-Menu Handlers
     application.add_handler(CallbackQueryHandler(add_content_menu, pattern="^admin_menu_add_content$"))
