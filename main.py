@@ -40,7 +40,7 @@ try:
     BOT_TOKEN = os.getenv("BOT_TOKEN")
     MONGO_URI = os.getenv("MONGO_URI")
     ADMIN_ID = int(os.getenv("ADMIN_ID"))
-    LOG_CHANNEL_ID = os.getenv("LOG_CHANNEL_ID")
+    LOG_CHANNEL_ID = os.getenv("LOG_CHANNEL_ID") # YEH ZAROORI HAI
     if not BOT_TOKEN or not MONGO_URI or not ADMIN_ID or not LOG_CHANNEL_ID:
         logger.error("Error: Secrets missing. BOT_TOKEN, MONGO_URI, ADMIN_ID, aur LOG_CHANNEL_ID check karo.")
         exit()
@@ -165,7 +165,6 @@ async def back_to_user_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 # --- Admin Conversations (Add, Delete, etc.) ---
-# ... (Saare Admin conversations [Add Anime... se Delete Season... tak] jaise pehle the waise hi copy-paste karein) ...
 
 # --- Conversation: Add Anime ---
 async def add_anime_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -387,9 +386,7 @@ async def set_donate_qr_save(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def set_links_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    
     link_type = query.data.replace("admin_set_", "") 
-    
     if link_type == "donate_link":
         context.user_data['link_type'] = "donate"
         text = "Aapna **Donate Link** bhejo.\n(Example: https://...)\n\n/skip - Skip.\n/cancel - Cancel."
@@ -402,38 +399,29 @@ async def set_links_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['link_type'] = "support"
         text = "Aapke **Support Inbox/Group** ka link bhejo.\n(Example: https://t.me/mygroup)\n\n/skip - Skip.\n/cancel - Cancel."
         back_button = "back_to_links"
-        
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data=back_button)]]))
     return CL_GET_BACKUP 
-
 async def get_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     link_url = update.message.text
     link_type = context.user_data['link_type']
-    
     config_collection.update_one({"_id": "bot_config"}, {"$set": {f"links.{link_type}": link_url}}, upsert=True)
     logger.info(f"{link_type} link update ho gaya: {link_url}")
     await update.message.reply_text(f"✅ **Success!** Naya {link_type} link set ho gaya hai.")
-    
     if link_type == "donate":
         await donate_settings_menu(update, context)
     else:
         await other_links_menu(update, context)
-        
     context.user_data.clear()
     return ConversationHandler.END
-    
 async def skip_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     link_type = context.user_data['link_type']
-    
     config_collection.update_one({"_id": "bot_config"}, {"$set": {f"links.{link_type}": None}}, upsert=True)
     logger.info(f"{link_type} link skip kiya (None set).")
     await update.message.reply_text(f"✅ **Success!** {link_type} link remove kar diya gaya hai.")
-
     if link_type == "donate":
         await donate_settings_menu(update, context)
     else:
         await other_links_menu(update, context)
-        
     context.user_data.clear()
     return ConversationHandler.END
 
@@ -666,7 +654,6 @@ async def user_subscribe_start(update: Update, context: ContextTypes.DEFAULT_TYP
     price = config.get('price')
     
     if not qr_id or not price:
-        # (FIXED) Subscription system setup nahi hai toh reply karo, edit nahi
         await query.message.reply_text("❌ **Error!** Subscription system abhi setup nahi hua hai. Admin se baat karein.")
         return ConversationHandler.END
         
@@ -676,7 +663,7 @@ async def user_subscribe_start(update: Update, context: ContextTypes.DEFAULT_TYP
     keyboard = [[InlineKeyboardButton("⬆️ Upload Screenshot", callback_data="user_upload_ss")], [InlineKeyboardButton("⬅️ Back", callback_data="user_back_menu")]]
     
     await query.message.reply_photo(photo=qr_id, caption=text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
-    await query.message.delete() # Purana menu delete kar do
+    await query.message.delete()
     return ConversationHandler.END 
 
 async def user_upload_ss_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -726,79 +713,7 @@ async def user_get_screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE
     
 # --- Conversation: Admin Approval ---
 async def admin_approve_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin se din poochega subscription ke liye"""
-    query = update.callback_query
-    await query.answer()
-    
-    if not await is_admin(query.from_user.id):
-        await query.answer("Aap admin nahi hain!", show_alert=True)
-        return ConversationHandler.END
-        
-    try:
-        user_id_to_approve = int(query.data.split("_")[-1])
-        context.user_data['user_to_approve'] = user_id_to_approve
-        user_info = users_collection.find_one({"_id": user_id_to_approve})
-        
-        await query.message.reply_text(f"Aap user **{user_info.get('first_name', 'N/A')}** (ID: `{user_id_to_approve}`) ko approve kar rahe hain.\n\nKitne din ka subscription dena hai? (Number mein bhejein, jaise: 30)\n\n/cancel - Cancel.")
-        return ADMIN_GET_DAYS
-    except Exception as e:
-        logger.error(f"Approve start me error: {e}")
-        await query.message.reply_text("❌ Error! User ID nahi mili.")
-        return ConversationHandler.END
-
-async def admin_get_days_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """User ko subscribe karega"""
-    try:
-        days = int(update.message.text)
-        user_id = context.user_data['user_to_approve']
-        
-        expiry_date = datetime.now() + timedelta(days=days)
-        
-        users_collection.update_one(
-            {"_id": user_id},
-            {"$set": {"subscribed": True, "expiry_date": expiry_date}},
-            upsert=True
-        )
-        
-        logger.info(f"User {user_id} ko {days} din ka subscription mil gaya hai.")
-        
-        await update.message.reply_text(f"✅ **Success!**\nUser ID `{user_id}` ko {days} din ka subscription mil gaya hai.\nExpiry: {expiry_date.strftime('%Y-%m-%d')}")
-        
-        try:
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=f"🎉 **Congratulations!**\n\nAapka subscription approve ho gaya hai.\nAapka plan {days} din mein expire hoga ({expiry_date.strftime('%Y-%m-%d')}).\n\n/menu se anime download karna shuru karein."
-            )
-        except Exception as e:
-            logger.error(f"User {user_id} ko subscription message bhejte waqt error: {e}")
-            await update.message.reply_text(f"⚠️ User {user_id} ko DM nahi kar paya (shayad bot ko block kar diya hai).")
-            
-        # (FIXED) Log channel message update karo (query se original message access karo)
-        original_message = context.user_data.get('original_approval_message')
-        if update.callback_query: # Check if this function was called from a callback
-            await update.callback_query.edit_message_caption(
-                caption=update.callback_query.message.caption + f"\n\n**[APPROVED by {update.from_user.first_name} for {days} days]**",
-                parse_mode='Markdown'
-            )
-        else:
-            # Yeh logic thoda galat hai, admin_get_days_save hamesha message se trigger hota hai.
-            # Humein original query message ko save karna hoga.
-            # Let's fix admin_approve_start
-            pass # We will fix this by saving query in admin_approve_start
-
-    except ValueError:
-        await update.message.reply_text("Yeh number nahi hai. Please sirf number bhejein (jaise 30) ya /cancel karein.")
-        return ADMIN_GET_DAYS
-    except Exception as e:
-        logger.error(f"Subscription save karte waqt error: {e}")
-        await update.message.reply_text("❌ Error! Subscription save nahi kar paya.")
-        
-    context.user_data.clear()
-    return ConversationHandler.END
-
-# --- (FIXED) Let's fix admin_approve_start to save the message ---
-async def admin_approve_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin se din poochega subscription ke liye"""
+    """(FIXED) Admin se din poochega aur message save karega"""
     query = update.callback_query
     await query.answer()
     
@@ -820,9 +735,8 @@ async def admin_approve_start(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.message.reply_text("❌ Error! User ID nahi mili.")
         return ConversationHandler.END
 
-# --- (FIXED) Let's fix admin_get_days_save to use the saved message ---
 async def admin_get_days_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """User ko subscribe karega"""
+    """(FIXED) User ko subscribe karega aur log message edit karega"""
     try:
         days = int(update.message.text)
         user_id = context.user_data['user_to_approve']
@@ -865,7 +779,6 @@ async def admin_get_days_save(update: Update, context: ContextTypes.DEFAULT_TYPE
         
     context.user_data.clear()
     return ConversationHandler.END
-
     
 async def admin_reject_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """User ki request reject karega"""
@@ -991,7 +904,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await menu_command(update, context) 
 
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from_callback: bool = False):
-    """(UPDATED) User ka main menu (/menu)"""
+    """(FIXED) User ka main menu (/menu)"""
     user = update.effective_user
     user_id = user.id
     
@@ -1020,7 +933,6 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from_
     if not backup_url or not backup_url.startswith(("http", "t.me")):
         backup_url = "https://t.me/" 
     
-    # (FIXED) Donate button ko URL se callback me badlo
     support_url = links.get('support')
     if not support_url or not support_url.startswith(("http", "t.me")):
         support_url = "https://t.me/"
@@ -1068,12 +980,12 @@ async def user_show_donate_qr(update: Update, context: ContextTypes.DEFAULT_TYPE
                 caption=text,
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
-        elif link: # Fallback agar QR nahi hai
+        elif link: 
             text += f"\n\nAap is link par donate kar sakte hain: {link}"
             await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True)
         
         await query.answer()
-        await query.message.delete() # Purana menu delete kar do
+        await query.message.delete() 
     except Exception as e:
         logger.error(f"Donate QR bhejte waqt error: {e}")
         await query.answer("❌ Error! Bot ko start karke try karein.", show_alert=True)
@@ -1088,10 +1000,12 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
         
     logger.info("Admin ne /admin command use kiya.")
     
-    # Log channel ka username fetch karo
     try:
         log_chat = await context.bot.get_chat(LOG_CHANNEL_ID)
-        log_url = log_chat.invite_link or f"https://t.me/c/{str(LOG_CHANNEL_ID).replace('-100', '')}"
+        if log_chat.username:
+             log_url = f"https://t.me/{log_chat.username}"
+        else:
+            log_url = log_chat.invite_link or f"https://t.me/c/{str(LOG_CHANNEL_ID).replace('-100', '')}"
     except Exception as e:
         logger.error(f"Log channel ({LOG_CHANNEL_ID}) fetch nahi kar paya: {e}")
         log_url = "https://t.me/"
@@ -1131,11 +1045,9 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
     user = query.from_user
     user_id = user.id
     
-    # (FIXED) Subscription check
     if not await check_subscription(user_id):
         await query.answer("❌ Access Denied! Aapko pehle subscribe karna hoga.", show_alert=True)
         try:
-            # User ko DM me message bhejo
             await context.bot.send_message(
                 chat_id=user_id,
                 text="Aapko anime download karne ke liye subscribe karna hoga. /menu se 'Subscribe Now' button dabayein."
@@ -1163,14 +1075,12 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             file_id = anime_doc.get("seasons", {}).get(season_name, {}).get(ep_num, {}).get(quality)
             if file_id:
                 try:
-                    # File ko seedha user ke DM me bhejo
                     await context.bot.send_video(
                         chat_id=user_id, 
                         video=file_id, 
                         caption=f"🎬 **{anime_name}**\nS{season_name} - E{ep_num} ({quality})",
                         parse_mode='Markdown'
                     )
-                    # User ko batao ki DM check kare
                     await query.answer("✅ File aapke DM (private chat) mein bhej di gayi hai!", show_alert=True)
                 except Exception as e:
                     logger.error(f"User {user_id} ko DM bhejte waqt error: {e}")
@@ -1222,7 +1132,6 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             cb_data = f"dl_{anime_name}__{s}"
             keyboard.append([InlineKeyboardButton(f"Season {s}", callback_data=cb_data)])
         
-        # User abhi channel me hai, use wapas bot ke menu me bhej sakte hain
         keyboard.append([InlineKeyboardButton("⬅️ Back to Bot Menu", callback_data="user_back_menu_from_channel")])
         
         await query.edit_message_text(f"**{anime_name}**\n\nSeason select karein:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
@@ -1236,9 +1145,15 @@ async def back_to_user_menu_from_channel(update: Update, context: ContextTypes.D
     """Channel se 'Back to Menu' button ko handle karega"""
     query = update.callback_query
     await query.answer()
-    await query.message.delete() # Channel post se menu delete kar do
+    await query.message.delete()
     # User ko DM me menu bhejo
-    await menu_command(update, context, from_callback=False)
+    # Iske liye user ka bot ko start karna zaroori hai
+    try:
+        await menu_command(update, context, from_callback=False)
+    except Exception as e:
+        logger.warning(f"User ko DM me menu nahi bhej paya: {e}")
+        await query.answer("Bot ko DM me /start karke menu kholein.", show_alert=True)
+
 
 # --- Error Handler ---
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
