@@ -12,11 +12,10 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters,
 )
-# Flask server ke liye
 from flask import Flask
 from threading import Thread
-# Subscription time ke liye
 from datetime import datetime, timedelta
+from functools import partial # NAYA: Safety nets ke liye
 
 # --- Flask Server Setup ---
 app = Flask(__name__)
@@ -47,12 +46,10 @@ except Exception as e:
     exit()
 
 # --- (FINAL FIX) Database Connection ---
-# Har operation ke liye naya connection banayenge taaki Render par koi issue na ho
 def get_db():
     """Naya DB connection return karta hai."""
     try:
-        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000) # 5 sec timeout
-        # Test connection
+        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
         client.server_info()
         return client['AnimeBotDB']
     except Exception as e:
@@ -74,17 +71,14 @@ def check_db_connection():
 
 # --- Admin Check ---
 async def is_admin(user_id: int) -> bool:
-    """Check if user is admin"""
     return user_id == ADMIN_ID
 
 # --- (FIXED) Config Helper ---
 async def get_config():
-    """Database se bot config fetch karega (FIXED)"""
     db = get_db()
     if db is None: 
         logger.error("get_config: DB connection failed.")
-        return {} # Return empty config if DB fails
-    
+        return {}
     config = db['config'].find_one({"_id": "bot_config"})
     if not config:
         logger.info("Config not found, creating default config.")
@@ -98,26 +92,19 @@ async def get_config():
 
 # --- (FIXED) Subscription Check Helper ---
 async def check_user_subscription(user_id: int):
-    """Check if user is subscribed and subscription is valid (FIXED)"""
     db = get_db()
     if db is None: 
         return {"active": False, "message": "DB connection error."}
-        
     user_data = db['users'].find_one({"_id": user_id})
     if not user_data or not user_data.get('subscribed', False):
         return {"active": False, "message": "Subscribed nahi hai."}
-        
     expiry_date = user_data.get('expiry_date')
     if not expiry_date:
         return {"active": False, "message": "Expiry date set nahi hai."}
-        
     if datetime.now() > expiry_date:
-        # Subscription expire ho gaya hai, DB update karo
         db['users'].update_one({"_id": user_id}, {"$set": {"subscribed": False}})
         logger.info(f"User {user_id} ka subscription expire ho gaya.")
         return {"active": False, "message": "Subscription expire ho gaya hai."}
-        
-    # Sab theek hai
     return {"active": True, "expiry_date": expiry_date.strftime("%Y-%m-%d")}
 
 # --- Conversation States ---
@@ -134,16 +121,39 @@ async def check_user_subscription(user_id: int):
 (SUB_GET_SS,) = range(28, 29)
 (ADMIN_PENDING_MENU, ADMIN_SUB_GET_DAYS) = range(29, 31)
 
-# --- Common Conversation Fallbacks ---
-async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("User ne conversation /cancel se band kar diya.")
+# --- (NAYA) Safety Handlers (Bot ko 'stuck' hone se bachane ke liye) ---
+async def invalid_input(update: Update, context: ContextTypes.DEFAULT_TYPE, expected_input: str):
+    """Galat input ke liye common message"""
     if update.message:
-        await update.message.reply_text("Operation cancel kar diya gaya hai.")
-    else:
+        await update.message.reply_text(f"❌ **Galat Input!**\n\nMujhe abhi **{expected_input}** ki zaroorat hai.\n\nFirse try karein ya /cancel karke operation band kar dein.")
+    elif update.callback_query:
+        await update.callback_query.answer(f"❌ Galat Input! Please {expected_input}", show_alert=True)
+    return
+
+# Alag-alag error messages ke liye 'partial' functions banayenge
+invalid_text_input = partial(invalid_input, expected_input="text (likha hua message)")
+invalid_photo_input = partial(invalid_input, expected_input="ek photo")
+invalid_file_input = partial(invalid_input, expected_input="ek video ya document file")
+invalid_callback_input = partial(invalid_input, expected_input="buttons par click karna")
+
+# --- (FIXED) Common Conversation Fallbacks ---
+async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/cancel, /start, ya /menu se conversation band karega"""
+    logger.info("User ne conversation /cancel, /start, ya /menu se band kar diya.")
+    if update.message:
+        await update.message.reply_text("Operation cancel kar diya gaya hai. Main menu ke liye /start ya /menu type karein.")
+    elif update.callback_query:
         await update.callback_query.answer("Operation cancel kar diya gaya hai.")
-        await update.callback_query.edit_message_text("Operation cancel kar diya gaya hai.")
+        await update.callback_query.edit_message_text("Operation cancel kar diya gaya hai. Main menu ke liye /start ya /menu type karein.")
     context.user_data.clear() 
     return ConversationHandler.END
+
+# (NAYA) Saare conversations ke liye common fallbacks
+main_fallbacks = [
+    CommandHandler("cancel", conv_cancel),
+    CommandHandler("start", conv_cancel),
+    CommandHandler("menu", conv_cancel),
+]
 
 async def back_to_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -193,9 +203,6 @@ async def get_anime_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Badhiya! Ab anime ka **Poster (Photo)** bhejo.\n\n/cancel - Cancel.")
     return A_GET_POSTER
 async def get_anime_poster(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message.photo:
-        await update.message.reply_text("Ye photo nahi hai. Please ek **Photo** bhejo, 'File' nahi.")
-        return A_GET_POSTER 
     context.user_data['anime_poster_id'] = update.message.photo[-1].file_id
     await update.message.reply_text("Poster mil gaya! Ab **Description (Synopsis)** bhejo.\n\n/skip ya /cancel.")
     return A_GET_DESC
@@ -340,9 +347,11 @@ async def get_episode_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif update.message.document: 
         file_id = update.message.document.file_id
         file_type = "document" 
-    if not file_id:
+    
+    if not file_id: # (FIXED) Safety check ko alag se call karne ki zaroorat nahi, seedha return
         await update.message.reply_text("Ye video file nahi hai. Please ek video file forward karein ya /cancel karein.")
         return E_GET_FILE
+        
     try:
         anime_name, season_name, ep_num, quality = context.user_data['anime_name'], context.user_data['season_name'], context.user_data['ep_num'], context.user_data['quality']
         file_data = {"id": file_id, "type": file_type}
@@ -363,9 +372,6 @@ async def set_sub_qr_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text("Aapna **Subscription (Payment) QR Code** ki photo bhejo.\n\n/cancel - Cancel.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_sub_settings")]]))
     return CS_GET_QR
 async def set_sub_qr_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message.photo:
-        await update.message.reply_text("Ye photo nahi hai. Please ek **Photo** bhejo, 'File' nahi, ya /cancel karein.")
-        return CS_GET_QR
     qr_file_id = update.message.photo[-1].file_id
     get_db()['config'].update_one({"_id": "bot_config"}, {"$set": {"sub_qr_id": qr_file_id}}, upsert=True)
     logger.info(f"Subscription QR code update ho gaya.")
@@ -394,9 +400,6 @@ async def set_donate_qr_start(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.edit_message_text("Aapna **Donate QR Code** ki photo bhejo.\n\n/cancel - Cancel.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_donate_settings")]]))
     return CD_GET_QR
 async def set_donate_qr_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message.photo:
-        await update.message.reply_text("Ye photo nahi hai. Please ek **Photo** bhejo, 'File' nahi, ya /cancel karein.")
-        return CD_GET_QR
     qr_file_id = update.message.photo[-1].file_id
     get_db()['config'].update_one({"_id": "bot_config"}, {"$set": {"donate_qr_id": qr_file_id}}, upsert=True)
     logger.info(f"Donate QR code update ho gaya.")
@@ -532,7 +535,6 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         if not support_url or not support_url.startswith(("http", "t.me")): support_url = "https://t.me/"
         
         btn_backup = InlineKeyboardButton("Backup", url=backup_url)
-        # NAYA FEATURE: Donate button ab QR ke liye callback use karega
         btn_donate = InlineKeyboardButton("Donate", callback_data="user_donate") 
         btn_support = InlineKeyboardButton("Support", url=support_url)
         btn_download = InlineKeyboardButton("Download", callback_data=dl_callback_data)
@@ -684,10 +686,6 @@ async def user_subscribe_start(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def user_sent_screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Step 2: User screenshot bhejta hai & DB mein save hota hai (FIXED)"""
-    if not update.message.photo:
-        await update.message.reply_text("Ye photo nahi hai. Please ek screenshot **photo ki tarah** bhejo ya /cancel karo.")
-        return SUB_GET_SS
-        
     user = update.effective_user
     db = get_db()
     
@@ -699,17 +697,14 @@ async def user_sent_screenshot(update: Update, context: ContextTypes.DEFAULT_TYP
     screenshot_id = update.message.photo[-1].file_id
     
     try:
-        pending_data = {
-            "ss_id": screenshot_id,
-            "time": datetime.now()
-        }
+        pending_data = { "ss_id": screenshot_id, "time": datetime.now() }
         db['users'].update_one(
             {"_id": user.id},
-            {"$set": {"pending_payment": pending_data, "first_name": user.first_name, "username": user.username}}, # Profile update karo
+            {"$set": {"pending_payment": pending_data, "first_name": user.first_name, "username": user.username}},
             upsert=True
         )
         
-        # YEH HAI NAYA MESSAGE (Problem 6)
+        # NAYA MESSAGE (Aapki requirement)
         await update.message.reply_text(
             "✅ **Screenshot Mil Gaya!**\n\n"
             "Your subscription is in pending. Admin will verify you shortly."
@@ -775,17 +770,16 @@ async def admin_set_sub_days(update: Update, context: ContextTypes.DEFAULT_TYPE)
         {"$set": {
             "subscribed": True,
             "expiry_date": expiry_date,
-            "pending_payment": None # Pending status clear karo
+            "pending_payment": None 
         }},
         upsert=True
     )
     
     logger.info(f"Admin ne user {user_id} ko {days} din ka sub diya.")
-    
     await update.message.reply_text(f"✅ **Success!**\nUser {user_id} ko {days} din ka subscription mil gaya hai. (Expire on: {expiry_date.strftime('%Y-%m-%d')})")
     
     try:
-        # YEH HAI NAYA MESSAGE (Problem 7)
+        # NAYA MESSAGE (Aapki requirement)
         await context.bot.send_message(user_id, f"🎉 **Subscription Activated!** 🎉\n\nYour subscription is activated for {days} days. Happy watching!\n\n/menu dabake check kar sakte hain.")
     except Exception as e:
         logger.error(f"User {user_id} ko activation message bhejme me error: {e}")
@@ -829,7 +823,7 @@ async def show_pending_user_details(update: Update, context: ContextTypes.DEFAUL
 
     try:
         ss_id = user_data["pending_payment"]["ss_id"]
-        user = await context.bot.get_chat(user_id) # User ki latest details lo
+        user = await context.bot.get_chat(user_id)
         
         admin_caption = (
             f"🔔 **Verification** 🔔\n\n"
@@ -837,7 +831,7 @@ async def show_pending_user_details(update: Update, context: ContextTypes.DEFAUL
             f"**Username:** @{user.username}"
         )
         keyboard = [
-            [InlineKeyboardButton(f"✅ Approve {user.id}", callback_data=f"admin_approve_sub_{user_id}")],
+            [InlineKeyboardButton(f"✅ Approve {user.id}", callback_data=f"admin_approve_sub_{user.id}")],
             [InlineKeyboardButton(f"❌ Reject {user.id}", callback_data=f"admin_reject_sub_{user.id}")]
         ]
         
@@ -947,7 +941,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db['users'].insert_one({"_id": user_id, "first_name": user.first_name, "username": user.username, "subscribed": False, "expiry_date": None, "pending_payment": None})
         logger.info(f"Naya user database me add kiya: {user_id}")
     else:
-        # Update profile info just in case
         db['users'].update_one({"_id": user_id}, {"$set": {"first_name": user.first_name, "username": user.username}})
             
     if await is_admin(user_id):
@@ -966,7 +959,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     links = config.get('links', {})
     sub_status = await check_user_subscription(user_id)
     
-    # YEH HAI NAYA MESSAGE (Problem 8)
+    # NAYA MESSAGE (Aapki requirement)
     if sub_status["active"]:
         sub_text = f"✅ Subscribed (Expires: {sub_status['expiry_date']})"
         sub_cb = "user_check_sub"
@@ -980,7 +973,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not support_url or not support_url.startswith(("http", "t.me")): support_url = "https://t.me/"
         
     btn_backup = InlineKeyboardButton("Backup", url=backup_url)
-    btn_donate = InlineKeyboardButton("Donate", callback_data="user_donate") # NAYA FEATURE
+    btn_donate = InlineKeyboardButton("Donate", callback_data="user_donate") 
     btn_support = InlineKeyboardButton("Support", url=support_url)
     btn_sub = InlineKeyboardButton(sub_text, callback_data=sub_cb)
     keyboard = [[btn_sub], [btn_backup, btn_donate], [btn_support]]
@@ -1013,7 +1006,7 @@ async def send_donate_thanks(context: ContextTypes.DEFAULT_TYPE):
         logger.warning(f"Donate thanks message nahi bhej paya user {job.user_id} ko: {e}")
 
 async def user_donate_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Jab user 'Donate' button dabata hai"""
+    """(NAYA) Jab user 'Donate' button dabata hai"""
     query = update.callback_query
     user_id = query.effective_user.id
     await query.answer("Fetching donation details...")
@@ -1032,9 +1025,8 @@ async def user_donate_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     if link:
         await context.bot.send_message(user_id, f"Aap is link se bhi donate kar sakte hain: {link}")
         
-    # NAYA FEATURE (Problem 2.2)
+    # 1 minute (60 sec) baad thanks message
     context.job_queue.run_once(send_donate_thanks, 60, user_id=user_id, data="Thank you for considering a donation! Your support keeps us going.")
-
 
 # --- Download Handler (Poora Flow) ---
 async def download_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1047,7 +1039,6 @@ async def download_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not sub_status["active"]:
         logger.info(f"User {user.id} ne download try kiya but subscribed nahi hai.")
         await query.answer("❌ Aap subscribed nahi hain.", show_alert=True)
-        # YEH HAI NAYA MESSAGE (Problem 5)
         await context.bot.send_message(
             user.id, 
             f"Download karne ke liye aapko subscribe karna padega.\nError: {sub_status['message']}",
@@ -1200,55 +1191,109 @@ def main():
     logger.info("Bot Application ban raha hai...")
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # --- Saare Conversation Handlers ---
+    # --- Saare Conversation Handlers (BULLETPROOF) ---
     
-    # Fallbacks
-    admin_menu_fallback = [CallbackQueryHandler(back_to_admin_menu, pattern="^admin_menu$")]
-    add_content_fallback = [CallbackQueryHandler(back_to_add_content_menu, pattern="^back_to_add_content$")]
-    manage_fallback = [CallbackQueryHandler(back_to_manage_menu, pattern="^back_to_manage$")]
-    sub_settings_fallback = [CallbackQueryHandler(back_to_sub_settings_menu, pattern="^back_to_sub_settings$")]
-    donate_settings_fallback = [CallbackQueryHandler(back_to_donate_settings_menu, pattern="^back_to_donate_settings$")]
-    links_fallback = [CallbackQueryHandler(back_to_links_menu, pattern="^back_to_links$")]
-    cancel_fallback = [CommandHandler("cancel", conv_cancel)]
-
-    # (Saare purane conversations)
-    add_anime_conv = ConversationHandler(entry_points=[CallbackQueryHandler(add_anime_start, pattern="^admin_add_anime$")], states={A_GET_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_anime_name)], A_GET_POSTER: [MessageHandler(filters.PHOTO, get_anime_poster)], A_GET_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_anime_desc), CommandHandler("skip", skip_anime_desc)], A_CONFIRM: [CallbackQueryHandler(save_anime_details, pattern="^save_anime$")]}, fallbacks=cancel_fallback + add_content_fallback)
-    add_season_conv = ConversationHandler(entry_points=[CallbackQueryHandler(add_season_start, pattern="^admin_add_season$")], states={S_GET_ANIME: [CallbackQueryHandler(get_anime_for_season, pattern="^season_anime_")], S_GET_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_season_number)], S_CONFIRM: [CallbackQueryHandler(save_season, pattern="^save_season$")]}, fallbacks=cancel_fallback + add_content_fallback)
-    add_episode_conv = ConversationHandler(entry_points=[CallbackQueryHandler(add_episode_start, pattern="^admin_add_episode$")], states={E_GET_ANIME: [CallbackQueryHandler(get_anime_for_episode, pattern="^ep_anime_")], E_GET_SEASON: [CallbackQueryHandler(get_season_for_episode, pattern="^ep_season_")], E_GET_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_episode_number)], E_GET_QUALITY: [CallbackQueryHandler(get_episode_quality, pattern="^ep_quality_")], E_GET_FILE: [MessageHandler(filters.VIDEO | filters.Document.ALL, get_episode_file)]}, fallbacks=cancel_fallback + add_content_fallback)
-    set_sub_qr_conv = ConversationHandler(entry_points=[CallbackQueryHandler(set_sub_qr_start, pattern="^admin_set_sub_qr$")], states={CS_GET_QR: [MessageHandler(filters.PHOTO, set_sub_qr_save)]}, fallbacks=cancel_fallback + sub_settings_fallback)
-    set_price_conv = ConversationHandler(entry_points=[CallbackQueryHandler(set_price_start, pattern="^admin_set_price$")], states={CP_GET_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_price_save)]}, fallbacks=cancel_fallback + sub_settings_fallback)
-    set_donate_qr_conv = ConversationHandler(entry_points=[CallbackQueryHandler(set_donate_qr_start, pattern="^admin_set_donate_qr$")], states={CD_GET_QR: [MessageHandler(filters.PHOTO, set_donate_qr_save)]}, fallbacks=cancel_fallback + donate_settings_fallback)
-    set_links_conv = ConversationHandler(entry_points=[CallbackQueryHandler(set_links_start, pattern="^admin_set_donate_link$|^admin_set_backup_link$|^admin_set_support_link$")], states={CL_GET_BACKUP: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_link), CommandHandler("skip", skip_link)]}, fallbacks=cancel_fallback + links_fallback + donate_settings_fallback)
-    post_gen_conv = ConversationHandler(entry_points=[CallbackQueryHandler(post_gen_menu, pattern="^admin_post_gen$")], states={PG_MENU: [CallbackQueryHandler(post_gen_select_anime, pattern="^post_gen_season$"), CallbackQueryHandler(post_gen_select_anime, pattern="^post_gen_episode$")], PG_GET_ANIME: [CallbackQueryHandler(post_gen_select_season, pattern="^post_anime_")], PG_GET_SEASON: [CallbackQueryHandler(post_gen_select_episode, pattern="^post_season_")], PG_GET_EPISODE: [CallbackQueryHandler(post_gen_final_episode, pattern="^post_ep_")], PG_GET_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, post_gen_send_to_chat)]}, fallbacks=cancel_fallback + admin_menu_fallback)
-    del_anime_conv = ConversationHandler(entry_points=[CallbackQueryHandler(delete_anime_start, pattern="^admin_del_anime$")], states={DA_GET_ANIME: [CallbackQueryHandler(delete_anime_confirm, pattern="^del_anime_")], DA_CONFIRM: [CallbackQueryHandler(delete_anime_do, pattern="^del_anime_confirm_yes$")]}, fallbacks=cancel_fallback + manage_fallback)
-    del_season_conv = ConversationHandler(entry_points=[CallbackQueryHandler(delete_season_start, pattern="^admin_del_season$")], states={DS_GET_ANIME: [CallbackQueryHandler(delete_season_select, pattern="^del_season_anime_")], DS_GET_SEASON: [CallbackQueryHandler(delete_season_confirm, pattern="^del_season_")], DS_CONFIRM: [CallbackQueryHandler(delete_season_do, pattern="^del_season_confirm_yes$")]}, fallbacks=cancel_fallback + manage_fallback)
-
-    # User ka subscription flow
+    add_anime_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(add_anime_start, pattern="^admin_add_anime$")], 
+        states={
+            A_GET_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_anime_name), MessageHandler(filters.ALL, invalid_text_input)], 
+            A_GET_POSTER: [MessageHandler(filters.PHOTO, get_anime_poster), MessageHandler(filters.ALL, invalid_photo_input)], 
+            A_GET_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_anime_desc), CommandHandler("skip", skip_anime_desc), MessageHandler(filters.ALL, invalid_text_input)], 
+            A_CONFIRM: [CallbackQueryHandler(save_anime_details, pattern="^save_anime$"), MessageHandler(filters.ALL, invalid_callback_input)]
+        }, 
+        fallbacks=main_fallbacks + [CallbackQueryHandler(back_to_add_content_menu, pattern="^back_to_add_content$")]
+    )
+    add_season_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(add_season_start, pattern="^admin_add_season$")], 
+        states={
+            S_GET_ANIME: [CallbackQueryHandler(get_anime_for_season, pattern="^season_anime_"), MessageHandler(filters.ALL, invalid_callback_input)], 
+            S_GET_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_season_number), MessageHandler(filters.ALL, invalid_text_input)], 
+            S_CONFIRM: [CallbackQueryHandler(save_season, pattern="^save_season$"), MessageHandler(filters.ALL, invalid_callback_input)]
+        }, 
+        fallbacks=main_fallbacks + [CallbackQueryHandler(back_to_add_content_menu, pattern="^back_to_add_content$")]
+    )
+    add_episode_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(add_episode_start, pattern="^admin_add_episode$")], 
+        states={
+            E_GET_ANIME: [CallbackQueryHandler(get_anime_for_episode, pattern="^ep_anime_"), MessageHandler(filters.ALL, invalid_callback_input)], 
+            E_GET_SEASON: [CallbackQueryHandler(get_season_for_episode, pattern="^ep_season_"), MessageHandler(filters.ALL, invalid_callback_input)], 
+            E_GET_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_episode_number), MessageHandler(filters.ALL, invalid_text_input)], 
+            E_GET_QUALITY: [CallbackQueryHandler(get_episode_quality, pattern="^ep_quality_"), MessageHandler(filters.ALL, invalid_callback_input)], 
+            E_GET_FILE: [MessageHandler(filters.VIDEO | filters.Document.ALL, get_episode_file), MessageHandler(filters.ALL, invalid_file_input)]
+        }, 
+        fallbacks=main_fallbacks + [CallbackQueryHandler(back_to_add_content_menu, pattern="^back_to_add_content$")]
+    )
+    set_sub_qr_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(set_sub_qr_start, pattern="^admin_set_sub_qr$")], 
+        states={CS_GET_QR: [MessageHandler(filters.PHOTO, set_sub_qr_save), MessageHandler(filters.ALL, invalid_photo_input)]}, 
+        fallbacks=main_fallbacks + [CallbackQueryHandler(back_to_sub_settings_menu, pattern="^back_to_sub_settings$")]
+    )
+    set_price_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(set_price_start, pattern="^admin_set_price$")], 
+        states={CP_GET_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_price_save), MessageHandler(filters.ALL, invalid_text_input)]}, 
+        fallbacks=main_fallbacks + [CallbackQueryHandler(back_to_sub_settings_menu, pattern="^back_to_sub_settings$")]
+    )
+    set_donate_qr_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(set_donate_qr_start, pattern="^admin_set_donate_qr$")], 
+        states={CD_GET_QR: [MessageHandler(filters.PHOTO, set_donate_qr_save), MessageHandler(filters.ALL, invalid_photo_input)]}, 
+        fallbacks=main_fallbacks + [CallbackQueryHandler(back_to_donate_settings_menu, pattern="^back_to_donate_settings$")]
+    )
+    set_links_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(set_links_start, pattern="^admin_set_donate_link$|^admin_set_backup_link$|^admin_set_support_link$")], 
+        states={CL_GET_BACKUP: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_link), CommandHandler("skip", skip_link), MessageHandler(filters.ALL, invalid_text_input)]}, 
+        fallbacks=main_fallbacks + [CallbackQueryHandler(back_to_links_menu, pattern="^back_to_links$"), CallbackQueryHandler(back_to_donate_settings_menu, pattern="^back_to_donate_settings$")]
+    )
+    post_gen_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(post_gen_menu, pattern="^admin_post_gen$")], 
+        states={
+            PG_MENU: [CallbackQueryHandler(post_gen_select_anime, pattern="^post_gen_season$"), CallbackQueryHandler(post_gen_select_anime, pattern="^post_gen_episode$"), MessageHandler(filters.ALL, invalid_callback_input)], 
+            PG_GET_ANIME: [CallbackQueryHandler(post_gen_select_season, pattern="^post_anime_"), MessageHandler(filters.ALL, invalid_callback_input)], 
+            PG_GET_SEASON: [CallbackQueryHandler(post_gen_select_episode, pattern="^post_season_"), MessageHandler(filters.ALL, invalid_callback_input)], 
+            PG_GET_EPISODE: [CallbackQueryHandler(post_gen_final_episode, pattern="^post_ep_"), MessageHandler(filters.ALL, invalid_callback_input)], 
+            PG_GET_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, post_gen_send_to_chat), MessageHandler(filters.ALL, invalid_text_input)]
+        }, 
+        fallbacks=main_fallbacks + [CallbackQueryHandler(back_to_admin_menu, pattern="^admin_menu$")]
+    )
+    del_anime_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(delete_anime_start, pattern="^admin_del_anime$")], 
+        states={
+            DA_GET_ANIME: [CallbackQueryHandler(delete_anime_confirm, pattern="^del_anime_"), MessageHandler(filters.ALL, invalid_callback_input)], 
+            DA_CONFIRM: [CallbackQueryHandler(delete_anime_do, pattern="^del_anime_confirm_yes$"), MessageHandler(filters.ALL, invalid_callback_input)]
+        }, 
+        fallbacks=main_fallbacks + [CallbackQueryHandler(back_to_manage_menu, pattern="^back_to_manage$")]
+    )
+    del_season_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(delete_season_start, pattern="^admin_del_season$")], 
+        states={
+            DS_GET_ANIME: [CallbackQueryHandler(delete_season_select, pattern="^del_season_anime_"), MessageHandler(filters.ALL, invalid_callback_input)], 
+            DS_GET_SEASON: [CallbackQueryHandler(delete_season_confirm, pattern="^del_season_"), MessageHandler(filters.ALL, invalid_callback_input)], 
+            DS_CONFIRM: [CallbackQueryHandler(delete_season_do, pattern="^del_season_confirm_yes$"), MessageHandler(filters.ALL, invalid_callback_input)]
+        }, 
+        fallbacks=main_fallbacks + [CallbackQueryHandler(back_to_manage_menu, pattern="^back_to_manage$")]
+    )
     user_sub_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(user_subscribe_start, pattern="^user_subscribe$")],
-        states={ SUB_GET_SS: [MessageHandler(filters.PHOTO, user_sent_screenshot)] },
-        fallbacks=[CommandHandler("cancel", conv_cancel)]
+        states={ SUB_GET_SS: [MessageHandler(filters.PHOTO, user_sent_screenshot), MessageHandler(filters.ALL, invalid_photo_input)] },
+        fallbacks=main_fallbacks
     )
-    # Admin ka approval flow
     admin_sub_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_approval_handler, pattern="^admin_(approve|reject)_sub_")],
-        states={ ADMIN_SUB_GET_DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_set_sub_days)] },
-        fallbacks=[CommandHandler("cancel", conv_cancel)]
+        states={ ADMIN_SUB_GET_DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_set_sub_days), MessageHandler(filters.ALL, invalid_text_input)] },
+        fallbacks=main_fallbacks
     )
-    # Admin jab 'Pending Payments' dabata hai
     pending_payments_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(show_pending_payments, pattern="^admin_pending_payments$")],
         states={
-            ADMIN_PENDING_MENU: [CallbackQueryHandler(show_pending_user_details, pattern="^pending_user_")]
+            ADMIN_PENDING_MENU: [CallbackQueryHandler(show_pending_user_details, pattern="^pending_user_"), CallbackQueryHandler(back_to_admin_menu, pattern="^admin_menu$")]
         },
-        fallbacks=[CallbackQueryHandler(back_to_admin_menu, pattern="^admin_menu$"), CommandHandler("cancel", conv_cancel)]
+        fallbacks=main_fallbacks
     )
 
     # --- Handlers ko Add Karo ---
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("admin", admin_command))
     application.add_handler(CommandHandler("menu", menu_command))
-    application.add_handler(CallbackQueryHandler(admin_command, pattern="^admin_menu$")) # Main "Back" button
+    application.add_handler(CallbackQueryHandler(admin_command, pattern="^admin_menu$"))
     
     # Admin Sub-Menu Handlers
     application.add_handler(CallbackQueryHandler(add_content_menu, pattern="^admin_menu_add_content$"))
@@ -1274,7 +1319,7 @@ def main():
     
     # Single Callbacks
     application.add_handler(CallbackQueryHandler(user_check_sub_status, pattern="^user_check_sub$"))
-    application.add_handler(CallbackQueryHandler(user_donate_handler, pattern="^user_donate$")) # NAYA HANDLER
+    application.add_handler(CallbackQueryHandler(user_donate_handler, pattern="^user_donate$"))
     application.add_handler(CallbackQueryHandler(download_handler, pattern="^dl_")) 
     application.add_handler(CallbackQueryHandler(send_file_handler, pattern="^sendfile_")) 
 
