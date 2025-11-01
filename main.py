@@ -153,6 +153,17 @@ async def send_donate_thank_you(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.warning(f"Thank you message bhejte waqt error: {e}")
 
+# NAYA FIX: Job Queue waala delete function waapas aa gaya
+async def delete_message_job(context: ContextTypes.DEFAULT_TYPE):
+    """File ko delete karega"""
+    job = context.job
+    try:
+        await context.bot.delete_message(chat_id=job.chat_id, message_id=job.data)
+        logger.info(f"Auto-deleted message {job.data} for user {job.chat_id}")
+    except Exception as e:
+        logger.warning(f"Message (job_queue) delete karne me error: {e}")
+
+
 # --- Conversation States ---
 (A_GET_NAME, A_GET_POSTER, A_GET_DESC, A_CONFIRM) = range(4)
 (S_GET_ANIME, S_GET_NUMBER, S_CONFIRM) = range(4, 7)
@@ -221,14 +232,14 @@ async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_admin_user = await is_admin(user_id)
     
     # NAYA FIX: Agar user ne /cancel type kiya hai, toh use manually menu dikhao
-    if is_command_cancel:
+    # Ya agar /start ya /admin type kiya hai
+    if update.message and update.message.text in ['/cancel', '/start', '/admin', '/menu']:
         if is_admin_user:
             await admin_command(update, context, from_callback=False) # from_callback=False kyunki yeh ek message se trigger hua
         else:
             await menu_command(update, context, from_callback=False)
     
-    # Agar user ne /cancel nahi, balki /start ya /admin type kiya hai,
-    # ya naya menu button dabaya hai, toh yeh function END return karega
+    # Agar user ne naya menu button dabaya hai, toh yeh function END return karega
     # aur doosra handler (start_command/admin_command/post_gen_menu etc.)
     # automatically chal jaayega.
             
@@ -714,8 +725,7 @@ async def post_gen_select_episode(update: Update, context: ContextTypes.DEFAULT_
     
     # NAYA FIX: Agar user "Season Post" generate kar raha hai, toh episode nahi pucho
     if context.user_data['post_type'] == 'post_gen_season':
-        # Episode number ko None set karo
-        context.user_data['ep_num'] = None
+        context.user_data['ep_num'] = None # Episode number ko None set karo
         return await generate_post_ask_chat(update, context)
         
     # Agar "Episode Post" hai, toh episode pucho
@@ -1388,9 +1398,9 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
     try:
         log_chat = await context.bot.get_chat(LOG_CHANNEL_ID)
         if log_chat.username:
-             log_url = f"https://t.me/{log_chat.username}"
+             log_url = f"https{':'*2}//t.me/{log_chat.username}"
         else:
-            log_url = log_chat.invite_link or f"https://t.me/c/{str(LOG_CHANNEL_ID).replace('-100', '')}"
+            log_url = log_chat.invite_link or f"https{':'*2}//t.me/c/{str(LOG_CHANNEL_ID).replace('-100', '')}"
     except Exception as e:
         logger.error(f"Log channel ({LOG_CHANNEL_ID}) fetch nahi kar paya: {e}")
         log_url = "https://t.me/"
@@ -1511,12 +1521,9 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                         parse_mode='Markdown'
                     )
                     
-                    await asyncio.sleep(delete_time)
-                    try:
-                        await context.bot.delete_message(chat_id=user_id, message_id=sent_message.message_id)
-                        logger.info(f"Auto-deleted message {sent_message.message_id} for user {user_id}")
-                    except Exception as e:
-                        logger.warning(f"Message (auto-delete) delete karne me error: {e}")
+                    # NAYA FIX: asyncio.sleep ki jagah job_queue use karo
+                    context.job_queue.run_once(delete_message_job, delete_time, chat_id=user_id, data=sent_message.message_id)
+                    logger.info(f"Scheduled message {sent_message.message_id} for deletion in {delete_time}s")
 
                 except Exception as e:
                     logger.error(f"User {user_id} ko DM bhejte waqt error: {e}")
@@ -1624,7 +1631,7 @@ def main():
         CommandHandler("admin", conv_cancel),
         CommandHandler("cancel", conv_cancel),
         # Agar user kisi conversation me hai aur naya button dabata hai
-        CallbackQueryHandler(conv_cancel, pattern="^admin_menu_"),
+        CallbackQueryHandler(conv_cancel, pattern="^admin_menu"),
         CallbackQueryHandler(conv_cancel, pattern="^admin_add_"),
         CallbackQueryHandler(conv_cancel, pattern="^admin_del_"),
         CallbackQueryHandler(conv_cancel, pattern="^admin_set_"),
@@ -1733,6 +1740,7 @@ def main():
     
     # NAYA: Donate button (menu se)
     application.add_handler(CallbackQueryHandler(user_show_donate_menu, pattern="^user_show_donate_menu$"))
+    # Channel wala Donate button /start command handle karega
     
     # NAYA: Download handler (channel + DM)
     application.add_handler(CallbackQueryHandler(download_button_handler, pattern="^dl_"))
