@@ -700,11 +700,11 @@ async def post_gen_final_episode(update: Update, context: ContextTypes.DEFAULT_T
     ep_num = query.data.replace("post_ep_", "")
     context.user_data['ep_num'] = ep_num
     return await generate_post_ask_chat(update, context)
+
+# NAYA: Redirect Hata Diya. (CallbackQuery use hoga)
 async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     try:
-        bot_username = (await context.bot.get_me()).username
-        
         config = await get_config()
         anime_name = context.user_data['anime_name']
         season_name = context.user_data.get('season_name')
@@ -723,12 +723,10 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         
         links = config.get('links', {})
         
-        dl_payload = f"dl_{anime_name}"
-        if season_name: dl_payload += f"__{season_name}" 
-        if ep_num: dl_payload += f"__{ep_num}"
-        
-        dl_url = f"https://t.me/{bot_username}?start={dl_payload}"
-        donate_url = f"https://t.me/{bot_username}?start=donate" 
+        # NAYA: Callback data (dl_)
+        dl_callback_data = f"dl_{anime_name}"
+        if season_name: dl_callback_data += f"__{season_name}" 
+        if ep_num: dl_callback_data += f"__{ep_num}"
         
         backup_url = links.get('backup')
         if not backup_url or not backup_url.startswith(("http", "t.me")):
@@ -739,10 +737,10 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
             support_url = "https://t.me/"
             
         btn_backup = InlineKeyboardButton("Backup", url=backup_url)
-        btn_donate = InlineKeyboardButton("Donate", url=donate_url)
+        btn_donate = InlineKeyboardButton("Donate", callback_data="user_show_donate_channel") # NAYA
         btn_support = InlineKeyboardButton("Support", url=support_url)
         
-        btn_download = InlineKeyboardButton("Download", url=dl_url)
+        btn_download = InlineKeyboardButton("Download", callback_data=dl_callback_data) # NAYA
         keyboard = [[btn_backup, btn_donate], [btn_support, btn_download]]
         
         context.user_data['post_caption'] = caption
@@ -760,6 +758,7 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         await query.edit_message_text("❌ **Error!** Post generate nahi ho paya. Logs check karein.")
         context.user_data.clear()
         return ConversationHandler.END
+
 async def post_gen_send_to_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.text
     try:
@@ -1165,6 +1164,8 @@ async def bot_messages_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
 # --- User Handlers ---
 
+# NAYA: Deep Link (`/start` command) ab zaroori nahi hai download ke liye
+# Lekin Donate ke liye zaroori hai agar post mein URL button hai
 async def handle_deep_link_donate(user: User, context: ContextTypes.DEFAULT_TYPE):
     """Deep link se /start=donate ko handle karega"""
     try:
@@ -1191,155 +1192,8 @@ async def handle_deep_link_donate(user: User, context: ContextTypes.DEFAULT_TYPE
         if "blocked" in str(e):
             logger.warning(f"User {user.id} ne bot ko block kiya hua hai.")
 
-# ===== YEH FUNCTION FIX KIYA GAYA HAI (BUG 1) =====
-async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TYPE, payload: str):
-    """Deep link se /start=dl_... ko handle karega (NAYA BUG FIX)"""
-    user_id = user.id
-    logger.info(f"--- DEEP LINK START --- User: {user_id}, Payload: {payload}")
-    
-    try:
-        # Step 1: Check DB Connection
-        logger.info("Step 1: Pinging MongoDB...")
-        client.admin.command('ping')
-        logger.info("Step 1.1: MongoDB Ping OK.")
-    except Exception as e:
-        logger.error(f"CRITICAL: MongoDB connection failed! Error: {e}", exc_info=True)
-        try:
-            await context.bot.send_message(user_id, "❌ Bot abhi database se connect nahi kar pa raha hai. Admin se contact karein.")
-        except Exception: pass
-        return
-
-    try:
-        # Step 2: Check Subscription
-        logger.info("Step 2: Checking subscription...")
-        is_subbed = await check_subscription(user_id)
-        logger.info(f"Step 2.1: User is_subbed: {is_subbed}")
-
-        if not is_subbed:
-            logger.info(f"Step 3 (Unsubbed): Sending QR code to {user_id}...")
-            config = await get_config()
-            qr_id = config.get('sub_qr_id')
-            price = config.get('price')
-            days = config.get('validity_days')
-
-            if not qr_id or not price or not days:
-                logger.warning(f"User {user_id} ko QR nahi bhej paya (config missing)")
-                await context.bot.send_message(user_id, "❌ Subscription system abhi setup nahi hua hai. Admin se baat karein.")
-                return
-
-            text = f"**Subscription Plan**\n\n**Price:** {price}\n**Validity:** {days} days\n\n"
-            text += "Aapko download karne ke liye subscribe karna hoga.\n\nIs QR code par payment karein aur payment ka **screenshot** bhejne ke liye, bot ko DM mein /menu likhein aur 'Subscribe Now' -> 'Upload Screenshot' button dabayein."
-            text += "\n\nSubscribe karne ke baad, channel me wapas jao aur Download button dobara dabao."
-            
-            await context.bot.send_photo(chat_id=user_id, photo=qr_id, caption=text, parse_mode='Markdown')
-            logger.info(f"Step 4 (Unsubbed): QR code sent.")
-            return
-        
-        # Step 3: User is Subscribed
-        logger.info(f"Step 3 (Subbed): User is subscribed. Sending processing message.")
-        await context.bot.send_message(user_id, "✅ Aapka download request process kar raha hoon...")
-
-        logger.info(f"Step 4: Parsing payload: {payload}")
-        parts = payload.split('__')
-        anime_name = parts[0].replace("dl_", "")
-        season_name = parts[1] if len(parts) > 1 else None
-        ep_num = parts[2] if len(parts) > 2 else None
-        
-        logger.info(f"Step 5: Parsed: Anime={anime_name}, Season={season_name}, Ep={ep_num}")
-
-        anime_doc = animes_collection.find_one({"name": anime_name})
-        if not anime_doc:
-            logger.warning(f"Anime not found in DB: {anime_name}")
-            await context.bot.send_message(user_id, "❌ Error: Anime nahi mila.")
-            return
-        
-        logger.info("Step 6: Anime doc found in DB.")
-
-        # Case: Episode link (dl_anime__season__ep)
-        if ep_num:
-            logger.info(f"Step 7 (Episode): Payload has episode. Getting qualities...")
-            qualities = anime_doc.get("seasons", {}).get(season_name, {}).get(ep_num, {})
-            if not qualities:
-                logger.warning(f"No qualities found for {anime_name} S{season_name} E{ep_num}")
-                await context.bot.send_message(user_id, "❌ Error: Is episode ke liye qualities nahi mili.")
-                return
-            
-            keyboard = []
-            for q in qualities:
-                cb_data = f"dl_{anime_name}__{season_name}__{ep_num}__{q}"
-                keyboard.append([InlineKeyboardButton(q, callback_data=cb_data)])
-            keyboard.append([InlineKeyboardButton("⬅️ Back to Menu", callback_data="user_back_menu")])
-            
-            logger.info(f"Step 8 (Episode): Sending quality list to user.")
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=f"**{anime_name}** | **Season {season_name}** | **Episode {ep_num}**\n\nQuality select karein:",
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='Markdown'
-            )
-            return
-
-        # Case: Season link (dl_anime__season)
-        if season_name:
-            logger.info(f"Step 7 (Season): Payload has season. Getting episodes...")
-            episodes = anime_doc.get("seasons", {}).get(season_name, {})
-            if not episodes:
-                logger.warning(f"No episodes found for {anime_name} S{season_name}")
-                await context.bot.send_message(user_id, "❌ Error: Is season ke liye episodes nahi mile.")
-                return
-            
-            keyboard = []
-            sorted_eps = sorted(episodes.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
-            for ep in sorted_eps:
-                cb_data = f"dl_{anime_name}__{season_name}__{ep}"
-                keyboard.append([InlineKeyboardButton(f"Episode {ep}", callback_data=cb_data)])
-            keyboard.append([InlineKeyboardButton("⬅️ Back to Menu", callback_data="user_back_menu")]) 
-            
-            logger.info(f"Step 8 (Season): Sending episode list to user.")
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=f"**{anime_name}** | **Season {season_name}**\n\nEpisode select karein:",
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='Markdown'
-            )
-            return
-        
-        # Case: Anime link (dl_anime)
-        logger.info(f"Step 7 (Anime): Payload has anime only. Getting seasons...")
-        seasons = anime_doc.get("seasons", {})
-        if not seasons:
-            logger.warning(f"No seasons found for {anime_name}")
-            await context.bot.send_message(user_id, "❌ Error: Is anime ke liye seasons nahi mile.")
-            return
-        
-        keyboard = []
-        sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
-        for s in sorted_seasons:
-            cb_data = f"dl_{anime_name}__{s}"
-            keyboard.append([InlineKeyboardButton(f"Season {s}", callback_data=cb_data)])
-        
-        keyboard.append([InlineKeyboardButton("⬅️ Back to Bot Menu", callback_data="user_back_menu")])
-        
-        logger.info(f"Step 8 (Anime): Sending season list to user.")
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=f"**{anime_name}**\n\nSeason select karein:",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
-        return
-
-    except Exception as e:
-        logger.error(f"CRITICAL: Deep link logic failed UNEXPECTEDLY. Error: {e}", exc_info=True)
-        try:
-            await context.bot.send_message(user_id, "❌ Ek error aa gaya hai. Admin se contact karein.")
-        except Exception as e2:
-            logger.error(f"Failed to even send error message to user {user_id}: {e2}")
-# ===== BUG FIX END =====
-
-
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Smart /start command"""
+    """Smart /start command (Deep link sirf Donate ke liye)"""
     user = update.effective_user
     user_id, first_name = user.id, user.first_name
     logger.info(f"User {user_id} ({first_name}) ne /start dabaya.")
@@ -1359,9 +1213,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         payload = args[0]
         logger.info(f"User {user_id} ne deep link use kiya: {payload}")
         
-        if payload.startswith("dl_"):
-            await handle_deep_link_download(user, context, payload)
-        elif payload == "donate":
+        # NAYA: Download link hata diya, sirf Donate check karo
+        if payload == "donate":
             await handle_deep_link_donate(user, context)
             
         return 
@@ -1401,11 +1254,11 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from_
     
     backup_url = links.get('backup')
     if not backup_url or not backup_url.startswith(("http", "t.me")):
-        backup_url = "https://t.me/" 
+        backup_url = "https.t.me/" 
     
     support_url = links.get('support')
     if not support_url or not support_url.startswith(("http", "t.me")):
-        support_url = "https://t.me/"
+        support_url = "https.t.me/"
         
     btn_backup = InlineKeyboardButton("Backup", url=backup_url)
     btn_donate = InlineKeyboardButton("Donate", callback_data="user_show_donate_menu")
@@ -1420,17 +1273,27 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from_
         query = update.callback_query
         await query.answer()
         try:
-            await query.edit_message_text(menu_text, reply_markup=InlineKeyboardMarkup(keyboard))
+            # Agar purana message photo tha (jaise QR code), toh usse delete karke naya bhejo
+            if query.message.photo:
+                await query.message.delete()
+                await query.message.reply_text(menu_text, reply_markup=InlineKeyboardMarkup(keyboard))
+            else:
+                await query.edit_message_text(menu_text, reply_markup=InlineKeyboardMarkup(keyboard))
         except Exception as e:
-            logger.warning(f"Menu edit nahi kar paya: {e}")
-            await query.message.reply_text(menu_text, reply_markup=InlineKeyboardMarkup(keyboard))
-            await query.message.delete()
+            logger.warning(f"Menu edit/reply nahi kar paya: {e}")
+            try:
+                await query.message.reply_text(menu_text, reply_markup=InlineKeyboardMarkup(keyboard))
+            except Exception as e2:
+                logger.error(f"Menu command (callback) me critical error: {e2}")
     else:
         await update.message.reply_text(menu_text, reply_markup=InlineKeyboardMarkup(keyboard))
 
-async def user_show_donate_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/menu se Donate button ko handle karega"""
+
+# NAYA: Yeh function ab 'Donate' (menu se) aur 'Donate' (channel se) dono ko handle karega
+async def user_show_donate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    from_channel = query.data == "user_show_donate_channel"
+    
     config = await get_config()
     qr_id = config.get('donate_qr_id')
     
@@ -1441,21 +1304,31 @@ async def user_show_donate_menu(update: Update, context: ContextTypes.DEFAULT_TY
     text = "❤️ **Support Us!**\n\nAgar aapko hamara kaam pasand aata hai, toh aap humein support kar sakte hain."
     
     try:
-        keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data="user_back_menu")]]
-        await query.message.reply_photo(
-            photo=qr_id,
-            caption=text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
-        await query.message.delete()
-        await query.answer()
+        if from_channel:
+            # Channel se click hua -> Sirf DM bhejo aur alert dikhao
+            await context.bot.send_photo(chat_id=query.from_user.id, photo=qr_id, caption=text, parse_mode='Markdown')
+            await query.answer("✅ Donation info aapke DM (private chat) mein bhej di gayi hai!", show_alert=True)
+        else:
+            # /menu se click hua -> DM bhejo aur menu ko replace karo
+            keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data="user_back_menu")]]
+            await query.message.reply_photo(
+                photo=qr_id,
+                caption=text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
+            await query.message.delete() # Purana /menu delete karo
+            await query.answer()
 
         context.job_queue.run_once(send_donate_thank_you, 60, chat_id=query.from_user.id)
 
     except Exception as e:
         logger.error(f"Donate QR bhejte waqt error: {e}")
-        await query.answer("❌ Error! Dobara try karein.", show_alert=True)
+        if "blocked" in str(e):
+            await query.answer("❌ Error! Bot ko DM mein /start karein.", show_alert=True)
+        else:
+            await query.answer("❌ Error! Dobara try karein.", show_alert=True)
+
 
 # --- Admin Panel ---
 async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from_callback: bool = False):
@@ -1475,7 +1348,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
             log_url = log_chat.invite_link or f"https://t.me/c/{str(LOG_CHANNEL_ID).replace('-100', '')}"
     except Exception as e:
         logger.error(f"Log channel ({LOG_CHANNEL_ID}) fetch nahi kar paya: {e}")
-        log_url = "https://t.me/"
+        log_url = "https->//t.me/"
 
     keyboard = [
         [InlineKeyboardButton("➕ Add Content", callback_data="admin_menu_add_content")],
@@ -1492,7 +1365,12 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
     
     if from_callback:
         try:
-            await update.callback_query.edit_message_text(admin_menu_text, reply_markup=reply_markup, parse_mode='Markdown')
+            # Agar purana message photo tha, toh usse delete karke naya bhejo
+            if query.message.photo:
+                await query.message.delete()
+                await query.message.reply_text(admin_menu_text, reply_markup=reply_markup, parse_mode='Markdown')
+            else:
+                await update.callback_query.edit_message_text(admin_menu_text, reply_markup=reply_markup, parse_mode='Markdown')
         except Exception as e:
             logger.warning(f"Admin menu edit nahi kar paya (shayad message same tha): {e}")
             await update.callback_query.answer()
@@ -1507,20 +1385,49 @@ async def placeholder_button_handler(update: Update, context: ContextTypes.DEFAU
         await query.answer(f"Button '{query.data}' jald aa raha hai...", show_alert=True)
         
 # --- User Download Handler (CallbackQuery) ---
+# NAYA: YEH FUNCTION AB CHANNEL AUR DM DONO HANDLE KAREGA
 async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Yeh function *sirf* bot ke DM ke andar 'Select Season', 'Select Episode', 'Select Quality'
-    wale buttons ko handle karega.
+    Callback data 'dl_' se shuru hone wale sabhi buttons ko handle karega.
     """
     query = update.callback_query
     user = query.from_user
     user_id = user.id
     
+    # Step 1: Check Subscription
     if not await check_subscription(user_id):
-        await query.answer("❌ Access Denied! Aapka subscription nahi hai.", show_alert=True)
+        await query.answer("❌ Access Denied! Subscribe karne ke liye DM check karein.", show_alert=True)
+        
+        config = await get_config()
+        qr_id = config.get('sub_qr_id')
+        price = config.get('price')
+        days = config.get('validity_days')
+
+        if not qr_id or not price or not days:
+            try:
+                await context.bot.send_message(user_id, "❌ Subscription system abhi setup nahi hua hai. Admin se baat karein.")
+            except Exception as e: logger.warning(f"Error sending sub error to user {user_id}: {e}")
+            return
+
+        text = f"**Subscription Plan**\n\n**Price:** {price}\n**Validity:** {days} days\n\n"
+        text += "Aapko download karne ke liye subscribe karna hoga.\n\nIs QR code par payment karein aur payment ka **screenshot** bhejne ke liye, bot ko DM mein /menu likhein aur 'Subscribe Now' -> 'Upload Screenshot' button dabayein."
+        
+        try:
+            await context.bot.send_photo(chat_id=user_id, photo=qr_id, caption=text, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"User {user_id} ko DM me QR bhejte waqt error: {e}")
+            if "blocked" in str(e):
+                 await query.answer("❌ Error! Subscribe karne ke liye bot ko DM me /start karein.", show_alert=True)
         return
         
-    await query.answer() 
+    # Step 2: User Subscribed Hai
+    
+    # Agar channel se click kiya hai, toh "Check DM" alert dikhao
+    if query.message.chat.type in ['channel', 'supergroup', 'group']:
+        await query.answer("✅ Check your DM (private chat) with me!", show_alert=True)
+    else:
+        # Agar DM mein pehle se hai, toh sirf acknowledge karo
+        await query.answer() 
     
     parts = query.data.split('__')
     try:
@@ -1531,10 +1438,10 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
         
         anime_doc = animes_collection.find_one({"name": anime_name})
         if not anime_doc:
-            await query.edit_message_text("❌ Error: Anime nahi mila.")
+            await context.bot.send_message(user_id, "❌ Error: Anime nahi mila.")
             return
 
-        # Step 4: Quality click hui hai -> File bhejo DM mein
+        # Case 4: Quality click hui hai -> File Bhejo
         if quality:
             file_id = anime_doc.get("seasons", {}).get(season_name, {}).get(ep_num, {}).get(quality)
             if file_id:
@@ -1547,6 +1454,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                     msg_template = config.get("messages", {}).get("file_warning")
                     caption += f"\n\n{msg_template.replace('{minutes}', str(delete_minutes))}"
                     
+                    # Purana message delete karo (jo buttons wala tha)
                     await query.message.delete()
                     
                     sent_message = await context.bot.send_video(
@@ -1568,34 +1476,36 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                     if "blocked" in str(e) or "bot was blocked" in str(e):
                         await context.bot.send_message(user_id, "❌ Error! File nahi bhej paya. Aapne bot ko block kiya hua hai.")
                     else:
-                        await query.message.reply_text("❌ Error! File nahi bhej paya. Bot ko /start karke try karein.")
+                        await context.bot.send_message(user_id, "❌ Error! File nahi bhej paya. Bot ko /start karke try karein.")
             else:
-                await query.edit_message_text("❌ Error: File ID nahi mili.")
+                await context.bot.send_message(user_id, "❌ Error: File ID nahi mili.")
             return
             
-        # Step 3: Episode click hua hai -> Quality buttons DM me dikhao
+        # Case 3: Episode click hua hai -> Quality Bhejo
         if ep_num:
             qualities = anime_doc.get("seasons", {}).get(season_name, {}).get(ep_num, {})
             if not qualities:
-                await query.edit_message_text("❌ Error: Is episode ke liye qualities nahi mili.")
+                await context.bot.send_message(user_id, "❌ Error: Is episode ke liye qualities nahi mili.")
                 return
             keyboard = []
             for q in qualities:
                 cb_data = f"dl_{anime_name}__{season_name}__{ep_num}__{q}"
                 keyboard.append([InlineKeyboardButton(q, callback_data=cb_data)])
             keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data=f"dl_{anime_name}__{season_name}")])
-            await query.edit_message_text(
-                text=f"**{anime_name}** | **Season {season_name}** | **Episode {ep_num}**\n\nQuality select karein:",
+            
+            # DM mein message ko Edit karo
+            await query.edit_message_caption(
+                caption=f"**{anime_name}** | **Season {season_name}** | **Episode {ep_num}**\n\nQuality select karein:",
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='Markdown'
             )
             return
 
-        # Step 2: Season click hua hai -> Episode buttons DM me dikhao
+        # Case 2: Season click hua hai -> Episode Bhejo
         if season_name:
             episodes = anime_doc.get("seasons", {}).get(season_name, {})
             if not episodes:
-                await query.edit_message_text("❌ Error: Is season ke liye episodes nahi mile.")
+                await context.bot.send_message(user_id, "❌ Error: Is season ke liye episodes nahi mile.")
                 return
             keyboard = []
             sorted_eps = sorted(episodes.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
@@ -1603,17 +1513,19 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                 cb_data = f"dl_{anime_name}__{season_name}__{ep}"
                 keyboard.append([InlineKeyboardButton(f"Episode {ep}", callback_data=cb_data)])
             keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data=f"dl_{anime_name}")])
-            await query.edit_message_text(
-                text=f"**{anime_name}** | **Season {season_name}**\n\nEpisode select karein:",
+            
+            # DM mein message ko Edit karo
+            await query.edit_message_caption(
+                caption=f"**{anime_name}** | **Season {season_name}**\n\nEpisode select karein:",
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='Markdown'
             )
             return
             
-        # Step 1: Anime click hua hai -> Season buttons DM me dikhao
+        # Case 1: Sirf Anime click hua hai (Channel se) -> Season Bhejo
         seasons = anime_doc.get("seasons", {})
         if not seasons:
-            await query.edit_message_text("❌ Error: Is anime ke liye seasons nahi mile.")
+            await context.bot.send_message(user_id, "❌ Error: Is anime ke liye seasons nahi mile.")
             return
         keyboard = []
         sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
@@ -1623,8 +1535,11 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
         
         keyboard.append([InlineKeyboardButton("⬅️ Back to Bot Menu", callback_data="user_back_menu")])
         
-        await query.edit_message_text(
-            text=f"**{anime_name}**\n\nSeason select karein:",
+        # NAYA: Poster ke saath naya message bhejo
+        await context.bot.send_photo(
+            chat_id=user_id,
+            photo=anime_doc['poster_id'],
+            caption=f"**{anime_name}**\n\nSeason select karein:",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
@@ -1632,7 +1547,11 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
 
     except Exception as e:
         logger.error(f"Download button handler me error: {e}", exc_info=True)
-        await query.answer("❌ Ek error aa gaya hai. Baad mein try karein.", show_alert=True)
+        if query.message.chat.type in ['channel', 'supergroup', 'group']:
+             await query.answer("❌ Ek error aa gaya hai. Baad mein try karein.", show_alert=True)
+        else:
+             await context.bot.send_message(user_id, "❌ Ek error aa gaya hai. Baad mein try karein.")
+
 
 # --- Error Handler ---
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1751,7 +1670,10 @@ def main():
     # User Handlers
     application.add_handler(CallbackQueryHandler(user_subscribe_start, pattern="^user_subscribe$"))
     application.add_handler(CallbackQueryHandler(admin_reject_user, pattern="^admin_reject_"))
-    application.add_handler(CallbackQueryHandler(user_show_donate_menu, pattern="^user_show_donate_menu$"))
+    # NAYA: Dono button (menu aur channel) ek hi function use karenge
+    application.add_handler(CallbackQueryHandler(user_show_donate, pattern="^user_show_donate_menu$"))
+    application.add_handler(CallbackQueryHandler(user_show_donate, pattern="^user_show_donate_channel$"))
+    
     application.add_handler(CallbackQueryHandler(download_button_handler, pattern="^dl_")) # Download handler (DM ke andar)
     
     # Placeholders
