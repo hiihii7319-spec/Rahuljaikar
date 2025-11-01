@@ -107,8 +107,14 @@ async def get_config():
         if key not in config["messages"]:
             config["messages"][key] = value
             needs_update = True
-    if needs_update:
-        config_collection.update_one({"_id": "bot_config"}, {"$set": {"messages": config["messages"], "delete_seconds": config["delete_seconds"]}})
+    if needs_update or "delete_seconds" not in config:
+        config_collection.update_one(
+            {"_id": "bot_config"}, 
+            {"$set": {
+                "messages": config["messages"], 
+                "delete_seconds": config.get("delete_seconds", 180)
+            }}
+        )
         
     if "donate" in config.get("links", {}): 
         config_collection.update_one({"_id": "bot_config"}, {"$unset": {"links.donate": ""}})
@@ -143,7 +149,7 @@ async def send_donate_thank_you(context: ContextTypes.DEFAULT_TYPE):
     try:
         config = await get_config()
         msg = config.get("messages", {}).get("donate_thanks")
-        await context.bot.send_message(chat_id=job.chat_id, text=msg)
+        await context.bot.send_message(chat_id=job.chat_id, text=msg, parse_mode='Markdown')
     except Exception as e:
         logger.warning(f"Thank you message bhejte waqt error: {e}")
 
@@ -161,8 +167,8 @@ async def send_donate_thank_you(context: ContextTypes.DEFAULT_TYPE):
 (SUB_GET_SCREENSHOT,) = range(28, 29)
 (ADMIN_GET_DAYS,) = range(29, 30)
 (CV_GET_DAYS,) = range(30, 31) 
-(M_GET_DONATE_THANKS, M_GET_SUB_PENDING, M_GET_SUB_APPROVED, M_GET_SUB_REJECTED, M_GET_FILE_WARNING) = range(31, 36) # NAYA: Message States
-(CS_GET_DELETE_TIME,) = range(36, 37) # NAYA: Delete Time State
+(M_GET_DONATE_THANKS, M_GET_SUB_PENDING, M_GET_SUB_APPROVED, M_GET_SUB_REJECTED, M_GET_FILE_WARNING) = range(31, 36)
+(CS_GET_DELETE_TIME,) = range(36, 37)
 
 # --- Common Conversation Fallbacks ---
 async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -597,7 +603,13 @@ async def set_msg_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     context.user_data['msg_type'] = msg_type
-    text = f"Naya **{titles[msg_type]}** message bhejo.{placeholders[msg_type]}\n\n/cancel - Cancel."
+    
+    # Current message dikhao
+    config = await get_config()
+    current_msg = config.get("messages", {}).get(msg_type, "N/A")
+    
+    text = f"**Current Message:**\n`{current_msg}`\n\n"
+    text += f"Naya **{titles[msg_type]}** message bhejo.{placeholders[msg_type]}\n\n/cancel - Cancel."
     
     await query.edit_message_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_messages")]]))
     
@@ -910,7 +922,6 @@ async def user_get_screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE
             parse_mode='Markdown',
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        # NAYA: Custom Message
         config = await get_config()
         msg = config.get("messages", {}).get("sub_pending")
         await update.message.reply_text(msg, parse_mode='Markdown')
@@ -932,7 +943,6 @@ async def activate_subscription(context: ContextTypes.DEFAULT_TYPE, user_id: int
     
     # User ko message
     try:
-        # NAYA: Custom Message
         config = await get_config()
         msg_template = config.get("messages", {}).get("sub_approved")
         msg = msg_template.replace("{days}", str(days)).replace("{expiry_date}", expiry_date.strftime('%Y-%m-%d'))
@@ -1038,7 +1048,6 @@ async def admin_reject_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id_to_reject = int(query.data.split("_")[-1])
         
         try:
-            # NAYA: Custom Message
             config = await get_config()
             msg = config.get("messages", {}).get("sub_rejected")
             await context.bot.send_message(
@@ -1091,8 +1100,6 @@ async def sub_settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     price_status = "✅" if config.get('price') else "❌"
     days_val = config.get('validity_days')
     days_status = f"✅ ({days_val} days)" if days_val else "❌"
-    
-    # NAYA: Delete Time
     delete_seconds = config.get("delete_seconds", 180)
     delete_status = f"✅ ({delete_seconds // 60} min)"
     
@@ -1100,7 +1107,7 @@ async def sub_settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(f"Set Subscription QR {sub_qr_status}", callback_data="admin_set_sub_qr")],
         [InlineKeyboardButton(f"Set Price Text {price_status}", callback_data="admin_set_price")],
         [InlineKeyboardButton(f"Set Validity Days {days_status}", callback_data="admin_set_days")],
-        [InlineKeyboardButton(f"Set Auto-Delete Time {delete_status}", callback_data="admin_set_delete_time")], # NAYA
+        [InlineKeyboardButton(f"Set Auto-Delete Time {delete_status}", callback_data="admin_set_delete_time")],
         [InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]
     ]
     text = "💲 **Subscription Settings** 💲\n\n`Set Validity Days` se automatic approval days set karein."
@@ -1135,7 +1142,6 @@ async def other_links_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query: await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     else: await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
-# NAYA: Custom Messages Menu
 async def bot_messages_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if query: await query.answer()
@@ -1189,18 +1195,24 @@ async def handle_deep_link_donate(user: User, context: ContextTypes.DEFAULT_TYPE
 
 # ===== YEH FUNCTION FIX KIYA GAYA HAI (BUG 1) =====
 async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TYPE, payload: str):
-    """Deep link se /start=dl_... ko handle karega"""
+    """Deep link se /start=dl_... ko handle karega (NAYA BUG FIX)"""
     user_id = user.id
-    
-    # Step 1: Subscription Check
-    if not await check_subscription(user_id):
-        try:
+    logger.info(f"--- Deep Link Start for User {user_id} (Payload: {payload}) ---")
+    try:
+        # Step 1: Subscription Check
+        logger.info(f"Step 1: Checking sub for {user_id}")
+        is_subbed = await check_subscription(user_id)
+        logger.info(f"Step 2: User sub status: {is_subbed}")
+
+        if not is_subbed:
+            logger.info(f"Step 3 (Unsubbed): Sending QR to {user_id}")
             config = await get_config()
             qr_id = config.get('sub_qr_id')
             price = config.get('price')
             days = config.get('validity_days')
 
             if not qr_id or not price or not days:
+                logger.warning(f"User {user_id} ko QR nahi bhej paya (config missing)")
                 await context.bot.send_message(user_id, "❌ Subscription system abhi setup nahi hua hai. Admin se baat karein.")
                 return
 
@@ -1209,57 +1221,31 @@ async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TY
             text += "\n\nSubscribe karne ke baad, channel me wapas jao aur Download button dobara dabao."
             
             await context.bot.send_photo(chat_id=user_id, photo=qr_id, caption=text, parse_mode='Markdown')
-        except Exception as e:
-            logger.error(f"User {user_id} ko DM me QR bhejte waqt error (deep link): {e}")
-        return
-        
-    # Step 2: Agar subscribed hai toh...
-    try:
+            logger.info(f"Step 4 (Unsubbed): QR sent to {user_id}")
+            return
+            
+        # Step 2: Agar subscribed hai toh...
+        logger.info(f"Step 3 (Subbed): Sending 'processing' msg to {user_id}")
         await context.bot.send_message(user_id, "✅ Aapka download request process kar raha hoon...")
         
+        logger.info(f"Step 4: Parsing payload: {payload}")
         parts = payload.split('__')
         anime_name = parts[0].replace("dl_", "")
         season_name = parts[1] if len(parts) > 1 else None
         ep_num = parts[2] if len(parts) > 2 else None
-        quality = parts[3] if len(parts) > 3 else None
+        
+        logger.info(f"Step 5: Parsed: Anime={anime_name}, Season={season_name}, Ep={ep_num}")
         
         anime_doc = animes_collection.find_one({"name": anime_name})
         if not anime_doc:
+            logger.warning(f"Deep link anime nahi mila: {anime_name}")
             await context.bot.send_message(user_id, "❌ Error: Anime nahi mila.")
             return
+        logger.info("Step 6: Anime doc found")
 
-        # Case 4: Quality (Yeh DM ke andar se click hoga, deep link se nahi)
-        if quality:
-            file_id = anime_doc.get("seasons", {}).get(season_name, {}).get(ep_num, {}).get(quality)
-            if file_id:
-                caption = f"🎬 **{anime_name}**\nS{season_name} - E{ep_num} ({quality})\n\n"
-                
-                # NAYA: Custom Warning Message & Time
-                config = await get_config()
-                delete_time = config.get("delete_seconds", 180)
-                delete_minutes = max(1, delete_time // 60) # 1 min se kam na dikhaye
-                msg_template = config.get("messages", {}).get("file_warning")
-                caption += msg_template.replace("{minutes}", str(delete_minutes))
-                
-                sent_message = await context.bot.send_video(
-                    chat_id=user_id, 
-                    video=file_id, 
-                    caption=caption,
-                    parse_mode='Markdown'
-                )
-                
-                await asyncio.sleep(delete_time)
-                try:
-                    await context.bot.delete_message(chat_id=user_id, message_id=sent_message.message_id)
-                    logger.info(f"Auto-deleted message {sent_message.message_id} for user {user_id}")
-                except Exception as e:
-                    logger.warning(f"Deep link Message (auto-delete) delete karne me error: {e}")
-            else:
-                await context.bot.send_message(user_id, "❌ Error: File ID nahi mili.")
-            return
-            
         # Case 3: Episode (Link se episode aaya hai, quality pucho)
         if ep_num:
+            logger.info(f"Step 7 (Ep): Checking qualities for S{season_name} E{ep_num}")
             qualities = anime_doc.get("seasons", {}).get(season_name, {}).get(ep_num, {})
             if not qualities:
                 await context.bot.send_message(user_id, "❌ Error: Is episode ke liye qualities nahi mili.")
@@ -1269,6 +1255,7 @@ async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TY
                 cb_data = f"dl_{anime_name}__{season_name}__{ep_num}__{q}"
                 keyboard.append([InlineKeyboardButton(q, callback_data=cb_data)])
             keyboard.append([InlineKeyboardButton("⬅️ Back to Menu", callback_data="user_back_menu")])
+            logger.info(f"Step 8 (Ep): Sending quality list to {user_id}")
             await context.bot.send_message(
                 chat_id=user_id,
                 text=f"**{anime_name}** | **Season {season_name}** | **Episode {ep_num}**\n\nQuality select karein:",
@@ -1279,6 +1266,7 @@ async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TY
 
         # Case 2: Season (Link se season aaya hai, episode pucho)
         if season_name:
+            logger.info(f"Step 7 (Season): Checking episodes for S{season_name}")
             episodes = anime_doc.get("seasons", {}).get(season_name, {})
             if not episodes:
                 await context.bot.send_message(user_id, "❌ Error: Is season ke liye episodes nahi mile.")
@@ -1289,6 +1277,7 @@ async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TY
                 cb_data = f"dl_{anime_name}__{season_name}__{ep}"
                 keyboard.append([InlineKeyboardButton(f"Episode {ep}", callback_data=cb_data)])
             keyboard.append([InlineKeyboardButton("⬅️ Back to Menu", callback_data="user_back_menu")]) 
+            logger.info(f"Step 8 (Season): Sending episode list to {user_id}")
             await context.bot.send_message(
                 chat_id=user_id,
                 text=f"**{anime_name}** | **Season {season_name}**\n\nEpisode select karein:",
@@ -1298,6 +1287,7 @@ async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TY
             return
             
         # Case 1: Anime (Link se sirf anime aaya hai, season pucho)
+        logger.info(f"Step 7 (Anime): Checking seasons for {anime_name}")
         seasons = anime_doc.get("seasons", {})
         if not seasons:
             await context.bot.send_message(user_id, "❌ Error: Is anime ke liye seasons nahi mile.")
@@ -1309,7 +1299,7 @@ async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TY
             keyboard.append([InlineKeyboardButton(f"Season {s}", callback_data=cb_data)])
         
         keyboard.append([InlineKeyboardButton("⬅️ Back to Bot Menu", callback_data="user_back_menu")])
-        
+        logger.info(f"Step 8 (Anime): Sending season list to {user_id}")
         await context.bot.send_message(
             chat_id=user_id,
             text=f"**{anime_name}**\n\nSeason select karein:",
@@ -1319,7 +1309,7 @@ async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TY
         return
 
     except Exception as e:
-        logger.error(f"CRITICAL: Deep link Download LOGIC me error: {e}")
+        logger.error(f"CRITICAL: Deep link Download LOGIC me error: {e}", exc_info=True)
         try:
             await context.bot.send_message(user_id, "❌ Ek error aa gaya hai. Admin se contact karein.")
         except Exception as e2:
@@ -1528,7 +1518,6 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                 try:
                     caption = f"🎬 **{anime_name}**\nS{season_name} - E{ep_num} ({quality})"
                     
-                    # NAYA: Custom Warning Message & Time
                     config = await get_config()
                     delete_time = config.get("delete_seconds", 180)
                     delete_minutes = max(1, delete_time // 60)
@@ -1554,7 +1543,8 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                 except Exception as e:
                     logger.error(f"User {user_id} ko DM bhejte waqt error: {e}")
                     if "blocked" in str(e) or "bot was blocked" in str(e):
-                        await query.message.reply_text("❌ Error! File nahi bhej paya. Aapne bot ko block kiya hua hai.")
+                        # Message edit nahi kar sakte, naya bhej do
+                        await context.bot.send_message(user_id, "❌ Error! File nahi bhej paya. Aapne bot ko block kiya hua hai.")
                     else:
                         await query.message.reply_text("❌ Error! File nahi bhej paya. Bot ko /start karke try karein.")
             else:
@@ -1619,7 +1609,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
         return
 
     except Exception as e:
-        logger.error(f"Download button handler me error: {e}")
+        logger.error(f"Download button handler me error: {e}", exc_info=True)
         await query.answer("❌ Ek error aa gaya hai. Baad mein try karein.", show_alert=True)
 
 # --- Error Handler ---
@@ -1666,14 +1656,12 @@ def main():
     del_season_conv = ConversationHandler(entry_points=[CallbackQueryHandler(delete_season_start, pattern="^admin_del_season$")], states={DS_GET_ANIME: [CallbackQueryHandler(delete_season_select, pattern="^del_season_anime_")], DS_GET_SEASON: [CallbackQueryHandler(delete_season_confirm, pattern="^del_season_")], DS_CONFIRM: [CallbackQueryHandler(delete_season_do, pattern="^del_season_confirm_yes$")]}, fallbacks=global_fallbacks + manage_fallback)
     set_days_conv = ConversationHandler(entry_points=[CallbackQueryHandler(set_days_start, pattern="^admin_set_days$")], states={CV_GET_DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_days_save)]}, fallbacks=global_fallbacks + sub_settings_fallback)
     
-    # NAYA: Set Delete Time Conv
     set_delete_time_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(set_delete_time_start, pattern="^admin_set_delete_time$")],
         states={CS_GET_DELETE_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_delete_time_save)]},
         fallbacks=global_fallbacks + sub_settings_fallback
     )
 
-    # NAYA: Custom Message Convs
     set_messages_conv = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(set_msg_start, pattern="^msg_donate_thanks$"),
@@ -1735,8 +1723,8 @@ def main():
     application.add_handler(sub_conv)
     application.add_handler(approve_conv)
     application.add_handler(set_days_conv) 
-    application.add_handler(set_delete_time_conv) # NAYA
-    application.add_handler(set_messages_conv) # NAYA
+    application.add_handler(set_delete_time_conv)
+    application.add_handler(set_messages_conv)
     
     # User Handlers
     application.add_handler(CallbackQueryHandler(user_subscribe_start, pattern="^user_subscribe$"))
