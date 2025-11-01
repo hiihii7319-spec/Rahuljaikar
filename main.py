@@ -1337,6 +1337,7 @@ async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TY
             logger.error(f"Failed to even send error message to user {user_id}: {e2}")
 # ===== BUG FIX END =====
 
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Smart /start command"""
     user = update.effective_user
