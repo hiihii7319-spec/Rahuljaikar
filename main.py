@@ -57,7 +57,7 @@ try:
     users_collection = db['users']
     animes_collection = db['animes'] 
     config_collection = db['config'] 
-    client.server_info()
+    client.admin.command('ping') # Check connection
     logger.info("MongoDB se successfully connect ho gaya!")
 except Exception as e:
     logger.error(f"MongoDB connection failed: {e}")
@@ -604,7 +604,6 @@ async def set_msg_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data['msg_type'] = msg_type
     
-    # Current message dikhao
     config = await get_config()
     current_msg = config.get("messages", {}).get(msg_type, "N/A")
     
@@ -613,7 +612,6 @@ async def set_msg_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.edit_message_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_messages")]]))
     
-    # Return the correct state based on msg_type
     if msg_type == "donate_thanks": return M_GET_DONATE_THANKS
     if msg_type == "sub_pending": return M_GET_SUB_PENDING
     if msg_type == "sub_approved": return M_GET_SUB_APPROVED
@@ -630,7 +628,7 @@ async def set_msg_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"{msg_type} message update ho gaya: {msg_text}")
         await update.message.reply_text(f"✅ **Success!** Naya '{msg_type}' message set ho gaya hai.")
         
-        await bot_messages_menu(update, context) # Wapas menu dikhao
+        await bot_messages_menu(update, context)
         context.user_data.clear()
         return ConversationHandler.END
     except Exception as e:
@@ -1197,15 +1195,28 @@ async def handle_deep_link_donate(user: User, context: ContextTypes.DEFAULT_TYPE
 async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TYPE, payload: str):
     """Deep link se /start=dl_... ko handle karega (NAYA BUG FIX)"""
     user_id = user.id
-    logger.info(f"--- Deep Link Start for User {user_id} (Payload: {payload}) ---")
+    logger.info(f"--- DEEP LINK START --- User: {user_id}, Payload: {payload}")
+    
     try:
-        # Step 1: Subscription Check
-        logger.info(f"Step 1: Checking sub for {user_id}")
+        # Step 1: Check DB Connection
+        logger.info("Step 1: Pinging MongoDB...")
+        client.admin.command('ping')
+        logger.info("Step 1.1: MongoDB Ping OK.")
+    except Exception as e:
+        logger.error(f"CRITICAL: MongoDB connection failed! Error: {e}", exc_info=True)
+        try:
+            await context.bot.send_message(user_id, "❌ Bot abhi database se connect nahi kar pa raha hai. Admin se contact karein.")
+        except Exception: pass
+        return
+
+    try:
+        # Step 2: Check Subscription
+        logger.info("Step 2: Checking subscription...")
         is_subbed = await check_subscription(user_id)
-        logger.info(f"Step 2: User sub status: {is_subbed}")
+        logger.info(f"Step 2.1: User is_subbed: {is_subbed}")
 
         if not is_subbed:
-            logger.info(f"Step 3 (Unsubbed): Sending QR to {user_id}")
+            logger.info(f"Step 3 (Unsubbed): Sending QR code to {user_id}...")
             config = await get_config()
             qr_id = config.get('sub_qr_id')
             price = config.get('price')
@@ -1221,13 +1232,13 @@ async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TY
             text += "\n\nSubscribe karne ke baad, channel me wapas jao aur Download button dobara dabao."
             
             await context.bot.send_photo(chat_id=user_id, photo=qr_id, caption=text, parse_mode='Markdown')
-            logger.info(f"Step 4 (Unsubbed): QR sent to {user_id}")
+            logger.info(f"Step 4 (Unsubbed): QR code sent.")
             return
-            
-        # Step 2: Agar subscribed hai toh...
-        logger.info(f"Step 3 (Subbed): Sending 'processing' msg to {user_id}")
-        await context.bot.send_message(user_id, "✅ Aapka download request process kar raha hoon...")
         
+        # Step 3: User is Subscribed
+        logger.info(f"Step 3 (Subbed): User is subscribed. Sending processing message.")
+        await context.bot.send_message(user_id, "✅ Aapka download request process kar raha hoon...")
+
         logger.info(f"Step 4: Parsing payload: {payload}")
         parts = payload.split('__')
         anime_name = parts[0].replace("dl_", "")
@@ -1235,27 +1246,31 @@ async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TY
         ep_num = parts[2] if len(parts) > 2 else None
         
         logger.info(f"Step 5: Parsed: Anime={anime_name}, Season={season_name}, Ep={ep_num}")
-        
+
         anime_doc = animes_collection.find_one({"name": anime_name})
         if not anime_doc:
-            logger.warning(f"Deep link anime nahi mila: {anime_name}")
+            logger.warning(f"Anime not found in DB: {anime_name}")
             await context.bot.send_message(user_id, "❌ Error: Anime nahi mila.")
             return
-        logger.info("Step 6: Anime doc found")
+        
+        logger.info("Step 6: Anime doc found in DB.")
 
-        # Case 3: Episode (Link se episode aaya hai, quality pucho)
+        # Case: Episode link (dl_anime__season__ep)
         if ep_num:
-            logger.info(f"Step 7 (Ep): Checking qualities for S{season_name} E{ep_num}")
+            logger.info(f"Step 7 (Episode): Payload has episode. Getting qualities...")
             qualities = anime_doc.get("seasons", {}).get(season_name, {}).get(ep_num, {})
             if not qualities:
+                logger.warning(f"No qualities found for {anime_name} S{season_name} E{ep_num}")
                 await context.bot.send_message(user_id, "❌ Error: Is episode ke liye qualities nahi mili.")
                 return
+            
             keyboard = []
             for q in qualities:
                 cb_data = f"dl_{anime_name}__{season_name}__{ep_num}__{q}"
                 keyboard.append([InlineKeyboardButton(q, callback_data=cb_data)])
             keyboard.append([InlineKeyboardButton("⬅️ Back to Menu", callback_data="user_back_menu")])
-            logger.info(f"Step 8 (Ep): Sending quality list to {user_id}")
+            
+            logger.info(f"Step 8 (Episode): Sending quality list to user.")
             await context.bot.send_message(
                 chat_id=user_id,
                 text=f"**{anime_name}** | **Season {season_name}** | **Episode {ep_num}**\n\nQuality select karein:",
@@ -1264,20 +1279,23 @@ async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TY
             )
             return
 
-        # Case 2: Season (Link se season aaya hai, episode pucho)
+        # Case: Season link (dl_anime__season)
         if season_name:
-            logger.info(f"Step 7 (Season): Checking episodes for S{season_name}")
+            logger.info(f"Step 7 (Season): Payload has season. Getting episodes...")
             episodes = anime_doc.get("seasons", {}).get(season_name, {})
             if not episodes:
+                logger.warning(f"No episodes found for {anime_name} S{season_name}")
                 await context.bot.send_message(user_id, "❌ Error: Is season ke liye episodes nahi mile.")
                 return
+            
             keyboard = []
             sorted_eps = sorted(episodes.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
             for ep in sorted_eps:
                 cb_data = f"dl_{anime_name}__{season_name}__{ep}"
                 keyboard.append([InlineKeyboardButton(f"Episode {ep}", callback_data=cb_data)])
             keyboard.append([InlineKeyboardButton("⬅️ Back to Menu", callback_data="user_back_menu")]) 
-            logger.info(f"Step 8 (Season): Sending episode list to {user_id}")
+            
+            logger.info(f"Step 8 (Season): Sending episode list to user.")
             await context.bot.send_message(
                 chat_id=user_id,
                 text=f"**{anime_name}** | **Season {season_name}**\n\nEpisode select karein:",
@@ -1285,13 +1303,15 @@ async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TY
                 parse_mode='Markdown'
             )
             return
-            
-        # Case 1: Anime (Link se sirf anime aaya hai, season pucho)
-        logger.info(f"Step 7 (Anime): Checking seasons for {anime_name}")
+        
+        # Case: Anime link (dl_anime)
+        logger.info(f"Step 7 (Anime): Payload has anime only. Getting seasons...")
         seasons = anime_doc.get("seasons", {})
         if not seasons:
+            logger.warning(f"No seasons found for {anime_name}")
             await context.bot.send_message(user_id, "❌ Error: Is anime ke liye seasons nahi mile.")
             return
+        
         keyboard = []
         sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
         for s in sorted_seasons:
@@ -1299,7 +1319,8 @@ async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TY
             keyboard.append([InlineKeyboardButton(f"Season {s}", callback_data=cb_data)])
         
         keyboard.append([InlineKeyboardButton("⬅️ Back to Bot Menu", callback_data="user_back_menu")])
-        logger.info(f"Step 8 (Anime): Sending season list to {user_id}")
+        
+        logger.info(f"Step 8 (Anime): Sending season list to user.")
         await context.bot.send_message(
             chat_id=user_id,
             text=f"**{anime_name}**\n\nSeason select karein:",
@@ -1309,11 +1330,12 @@ async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TY
         return
 
     except Exception as e:
-        logger.error(f"CRITICAL: Deep link Download LOGIC me error: {e}", exc_info=True)
+        logger.error(f"CRITICAL: Deep link logic failed UNEXPECTEDLY. Error: {e}", exc_info=True)
         try:
             await context.bot.send_message(user_id, "❌ Ek error aa gaya hai. Admin se contact karein.")
         except Exception as e2:
-            logger.error(f"User {user_id} ko error message bhi nahi bhej paye: {e2}")
+            logger.error(f"Failed to even send error message to user {user_id}: {e2}")
+# ===== BUG FIX END =====
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Smart /start command"""
@@ -1461,7 +1483,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
         [InlineKeyboardButton("💲 Subscription Settings", callback_data="admin_menu_sub_settings")],
         [InlineKeyboardButton("❤️ Donation Settings", callback_data="admin_menu_donate_settings")],
         [InlineKeyboardButton("🔗 Other Links", callback_data="admin_menu_other_links")],
-        [InlineKeyboardButton("⚙️ Bot Messages", callback_data="admin_menu_messages")], # NAYA
+        [InlineKeyboardButton("⚙️ Bot Messages", callback_data="admin_menu_messages")],
         [InlineKeyboardButton("🔔 Subscription Log", url=log_url)]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -1543,7 +1565,6 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                 except Exception as e:
                     logger.error(f"User {user_id} ko DM bhejte waqt error: {e}")
                     if "blocked" in str(e) or "bot was blocked" in str(e):
-                        # Message edit nahi kar sakte, naya bhej do
                         await context.bot.send_message(user_id, "❌ Error! File nahi bhej paya. Aapne bot ko block kiya hua hai.")
                     else:
                         await query.message.reply_text("❌ Error! File nahi bhej paya. Bot ko /start karke try karein.")
