@@ -998,7 +998,7 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         btn_subscribe = InlineKeyboardButton("Subscribe Now", url=subscribe_url)
         
         keyboard = [
-            [btn_download, btn_subscribe], # Naya Layout
+            [btn_subscribe, btn_download], # Naya Layout
             [btn_backup, btn_donate, btn_support] # Naya Layout
         ]
         # =========================================
