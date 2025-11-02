@@ -189,7 +189,10 @@ async def delete_message_job(context: ContextTypes.DEFAULT_TYPE):
 (PG_MENU, PG_GET_ANIME, PG_GET_SEASON, PG_GET_EPISODE, PG_GET_CHAT) = range(20, 25)
 (DA_GET_ANIME, DA_CONFIRM) = range(25, 27)
 (DS_GET_ANIME, DS_GET_SEASON, DS_CONFIRM) = range(27, 30)
+
+# NAYA: Delete Episode States
 (DE_GET_ANIME, DE_GET_SEASON, DE_GET_EPISODE, DE_CONFIRM) = range(30, 34)
+
 (SUB_GET_SCREENSHOT,) = range(34, 35)
 (ADMIN_GET_DAYS,) = range(35, 36)
 (CV_GET_DAYS,) = range(36, 37) 
@@ -280,6 +283,8 @@ async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await post_gen_menu(update, context)
         elif data == "admin_remove_sub": # NAYA
             await remove_sub_start(update, context)
+        elif data == "admin_list_subs": # NAYA
+            await admin_list_subs(update, context)
         # (User buttons)
         elif data == "user_back_menu":
             await menu_command(update, context, from_callback=True)
@@ -1221,6 +1226,7 @@ async def activate_subscription(context: ContextTypes.DEFAULT_TYPE, user_id: int
     )
     logger.info(f"User {user_id} ko {days} din ka subscription mil gaya hai.")
     
+    user_dm_success = False
     # User ko message
     try:
         config = await get_config()
@@ -1232,9 +1238,10 @@ async def activate_subscription(context: ContextTypes.DEFAULT_TYPE, user_id: int
             text=msg,
             parse_mode='Markdown'
         )
+        user_dm_success = True # NAYA FIX
     except Exception as e:
         logger.error(f"User {user_id} ko subscription message bhejte waqt error: {e}")
-        pass 
+        pass # Fail silently for user
 
     # Log channel message update
     if original_message:
@@ -1243,8 +1250,12 @@ async def activate_subscription(context: ContextTypes.DEFAULT_TYPE, user_id: int
             parse_mode='Markdown'
         )
     
-    # Admin ko confirmation
-    return f"✅ **Success!**\nUser ID `{user_id}` ko {days} din ka subscription mil gaya hai.\nExpiry: {expiry_date.strftime('%Y-%m-%d')}"
+    # NAYA FIX: Admin ko confirmation
+    admin_confirm_text = f"✅ **Success!**\nUser ID `{user_id}` ko {days} din ka subscription mil gaya hai.\nExpiry: {expiry_date.strftime('%Y-%m-%d')}"
+    if not user_dm_success:
+        admin_confirm_text += "\n\n⚠️ **Warning:** User ko notification DM nahi bhej paya. (Shayad user ne bot ko start/unblock nahi kiya hai)."
+    
+    return admin_confirm_text
 
     
 # --- Conversation: Admin Approval ---
@@ -1662,6 +1673,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
         [InlineKeyboardButton("❤️ Donation Settings", callback_data="admin_menu_donate_settings")],
         [InlineKeyboardButton("🔗 Other Links", callback_data="admin_menu_other_links")],
         [InlineKeyboardButton("⚙️ Bot Messages", callback_data="admin_menu_messages")],
+        [InlineKeyboardButton("👥 Subscribed Users", callback_data="admin_list_subs")], # NAYA
         [InlineKeyboardButton("🔔 Subscription Log", url=log_url)]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -1680,6 +1692,49 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
             await query.answer()
     else:
         await update.message.reply_text(admin_menu_text, reply_markup=reply_markup, parse_mode='Markdown')
+
+# NAYA: Subscribed users ki list
+async def admin_list_subs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer("Fetching user list...")
+    
+    try:
+        subscribed_users = users_collection.find({"subscribed": True})
+        user_list = []
+        count = 0
+        for user in subscribed_users:
+            user_id = user['_id']
+            name = user.get('first_name', 'N/A')
+            expiry = user.get('expiry_date')
+            expiry_str = expiry.strftime('%Y-%m-%d') if expiry else "Permanent"
+            user_list.append(f"ID: {user_id} | Name: {name} | Expires: {expiry_str}")
+            count += 1
+        
+        if count == 0:
+            await query.edit_message_text("Bot par koi bhi subscribed user nahi hai.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="admin_menu")]]))
+            return
+        
+        # File banakar bhejo
+        file_content = "\n".join(user_list)
+        file_path = f"subscribed_users_{datetime.now().strftime('%Y%m%d')}.txt"
+        
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(file_content)
+        
+        await context.bot.send_document(
+            chat_id=query.from_user.id,
+            document=open(file_path, "rb"),
+            filename=file_path,
+            caption=f"Yeh rahi **{count}** subscribed users ki poori list.",
+            parse_mode='Markdown'
+        )
+        os.remove(file_path) # File delete karo
+        await query.message.delete() # Purana menu delete karo
+        
+    except Exception as e:
+        logger.error(f"Subscribed users ki list banate waqt error: {e}")
+        await context.bot.send_message(query.from_user.id, "❌ Error! List nahi bana paya.")
+
 
 async def placeholder_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1920,6 +1975,7 @@ def main():
         CallbackQueryHandler(conv_cancel, pattern="^admin_menu_messages$"),
         CallbackQueryHandler(conv_cancel, pattern="^admin_post_gen$"),
         CallbackQueryHandler(conv_cancel, pattern="^admin_remove_sub$"), # NAYA
+        CallbackQueryHandler(conv_cancel, pattern="^admin_list_subs$"), # NAYA
         CallbackQueryHandler(conv_cancel, pattern="^user_back_menu$"),
         CallbackQueryHandler(conv_cancel, pattern="^user_subscribe$"),
     ]
@@ -2040,6 +2096,7 @@ def main():
     application.add_handler(CallbackQueryHandler(other_links_menu, pattern="^admin_menu_other_links$"))
     application.add_handler(CallbackQueryHandler(bot_messages_menu, pattern="^admin_menu_messages$"))
     application.add_handler(CallbackQueryHandler(post_gen_menu, pattern="^admin_post_gen$")) # NAYA: Stuck Fix
+    application.add_handler(CallbackQueryHandler(admin_list_subs, pattern="^admin_list_subs$")) # NAYA
 
     # Conversations
     application.add_handler(add_anime_conv)
