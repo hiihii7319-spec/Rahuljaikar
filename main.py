@@ -20,10 +20,7 @@ from telegram.error import BadRequest
 # Flask server ke liye
 from flask import Flask
 from threading import Thread
-# Flask server ke liye
-from flask import Flask
-from threading import Thread
-from waitress import serve # <-- YEH LINE ADD KAREIN
+from waitress import serve # <-- FIX 1: Crash fix ke liye import
 
 # --- Flask Server Setup ---
 app = Flask(__name__)
@@ -32,7 +29,7 @@ def home():
     return "I am alive and running!"
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
-    # app.run() ki jagah serve() use karein
+    # app.run() ki jagah serve() use karein (Crash Fix)
     serve(app, host="0.0.0.0", port=port)
 
 # --- Baaki ka Bot Code ---
@@ -173,8 +170,7 @@ async def send_donate_thank_you(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.warning(f"Thank you message bhejte waqt error: {e}")
 
-# NAYA FIX: Job Queue waala delete function waapas aa gaya (Auto-Delete Fix)
-# NAYA FIX: Job Queue Alternative
+# FIX 2: Naya Auto-Delete Function (Job Queue Alternative)
 async def delete_message_later(bot, chat_id: int, message_id: int, seconds: int):
     """asyncio.sleep ka use karke message delete karega (Job Queue Alternative)"""
     try:
@@ -184,9 +180,8 @@ async def delete_message_later(bot, chat_id: int, message_id: int, seconds: int)
     except Exception as e:
         logger.warning(f"Message (asyncio.sleep) delete karne me error: {e}")
 
-# NAYA FIX: Job Queue waala delete function waapas aa gaya (Auto-Delete Fix)
+# (Purana Job Queue function, abhi bhi use ho sakta hai agar kahin aur call ho)
 async def delete_message_job(context: ContextTypes.DEFAULT_TYPE):
-    # ... (baaki ka function waise hi rahega) ...async def delete_message_job(context: ContextTypes.DEFAULT_TYPE):
     """File ko delete karega"""
     job = context.job
     try:
@@ -1942,15 +1937,21 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                         # NAYA FIX: User ko "Try again" message do
                         await context.bot.send_message(user_id, "❌ Error! File nahi bhej paya. Please try again.")
                 
-                # NAYA FIX: Auto-Delete Fix (Job Queue)
+                # FIX 3: Auto-Delete Fix (asyncio.create_task)
                 if sent_message:
                     try:
                         config = await get_config()
                         delete_time = config.get("delete_seconds", 180) 
-                        context.job_queue.run_once(delete_message_job, delete_time, chat_id=user_id, data=sent_message.message_id)
-                        logger.info(f"Scheduled message {sent_message.message_id} for deletion in {delete_time}s (using job_queue)")
+                        # Naya method: asyncio.create_task
+                        asyncio.create_task(delete_message_later(
+                            bot=context.bot, 
+                            chat_id=user_id, 
+                            message_id=sent_message.message_id, 
+                            seconds=delete_time
+                        ))
+                        logger.info(f"Scheduled message {sent_message.message_id} for deletion in {delete_time}s (using asyncio.create_task)")
                     except Exception as e:
-                        logger.error(f"JobQueue schedule failed for user {user_id}: {e}")
+                        logger.error(f"asyncio.create_task schedule failed for user {user_id}: {e}")
 
             else:
                 await query.edit_message_caption("❌ Error: File ID nahi mili.")
