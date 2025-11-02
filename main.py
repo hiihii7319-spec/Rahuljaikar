@@ -77,7 +77,7 @@ async def get_config():
             "_id": "bot_config", "sub_qr_id": None, "donate_qr_id": None, "price": None, 
             "links": {"backup": None, "support": None}, 
             "validity_days": None,
-            "delete_seconds": 180, # NAYA: 3 Minute (180 sec)
+            "delete_seconds": 300, # NAYA: 5 Minute (300 sec)
             "messages": { # NAYA FEATURE: Custom Messages
                 "sub_pending": "✅ **Screenshot Bhej Diya Gaya!**\n\nAdmin jald hi aapka payment check karke approve kar denge. Intezaar karein.",
                 "sub_approved": "🎉 **Congratulations!**\n\nAapka subscription approve ho gaya hai.\nAapka plan {days} din mein expire hoga ({expiry_date}).\n\n/menu se anime download karna shuru karein.",
@@ -91,7 +91,7 @@ async def get_config():
     
     # Purane users ke liye compatibility
     if "validity_days" not in config: config["validity_days"] = None
-    if "delete_seconds" not in config: config["delete_seconds"] = 180 # NAYA
+    if "delete_seconds" not in config: config["delete_seconds"] = 300 # NAYA
     if "messages" not in config: config["messages"] = {}
     
     # Default messages check
@@ -112,7 +112,7 @@ async def get_config():
             {"_id": "bot_config"}, 
             {"$set": {
                 "messages": config["messages"], 
-                "delete_seconds": config.get("delete_seconds", 180)
+                "delete_seconds": config.get("delete_seconds", 300)
             }}
         )
         
@@ -619,10 +619,10 @@ async def set_delete_time_start(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     config = await get_config()
-    current_seconds = config.get("delete_seconds", 180)
+    current_seconds = config.get("delete_seconds", 300) # NAYA: Default 300
     current_minutes = current_seconds // 60
     text = f"Abhi file auto-delete **{current_minutes} minute(s)** ({current_seconds} seconds) par set hai.\n\n"
-    text += "Naya time **seconds** mein bhejo.\n(Example: `180` for 3 minutes, `300` for 5 minutes)\n\n/cancel - Cancel."
+    text += "Naya time **seconds** mein bhejo.\n(Example: `300` for 5 minutes, `600` for 10 minutes)\n\n/cancel - Cancel."
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_sub_settings")]]))
     return CS_GET_DELETE_TIME
 async def set_delete_time_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1236,7 +1236,7 @@ async def sub_settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     price_status = "✅" if config.get('price') else "❌"
     days_val = config.get('validity_days')
     days_status = f"✅ ({days_val} days)" if days_val else "❌"
-    delete_seconds = config.get("delete_seconds", 180)
+    delete_seconds = config.get("delete_seconds", 300) # NAYA: 300
     delete_status = f"✅ ({delete_seconds // 60} min)"
     
     keyboard = [
@@ -1337,6 +1337,7 @@ async def handle_deep_link_donate(user: User, context: ContextTypes.DEFAULT_TYPE
             parse_mode='Markdown',
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
+        # NAYA FIX: job_queue ab reliable hai Uptime Robot ke saath
         context.job_queue.run_once(send_donate_thank_you, 60, chat_id=user.id)
     except Exception as e:
         logger.error(f"Deep link Donate QR bhejte waqt error: {e}")
@@ -1598,7 +1599,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                     caption = f"🎬 **{anime_name}**\nS{season_name} - E{ep_num} ({quality})"
                     
                     config = await get_config()
-                    delete_time = config.get("delete_seconds", 180)
+                    delete_time = config.get("delete_seconds", 300)
                     delete_minutes = max(1, delete_time // 60)
                     msg_template = config.get("messages", {}).get("file_warning")
                     caption += f"\n\n{msg_template.replace('{minutes}', str(delete_minutes))}"
@@ -1625,7 +1626,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                 if sent_message:
                     try:
                         config = await get_config()
-                        delete_time = config.get("delete_seconds", 180)
+                        delete_time = config.get("delete_seconds", 300)
                         asyncio.create_task(
                             delete_message_after_delay(
                                 context=context,
