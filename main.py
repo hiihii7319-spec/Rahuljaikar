@@ -167,7 +167,7 @@ async def send_donate_thank_you(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.warning(f"Thank you message bhejte waqt error: {e}")
 
-# NAYA FIX: Job Queue waala delete function waapas aa gaya
+# NAYA FIX: Job Queue waala delete function waapas aa gaya (Auto-Delete Fix)
 async def delete_message_job(context: ContextTypes.DEFAULT_TYPE):
     """File ko delete karega"""
     job = context.job
@@ -202,27 +202,33 @@ async def delete_message_job(context: ContextTypes.DEFAULT_TYPE):
 (RS_GET_ID, RS_CONFIRM) = range(43, 45)
 
 
-# --- Common Conversation Fallbacks (NAYA GLOBAL CANCEL FIX) ---
+# --- Common Conversation Fallbacks (NAYA GLOBAL CANCEL FIX - Stuck Fix) ---
 async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
     logger.info(f"User {user_id} ne conversation cancel/reset kiya.")
     
     current_state = context.user_data.get(ConversationHandler.STATE)
+    
+    # Agar user conversation me nahi tha, bas /cancel likha
     if not current_state:
-        # User conversation me nahi tha, bas /cancel likha
         if update.message:
             await update.message.reply_text("Aap kisi active operation mein nahi hain.")
-        else:
+        elif update.callback_query:
             await update.callback_query.answer("Aap kisi active operation mein nahi hain.", show_alert=True)
         
         # NAYA FIX: Agar state nahi hai, toh bhi naya command/button chalao
         if update.message and update.message.text == '/start':
             await start_command(update, context)
+            return ConversationHandler.END
         elif update.message and update.message.text == '/admin':
             await admin_command(update, context)
+            return ConversationHandler.END
         elif update.message and update.message.text == '/menu':
             await menu_command(update, context)
+            return ConversationHandler.END
+        
+        # Agar sirf /cancel ya random message tha
         return ConversationHandler.END
 
     # User conversation me tha, data clear karo
@@ -234,7 +240,7 @@ async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Agar /cancel, /start etc. type kiya
         await update.message.reply_text(cancel_text)
     else:
-        # Agar button dabaya (jaise Back button)
+        # Agar button dabaya (jaise Main Menu button)
         query = update.callback_query
         await query.answer("Puraana operation cancel kar diya gaya hai.")
         try:
@@ -252,14 +258,22 @@ async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_message(chat_id=user_id, text=cancel_text)
             except Exception: pass
             
-    # --- YEH HAI NAYA FIX ---
-    # Conversation end karne ke baad, check karo user admin hai ya nahi
-    await asyncio.sleep(0.1) # Delay for ConversationHandler.END to process
+    # --- YEH HAI NAYA FIX (Stuck Fix) ---
+    # Conversation end karne ke baad, check karo naya command/button kya tha aur usse run karo
     
-    # NAYA LOGIC: Naya command/button kya tha? Usse run karo
+    # Naya command/button kya tha? Usse run karo
     if update.message:
-        if update.message.text in ['/start', '/menu', '/admin', '/cancel']:
+        # Commands
+        if update.message.text == '/start':
             await start_command(update, context) # start_command handles admin/user logic
+        elif update.message.text == '/admin':
+            await admin_command(update, context)
+        elif update.message.text == '/menu':
+            await menu_command(update, context)
+        elif update.message.text == '/cancel':
+             # /cancel ke baad kuch nahi karna
+             pass
+
     elif update.callback_query:
         query = update.callback_query
         data = query.data
@@ -289,9 +303,64 @@ async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data == "user_back_menu":
             await menu_command(update, context, from_callback=True)
         elif data == "user_subscribe":
-            await user_subscribe_start(update, context)
-        
+            # Start the user subscription flow again from the beginning
+            await user_subscribe_start(update, context, from_conv_cancel=True)
+
     return ConversationHandler.END
+
+# NAYA FIX: Back button ke liye user_subscribe_start me naya argument
+async def user_subscribe_start(update: Update, context: ContextTypes.DEFAULT_TYPE, from_conv_cancel: bool = False):
+    if update.callback_query:
+        query = update.callback_query
+        if not from_conv_cancel:
+            await query.answer()
+        
+        config = await get_config()
+        qr_id = config.get('sub_qr_id')
+        price = config.get('price')
+        days = config.get('validity_days')
+        
+        if not qr_id or not price or not days:
+            await query.message.reply_text("❌ **Error!** Subscription system abhi setup nahi hua hai. Admin se baat karein.")
+            # Naya logic: Agar /menu button dabakar aaye the, toh /menu dikhao
+            if not from_conv_cancel:
+                 await back_to_user_menu(update, context) 
+            return ConversationHandler.END
+            
+        text = f"**Subscription Plan**\n\n**Price:** {price}\n**Validity:** {days} days\n\n"
+        text += "Upar diye gaye QR code par payment karein aur payment ka **screenshot** neeche 'Upload Screenshot' button dabake bhejein."
+        
+        keyboard = [[InlineKeyboardButton("⬆️ Upload Screenshot", callback_data="user_upload_ss")], [InlineKeyboardButton("⬅️ Back", callback_data="user_back_menu")]]
+        
+        try:
+            # Agar purana message photo nahi hai, toh use delete karke naya bhejo
+            if query.message.photo:
+                await query.message.delete()
+                await context.bot.send_photo(chat_id=query.from_user.id, photo=qr_id, caption=text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
+            else:
+                await query.edit_message_media(
+                    media=InputMediaPhoto(media=qr_id, caption=text, parse_mode='Markdown'),
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+        except Exception as e:
+            # Agar edit nahi ho paya (jaise old message type text ho), naya message bhejo
+            logger.warning(f"user_subscribe_start me edit nahi kar paya, naya bhej raha hoon: {e}")
+            try:
+                if query.message.photo:
+                    await query.message.delete() # Purana photo message delete karo
+                else:
+                    await query.edit_message_text("Subscription menu refresh ho raha hai...")
+                await context.bot.send_photo(chat_id=query.from_user.id, photo=qr_id, caption=text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
+            except Exception as e_fail:
+                logger.error(f"user_subscribe_start me critical error: {e_fail}")
+                await context.bot.send_message(query.from_user.id, "❌ Error! Subscription menu nahi khul paya.")
+                return ConversationHandler.END
+            
+        return ConversationHandler.END # Isme koi state nahi hai, screenshot upload ke liye naya handler shuru hoga
+    
+    # Agar ye function kisi aur tarah se call ho
+    return ConversationHandler.END
+
 
 async def back_to_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -365,7 +434,14 @@ async def confirm_anime_details(update: Update, context: ContextTypes.DEFAULT_TY
     desc = context.user_data['anime_desc']
     caption = f"**{name}**\n\n{desc if desc else ''}\n\n--- Details Check Karo ---"
     keyboard = [[InlineKeyboardButton("✅ Save", callback_data="save_anime")], [InlineKeyboardButton("⬅️ Back", callback_data="back_to_add_content")]]
-    await update.message.reply_photo(photo=poster_id, caption=caption, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    # NAYA FIX: Confirm details se pehle agar koi photo bachi ho toh usse delete karo
+    try:
+        await update.message.reply_photo(photo=poster_id, caption=caption, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    except Exception as e:
+        logger.warning(f"Confirm anime details me error: {e}")
+        await update.message.reply_text("❌ Error: Poster bhej nahi paya. Dobara try karein ya /cancel.")
+        return A_GET_DESC # Wapas description state par bhej do
+        
     return A_CONFIRM
 async def save_anime_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -483,7 +559,7 @@ async def _save_episode_file_helper(update: Update, context: ContextTypes.DEFAUL
     """Helper function to save file ID to DB"""
     file_id = None
     if update.message.video: file_id = update.message.video.file_id
-    elif update.message.document: file_id = update.message.document.file_id
+    elif update.message.document and (update.message.document.mime_type and update.message.document.mime_type.startswith('video')): file_id = update.message.document.file_id # NAYA FIX: Document filter me video support
     
     if not file_id:
         await update.message.reply_text("Ye video file nahi hai. Please dobara file bhejein ya /skip karein.")
@@ -506,7 +582,20 @@ async def _save_episode_file_helper(update: Update, context: ContextTypes.DEFAUL
 
 # Naya function
 async def get_episode_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['ep_num'] = update.message.text
+    # NAYA FIX: Check if episode number is already there (in case of consecutive file sends)
+    if 'ep_num' not in context.user_data:
+        context.user_data['ep_num'] = update.message.text
+    
+    # NAYA FIX: Check if episode already exists for any quality (Stuck Fix - Duplicate Episode Check)
+    anime_name = context.user_data['anime_name']
+    season_name = context.user_data['season_name']
+    ep_num = context.user_data['ep_num']
+    
+    anime_doc = animes_collection.find_one({"name": anime_name})
+    if anime_doc.get("seasons", {}).get(season_name, {}).get(ep_num):
+        await update.message.reply_text(f"⚠️ **Error!** '{anime_name}' - Season {season_name} - Episode {ep_num} pehle se maujood hai. Please pehle isse delete karein ya koi doosra episode number dein.\n\n/cancel - Cancel.")
+        return E_GET_NUMBER
+
     await update.message.reply_text(f"Aapne **Episode {context.user_data['ep_num']}** select kiya hai.\n\n"
                                     "Ab **480p** quality ki video file bhejein.\n"
                                     "Ya /skip type karein.", 
@@ -515,17 +604,20 @@ async def get_episode_number(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 # Naye handlers
 async def get_480p_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text == "/skip": return await skip_480p(update, context) # NAYA FIX: Skip check
     await _save_episode_file_helper(update, context, "480p")
     await update.message.reply_text("Ab **720p** quality ki video file bhejein.\nYa /skip type karein.", parse_mode='Markdown')
     return E_GET_720P
 
 async def skip_480p(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # NAYA FIX: DB me None set karna zaroori nahi, skip ka matlab hai woh key nahi hogi.
     await update.message.reply_text("✅ 480p skip kar diya.\n\n"
                                     "Ab **720p** quality ki video file bhejein.\n"
                                     "Ya /skip type karein.", parse_mode='Markdown')
     return E_GET_720P
 
 async def get_720p_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text == "/skip": return await skip_720p(update, context) # NAYA FIX: Skip check
     await _save_episode_file_helper(update, context, "720p")
     await update.message.reply_text("Ab **1080p** quality ki video file bhejein.\nYa /skip type karein.", parse_mode='Markdown')
     return E_GET_1080P
@@ -537,6 +629,7 @@ async def skip_720p(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return E_GET_1080P
 
 async def get_1080p_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text == "/skip": return await skip_1080p(update, context) # NAYA FIX: Skip check
     await _save_episode_file_helper(update, context, "1080p")
     await update.message.reply_text("Ab **4K** quality ki video file bhejein.\nYa /skip type karein.", parse_mode='Markdown')
     return E_GET_4K
@@ -548,6 +641,7 @@ async def skip_1080p(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return E_GET_4K
 
 async def get_4k_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text == "/skip": return await skip_4k(update, context) # NAYA FIX: Skip check
     await _save_episode_file_helper(update, context, "4K")
     await update.message.reply_text("✅ **Success!** Saari qualities save ho gayi hain.", parse_mode='Markdown')
     context.user_data.clear()
@@ -782,7 +876,7 @@ async def post_gen_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("✍️ Season Post", callback_data="post_gen_season")],
         [InlineKeyboardButton("✍️ Episode Post", callback_data="post_gen_episode")],
-        [InlineKeyboardButton("⬅️ Back", callback_data="admin_menu")]
+        [InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]
     ]
     await query.edit_message_text("✍️ **Post Generator** ✍️\n\nAap kis tarah ka post generate karna chahte hain?", reply_markup=InlineKeyboardMarkup(keyboard))
     return PG_MENU
@@ -1136,9 +1230,9 @@ async def remove_sub_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Admin ko confirmation
         await query.edit_message_text(f"✅ **Success!**\nUser {user_name} (ID: `{user_id}`) ka subscription remove kar diya gaya hai.")
         
-        # User ko notification
+        # User ko notification (Notification Fix)
         try:
-            await context.bot.send_message(user_id, "ℹ️ Aapka subscription admin ne remove kar diya hai.")
+            await context.bot.send_message(user_id, "ℹ️ Aapka subscription admin ne remove kar diya hai.\n\n/menu se dobara subscribe kar sakte hain.")
         except Exception as e:
             logger.warning(f"User {user_id} ko removal notification bhejte waqt error: {e}")
 
@@ -1150,27 +1244,7 @@ async def remove_sub_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 # --- Conversation: User Subscription ---
-async def user_subscribe_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    config = await get_config()
-    qr_id = config.get('sub_qr_id')
-    price = config.get('price')
-    days = config.get('validity_days')
-    
-    if not qr_id or not price or not days:
-        await query.message.reply_text("❌ **Error!** Subscription system abhi setup nahi hua hai. Admin se baat karein.")
-        return ConversationHandler.END
-        
-    text = f"**Subscription Plan**\n\n**Price:** {price}\n**Validity:** {days} days\n\n"
-    text += "Upar diye gaye QR code par payment karein aur payment ka **screenshot** neeche 'Upload Screenshot' button dabake bhejein."
-    
-    keyboard = [[InlineKeyboardButton("⬆️ Upload Screenshot", callback_data="user_upload_ss")], [InlineKeyboardButton("⬅️ Back", callback_data="user_back_menu")]]
-    
-    await query.message.reply_photo(photo=qr_id, caption=text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
-    await query.message.delete()
-    return ConversationHandler.END 
-
+# NAYA FIX: isko user_subscribe_start me merge kar diya hai taki back button bhi handle ho sake
 async def user_upload_ss_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -1217,7 +1291,7 @@ async def user_get_screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ConversationHandler.END
     
 async def activate_subscription(context: ContextTypes.DEFAULT_TYPE, user_id: int, days: int, admin_user_name: str, original_message=None):
-    """User ko subscribe karega aur sabko inform karega"""
+    """User ko subscribe karega aur sabko inform karega (Notification Fix)"""
     expiry_date = datetime.now() + timedelta(days=days)
     users_collection.update_one(
         {"_id": user_id},
@@ -1238,10 +1312,10 @@ async def activate_subscription(context: ContextTypes.DEFAULT_TYPE, user_id: int
             text=msg,
             parse_mode='Markdown'
         )
-        user_dm_success = True # NAYA FIX
+        user_dm_success = True
     except Exception as e:
-        logger.error(f"User {user_id} ko subscription message bhejte waqt error: {e}")
-        pass # Fail silently for user
+        logger.error(f"User {user_id} ko subscription message bhejte waqt error (blocked?): {e}")
+        # User ko message nahi gaya.
 
     # Log channel message update
     if original_message:
@@ -1250,9 +1324,10 @@ async def activate_subscription(context: ContextTypes.DEFAULT_TYPE, user_id: int
             parse_mode='Markdown'
         )
     
-    # NAYA FIX: Admin ko confirmation
+    # Admin ko confirmation
     admin_confirm_text = f"✅ **Success!**\nUser ID `{user_id}` ko {days} din ka subscription mil gaya hai.\nExpiry: {expiry_date.strftime('%Y-%m-%d')}"
     if not user_dm_success:
+        # User ko notification nahi gaya, Admin ko batao
         admin_confirm_text += "\n\n⚠️ **Warning:** User ko notification DM nahi bhej paya. (Shayad user ne bot ko start/unblock nahi kiya hai)."
     
     return admin_confirm_text
@@ -1284,6 +1359,7 @@ async def admin_approve_start(update: Update, context: ContextTypes.DEFAULT_TYPE
                 query.from_user.first_name, 
                 query.message
             )
+            # Admin ko confirmation bhejo
             await query.message.reply_text(confirmation_text, parse_mode='Markdown') 
             context.user_data.clear()
             return ConversationHandler.END 
@@ -1335,8 +1411,10 @@ async def admin_reject_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("Aap admin nahi hain!", show_alert=True)
         return
         
+    user_dm_success = False # Notification Fix
     try:
         user_id_to_reject = int(query.data.split("_")[-1])
+        user_info = users_collection.find_one({"_id": user_id_to_reject}) # NAYA FIX: User info fetch karo
         
         try:
             config = await get_config()
@@ -1346,10 +1424,15 @@ async def admin_reject_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text=msg,
                 parse_mode='Markdown'
             )
+            user_dm_success = True # Notification Fix
         except Exception as e:
-            logger.error(f"User {user_id_to_reject} ko rejection message bhejte waqt error: {e}")
+            logger.error(f"User {user_id_to_reject} ko rejection message bhejte waqt error (blocked?): {e}")
             
-        await query.message.reply_text(f"✅ User {user_id_to_reject} ko reject kar diya gaya hai.")
+        admin_confirm_text = f"✅ User {user_id_to_reject} ({user_info.get('first_name', 'N/A')}) ko reject kar diya gaya hai."
+        if not user_dm_success:
+             admin_confirm_text += "\n\n⚠️ **Warning:** User ko notification DM nahi bhej paya."
+             
+        await query.message.reply_text(admin_confirm_text, parse_mode='Markdown') # Admin ko reply do
         
         await query.edit_message_caption(
             caption=query.message.caption + f"\n\n**[REJECTED by {query.from_user.first_name}]**",
@@ -1596,13 +1679,13 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from_
             # Agar purana message photo tha (jaise QR code), toh usse delete karke naya bhejo
             if query.message.photo:
                 await query.message.delete()
-                await query.message.reply_text(menu_text, reply_markup=InlineKeyboardMarkup(keyboard))
+                await context.bot.send_message(query.from_user.id, menu_text, reply_markup=InlineKeyboardMarkup(keyboard))
             else:
                 await query.edit_message_text(menu_text, reply_markup=InlineKeyboardMarkup(keyboard))
         except Exception as e:
             logger.warning(f"Menu edit/reply nahi kar paya: {e}")
             try:
-                await query.message.reply_text(menu_text, reply_markup=InlineKeyboardMarkup(keyboard))
+                await context.bot.send_message(query.from_user.id, menu_text, reply_markup=InlineKeyboardMarkup(keyboard))
             except Exception as e2:
                 logger.error(f"Menu command (callback) me critical error: {e2}")
     else:
@@ -1684,7 +1767,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
         try:
             if query.message.photo:
                 await query.message.delete()
-                await query.message.reply_text(admin_menu_text, reply_markup=reply_markup, parse_mode='Markdown')
+                await context.bot.send_message(query.from_user.id, admin_menu_text, reply_markup=reply_markup, parse_mode='Markdown')
             else:
                 await query.edit_message_text(admin_menu_text, reply_markup=reply_markup, parse_mode='Markdown')
         except Exception as e:
@@ -1748,6 +1831,7 @@ async def placeholder_button_handler(update: Update, context: ContextTypes.DEFAU
 async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Callback data 'dl_' se shuru hone wale sabhi buttons ko handle karega.
+    (Auto-Delete Fix)
     """
     query = update.callback_query
     user = query.from_user
@@ -1806,12 +1890,12 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
         if quality:
             file_id = anime_doc.get("seasons", {}).get(season_name, {}).get(ep_num, {}).get(quality)
             if file_id:
-                sent_message = None # NAYA FIX
+                sent_message = None 
                 try:
                     caption = f"🎬 **{anime_name}**\nS{season_name} - E{ep_num} ({quality})"
                     
                     config = await get_config()
-                    delete_time = config.get("delete_seconds", 180) # NAYA: 180
+                    delete_time = config.get("delete_seconds", 180) 
                     delete_minutes = max(1, delete_time // 60)
                     msg_template = config.get("messages", {}).get("file_warning")
                     caption += f"\n\n{msg_template.replace('{minutes}', str(delete_minutes))}"
@@ -1819,6 +1903,9 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                     # Purana message (jo Poster wala tha) delete karo
                     await query.message.delete()
                     
+                    # NAYA FIX: File ko as a document bhejo agar woh video nahi hai (ya size bada hai)
+                    # Currently, Telegram allows video to be sent as video or document
+                    # send_video is generally preferred for smaller videos. Let's keep send_video for simplicity.
                     sent_message = await context.bot.send_video(
                         chat_id=user_id, 
                         video=file_id, 
@@ -1834,15 +1921,14 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                         # NAYA FIX: User ko "Try again" message do
                         await context.bot.send_message(user_id, "❌ Error! File nahi bhej paya. Please try again.")
                 
-                # NAYA FIX: Ab job_queue yahan hai.
+                # NAYA FIX: Auto-Delete Fix (Job Queue)
                 if sent_message:
                     try:
                         config = await get_config()
-                        delete_time = config.get("delete_seconds", 180) # NAYA: 180
+                        delete_time = config.get("delete_seconds", 180) 
                         context.job_queue.run_once(delete_message_job, delete_time, chat_id=user_id, data=sent_message.message_id)
                         logger.info(f"Scheduled message {sent_message.message_id} for deletion in {delete_time}s (using job_queue)")
                     except Exception as e:
-                        # Agar job_queue fail hota hai, toh user ko pareshan mat karo
                         logger.error(f"JobQueue schedule failed for user {user_id}: {e}")
 
             else:
@@ -1977,7 +2063,8 @@ def main():
         CallbackQueryHandler(conv_cancel, pattern="^admin_remove_sub$"), # NAYA
         CallbackQueryHandler(conv_cancel, pattern="^admin_list_subs$"), # NAYA
         CallbackQueryHandler(conv_cancel, pattern="^user_back_menu$"),
-        CallbackQueryHandler(conv_cancel, pattern="^user_subscribe$"),
+        # NAYA FIX: user_subscribe button ko bhi global fallback me daalo
+        CallbackQueryHandler(conv_cancel, pattern="^user_subscribe$"), 
     ]
     
     # Local Fallbacks (Sirf "Back" buttons ke liye)
@@ -1994,17 +2081,18 @@ def main():
     add_anime_conv = ConversationHandler(entry_points=[CallbackQueryHandler(add_anime_start, pattern="^admin_add_anime$")], states={A_GET_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_anime_name)], A_GET_POSTER: [MessageHandler(filters.PHOTO, get_anime_poster)], A_GET_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_anime_desc), CommandHandler("skip", skip_anime_desc)], A_CONFIRM: [CallbackQueryHandler(save_anime_details, pattern="^save_anime$")]}, fallbacks=global_fallbacks + add_content_fallback)
     add_season_conv = ConversationHandler(entry_points=[CallbackQueryHandler(add_season_start, pattern="^admin_add_season$")], states={S_GET_ANIME: [CallbackQueryHandler(get_anime_for_season, pattern="^season_anime_")], S_GET_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_season_number)], S_CONFIRM: [CallbackQueryHandler(save_season, pattern="^save_season$")]}, fallbacks=global_fallbacks + add_content_fallback)
     
-    # NAYA "Add Episode" Conversation Handler
+    # NAYA "Add Episode" Conversation Handler (Filters Fixed)
     add_episode_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(add_episode_start, pattern="^admin_add_episode$")], 
         states={
             E_GET_ANIME: [CallbackQueryHandler(get_anime_for_episode, pattern="^ep_anime_")], 
             E_GET_SEASON: [CallbackQueryHandler(get_season_for_episode, pattern="^ep_season_")], 
             E_GET_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_episode_number)],
-            E_GET_480P: [MessageHandler(filters.VIDEO | filters.Document.ALL, get_480p_file), CommandHandler("skip", skip_480p)],
-            E_GET_720P: [MessageHandler(filters.VIDEO | filters.Document.ALL, get_720p_file), CommandHandler("skip", skip_720p)],
-            E_GET_1080P: [MessageHandler(filters.VIDEO | filters.Document.ALL, get_1080p_file), CommandHandler("skip", skip_1080p)],
-            E_GET_4K: [MessageHandler(filters.VIDEO | filters.Document.ALL, get_4k_file), CommandHandler("skip", skip_4k)],
+            # NAYA FIX: filters.VIDEO | (filters.Document.ALL & filters.Update.MIME_TYPE_VIDEO) ke badle MessageHandler me skip command check add kiya
+            E_GET_480P: [MessageHandler(filters.ALL & ~filters.COMMAND, get_480p_file), CommandHandler("skip", skip_480p)],
+            E_GET_720P: [MessageHandler(filters.ALL & ~filters.COMMAND, get_720p_file), CommandHandler("skip", skip_720p)],
+            E_GET_1080P: [MessageHandler(filters.ALL & ~filters.COMMAND, get_1080p_file), CommandHandler("skip", skip_1080p)],
+            E_GET_4K: [MessageHandler(filters.ALL & ~filters.COMMAND, get_4k_file), CommandHandler("skip", skip_4k)],
         }, 
         fallbacks=global_fallbacks + add_content_fallback
     )
