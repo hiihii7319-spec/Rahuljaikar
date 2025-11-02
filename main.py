@@ -20,6 +20,10 @@ from telegram.error import BadRequest
 # Flask server ke liye
 from flask import Flask
 from threading import Thread
+# Flask server ke liye
+from flask import Flask
+from threading import Thread
+from waitress import serve # <-- YEH LINE ADD KAREIN
 
 # --- Flask Server Setup ---
 app = Flask(__name__)
