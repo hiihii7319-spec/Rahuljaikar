@@ -32,7 +32,8 @@ def home():
     return "I am alive and running!"
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
+    # app.run() ki jagah serve() use karein
+    serve(app, host="0.0.0.0", port=port)
 
 # --- Baaki ka Bot Code ---
 load_dotenv()
