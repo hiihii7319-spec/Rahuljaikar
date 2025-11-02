@@ -207,20 +207,19 @@ async def delete_message_job(context: ContextTypes.DEFAULT_TYPE):
 async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
-    logger.info(f"User {user_id} ne conversation cancel/reset kiya.")
-    
-    # Previous state ko store karo (just for logging/context)
-    current_state = context.user_data.get(ConversationHandler.STATE)
+    logger.info(f"User {user_id} ne conversation cancel/reset kiya (State: {context.user_data.get(ConversationHandler.STATE)}).")
     
     # Data clear karo
     if context.user_data:
         context.user_data.clear()
     
-    # Step 1: User ko feedback do
     cancel_text = "Operation cancel kar diya gaya hai. Naya command process ho raha hai..."
     
     if update.message:
         try:
+            # NAYA FIX: /cancel ke liye alag message
+            if update.message.text == '/cancel':
+                cancel_text = "Sab kuch cancel kar diya gaya hai. Menu khol raha hoon..."
             await update.message.reply_text(cancel_text)
         except Exception:
             pass
@@ -254,7 +253,16 @@ async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if update.message:
         text = update.message.text
-        if text == '/start' or text == '/cancel':
+        
+        # NAYA FIX: Request 2 - /cancel hamesha admin/user menu laaye
+        if text == '/cancel':
+            if await is_admin(user.id):
+                logger.info("/cancel se Admin Menu dikha raha hoon.")
+                await admin_command(update, context) # Force admin menu
+            else:
+                logger.info("/cancel se User Menu dikha raha hoon.")
+                await menu_command(update, context) # Force user menu
+        elif text == '/start':
             await start_command(update, context) 
         elif text == '/admin':
             await admin_command(update, context)
@@ -265,7 +273,7 @@ async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         data = query.data
         
-        # Admin Menu buttons
+        # Admin Main Menu buttons
         if data == "admin_menu": await admin_command(update, context, from_callback=True)
         elif data == "admin_menu_add_content": await add_content_menu(update, context)
         elif data == "admin_menu_manage_content": await manage_content_menu(update, context)
@@ -277,9 +285,41 @@ async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data == "admin_remove_sub": await remove_sub_start(update, context)
         elif data == "admin_list_subs": await admin_list_subs(update, context)
         
+        # NAYA FIX: Request 1 - Stuck buttons
+        # Add Content Sub-menu
+        elif data == "admin_add_anime": await add_anime_start(update, context)
+        elif data == "admin_add_season": await add_season_start(update, context)
+        elif data == "admin_add_episode": await add_episode_start(update, context)
+        
+        # Manage Content Sub-menu
+        elif data == "admin_del_anime": await delete_anime_start(update, context)
+        elif data == "admin_del_season": await delete_season_start(update, context)
+        elif data == "admin_del_episode": await delete_episode_start(update, context)
+        
+        # Sub-Settings Sub-menu
+        elif data == "admin_set_sub_qr": await set_sub_qr_start(update, context)
+        elif data == "admin_set_price": await set_price_start(update, context)
+        elif data == "admin_set_days": await set_days_start(update, context)
+        elif data == "admin_set_delete_time": await set_delete_time_start(update, context)
+        
+        # Donate Settings Sub-menu
+        elif data == "admin_set_donate_qr": await set_donate_qr_start(update, context)
+        
+        # Links Sub-menu
+        elif data == "admin_set_backup_link" or data == "admin_set_support_link": await set_links_start(update, context)
+        
+        # Messages Sub-menu
+        elif data.startswith("msg_"): await set_msg_start(update, context)
+        
         # User Menu buttons
         elif data == "user_back_menu": await menu_command(update, context, from_callback=True)
         elif data == "user_subscribe": await user_subscribe_start(update, context, from_conv_cancel=True)
+        
+        # User Subscription
+        elif data == "user_upload_ss": await user_upload_ss_start(update, context)
+        
+        # Admin Approval
+        elif data.startswith("admin_approve_"): await admin_approve_start(update, context)
         
     return ConversationHandler.END # Hamesha conversation ko end karo
 
@@ -865,12 +905,11 @@ async def post_gen_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     keyboard = [
-        [InlineKeyboardButton("✍️ Season Post", callback_data="post_gen_season")], # Sirf Season Post rakha gaya hai
-        # [InlineKeyboardButton("✍️ Episode Post", callback_data="post_gen_episode")], # Removed to simplify
+        [InlineKeyboardButton("✍️ Season Post", callback_data="post_gen_season")],
+        [InlineKeyboardButton("✍️ Episode Post", callback_data="post_gen_episode")],
         [InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]
     ]
     await query.edit_message_text("✍️ **Post Generator** ✍️\n\nAap kis tarah ka post generate karna chahte hain?", reply_markup=InlineKeyboardMarkup(keyboard))
-    # NAYA FIX: PG_MENU se PG_GET_ANIME par click karne par jayega, no change in state return here
     return PG_MENU
 async def post_gen_select_anime(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -894,26 +933,47 @@ async def post_gen_select_season(update: Update, context: ContextTypes.DEFAULT_T
     anime_doc = animes_collection.find_one({"name": anime_name})
     seasons = anime_doc.get("seasons", {})
     if not seasons:
-        await query.edit_message_text(f"❌ **Error!** '{anime_name}' mein koi season nahi hai.\n\nPehle `➕ Add Season` se season add karo.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="admin_menu")]]))
+        await query.edit_message_text(f"❌ **Error!** '{anime_name}' mein koi season nahi hai.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="admin_menu")]]))
         return ConversationHandler.END
     sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
     buttons = [InlineKeyboardButton(f"Season {s}", callback_data=f"post_season_{s}") for s in sorted_seasons]
     keyboard = build_grid_keyboard(buttons, 2)
     keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="admin_menu")])
     await query.edit_message_text(f"Aapne **{anime_name}** select kiya hai.\n\nAb **Season** select karein:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
-    # NAYA FIX: Yeh Season select karne ke baad PG_GET_EPISODE pe nahi jayega, bulk post ke liye
     return PG_GET_SEASON
-    
-# NAYA FIX: Yeh function season select hone ke baad call hoga
-async def post_gen_final_season(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def post_gen_select_episode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     season_name = query.data.replace("post_season_", "")
     context.user_data['season_name'] = season_name
-    context.user_data['ep_num'] = None # Season Post hai
+    anime_name = context.user_data['anime_name']
     
-    await generate_post_ask_chat(update, context) 
-    return PG_GET_CHAT # Sahi next state return karo (Fix: Post Gen Stuck)
+    # NAYA FIX: Agar user "Season Post" generate kar raha hai, toh episode nahi pucho
+    if context.user_data['post_type'] == 'post_gen_season':
+        context.user_data['ep_num'] = None # Episode number ko None set karo
+        await generate_post_ask_chat(update, context) # Post details generate karke chat ID maangne ke liye edit karega
+        return PG_GET_CHAT # <--- Sahi next state return karo (Fix: Season Post Stuck)
+        
+    # Agar "Episode Post" hai, toh episode pucho
+    anime_doc = animes_collection.find_one({"name": anime_name})
+    episodes = anime_doc.get("seasons", {}).get(season_name, {})
+    if not episodes:
+        await query.edit_message_text(f"❌ **Error!** '{anime_name}' - Season {season_name} mein koi episode nahi hai.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="admin_menu")]]))
+        return ConversationHandler.END
+    sorted_eps = sorted(episodes.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+    buttons = [InlineKeyboardButton(f"Episode {ep}", callback_data=f"post_ep_{ep}") for ep in sorted_eps]
+    keyboard = build_grid_keyboard(buttons, 2)
+    keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="admin_menu")])
+    await query.edit_message_text(f"Aapne **Season {season_name}** select kiya hai.\n\nAb **Episode** select karein:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    return PG_GET_EPISODE
+async def post_gen_final_episode(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    ep_num = query.data.replace("post_ep_", "")
+    context.user_data['ep_num'] = ep_num
+    
+    await generate_post_ask_chat(update, context) # NAYA FIX: Call kiya
+    return PG_GET_CHAT # NAYA FIX: State return kiya
 
 # NAYA: Redirect Hata Diya. (CallbackQuery use hoga)
 async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -928,12 +988,17 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         ep_num = context.user_data.get('ep_num') # Yeh 'None' ho sakta hai
         anime_doc = animes_collection.find_one({"name": anime_name})
         
-        # Sirf Season Post ka logic rakha gaya hai
-        caption = f"✅ **{anime_name}**\n"
-        if season_name: caption += f"**[ S{season_name} ]**\n\n"
-        if anime_doc.get('description'): caption += f"**📖 Synopsis:**\n{anime_doc['description']}\n\n"
-        caption += "Neeche [Download] button dabake download karein!"
-        poster_id = anime_doc['poster_id']
+        if ep_num:
+            # Episode Post
+            caption = f"✨ **Episode {ep_num} Added** ✨\n\n🎬 **Anime:** {anime_name}\n➡️ **Season:** {season_name}\n\nNeeche [Download] button dabake download karein!"
+            poster_id = anime_doc['poster_id']
+        else:
+            # Season Post
+            caption = f"✅ **{anime_name}**\n"
+            if season_name: caption += f"**[ S{season_name} ]**\n\n"
+            if anime_doc.get('description'): caption += f"**📖 Synopsis:**\n{anime_doc['description']}\n\n"
+            caption += "Neeche [Download] button dabake download karein!"
+            poster_id = anime_doc['poster_id']
         
         links = config.get('links', {})
         
@@ -1917,10 +1982,36 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                 await query.edit_message_caption("❌ Error: File ID nahi mili.")
             return
             
-        # Case 3: Episode click hua hai -> Quality Bhejo (This state is not used in the new simple flow)
+        # Case 3: Episode click hua hai -> Quality Bhejo
         if ep_num:
-             # Should not reach here if Season Post flow is used
-             pass
+            qualities = anime_doc.get("seasons", {}).get(season_name, {}).get(ep_num, {})
+            if not qualities:
+                await query.edit_message_caption("❌ Error: Is episode ke liye qualities nahi mili.")
+                return
+            
+            # NAYA FIX: Quality ko sort karo
+            QUALITY_ORDER = ['480p', '720p', '1080p', '4K']
+            available_qualities = qualities.keys()
+            sorted_q_list = [q for q in QUALITY_ORDER if q in available_qualities]
+            extra_q = [q for q in available_qualities if q not in sorted_q_list]
+            sorted_q_list.extend(extra_q)
+            
+            buttons = []
+            for q in sorted_q_list:
+                cb_data = f"dl_{anime_name}__{season_name}__{ep_num}__{q}"
+                buttons.append(InlineKeyboardButton(q, callback_data=cb_data))
+            
+            # NAYA FIX: 2x2 Grid
+            keyboard = build_grid_keyboard(buttons, 2)
+            keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data=f"dl_{anime_name}__{season_name}")])
+            
+            # DM mein Poster message ko Edit karo
+            await query.edit_message_caption(
+                caption=f"**{anime_name}** | **Season {season_name}** | **Episode {ep_num}**\n\nQuality select karein:",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
+            return
 
         # Case 2: Season click hua hai -> Episode Bhejo
         if season_name:
@@ -1931,10 +2022,9 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             
             sorted_eps = sorted(episodes.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
             
-            # NAYA FIX: 2x2 Grid (Episode List)
+            # NAYA FIX: 2x2 Grid
             buttons = []
             for ep in sorted_eps:
-                # NAYA FIX: Episode click karne par Quality select karne ki state par jayega
                 cb_data = f"dl_{anime_name}__{season_name}__{ep}"
                 buttons.append(InlineKeyboardButton(f"Episode {ep}", callback_data=cb_data))
             
@@ -2003,12 +2093,15 @@ def main():
     application = Application.builder().token(BOT_TOKEN).build()
     
     # --- NAYA: Global Fallbacks (Poore bot ko 'stuck' hone se bachane ke liye) ---
+    # NAYA FIX: Yeh list ab poori tarah complete hai
     global_fallbacks = [
+        # Commands
         CommandHandler("start", conv_cancel),
         CommandHandler("menu", conv_cancel),
         CommandHandler("admin", conv_cancel),
         CommandHandler("cancel", conv_cancel),
-        # Agar user kisi conversation me hai aur naya MAIN MENU button dabata hai
+        
+        # Admin Main Menu
         CallbackQueryHandler(conv_cancel, pattern="^admin_menu$"),
         CallbackQueryHandler(conv_cancel, pattern="^admin_menu_add_content$"),
         CallbackQueryHandler(conv_cancel, pattern="^admin_menu_manage_content$"),
@@ -2017,11 +2110,41 @@ def main():
         CallbackQueryHandler(conv_cancel, pattern="^admin_menu_other_links$"),
         CallbackQueryHandler(conv_cancel, pattern="^admin_menu_messages$"),
         CallbackQueryHandler(conv_cancel, pattern="^admin_post_gen$"),
-        CallbackQueryHandler(conv_cancel, pattern="^admin_remove_sub$"), # NAYA
-        CallbackQueryHandler(conv_cancel, pattern="^admin_list_subs$"), # NAYA
+        CallbackQueryHandler(conv_cancel, pattern="^admin_remove_sub$"), 
+        CallbackQueryHandler(conv_cancel, pattern="^admin_list_subs$"), 
+        
+        # User Menu
         CallbackQueryHandler(conv_cancel, pattern="^user_back_menu$"),
-        # NAYA FIX: user_subscribe button ko bhi global fallback me daalo
         CallbackQueryHandler(conv_cancel, pattern="^user_subscribe$"), 
+        
+        # NAYA FIX: Saare Conversation Entry Points ko add karo
+        # Add Content
+        CallbackQueryHandler(conv_cancel, pattern="^admin_add_anime$"),
+        CallbackQueryHandler(conv_cancel, pattern="^admin_add_season$"),
+        CallbackQueryHandler(conv_cancel, pattern="^admin_add_episode$"),
+        # Manage Content
+        CallbackQueryHandler(conv_cancel, pattern="^admin_del_anime$"),
+        CallbackQueryHandler(conv_cancel, pattern="^admin_del_season$"),
+        CallbackQueryHandler(conv_cancel, pattern="^admin_del_episode$"),
+        # Sub Settings
+        CallbackQueryHandler(conv_cancel, pattern="^admin_set_sub_qr$"),
+        CallbackQueryHandler(conv_cancel, pattern="^admin_set_price$"),
+        CallbackQueryHandler(conv_cancel, pattern="^admin_set_days$"),
+        CallbackQueryHandler(conv_cancel, pattern="^admin_set_delete_time$"),
+        # Donate Settings
+        CallbackQueryHandler(conv_cancel, pattern="^admin_set_donate_qr$"),
+        # Links
+        CallbackQueryHandler(conv_cancel, pattern="^admin_set_backup_link$|^admin_set_support_link$"),
+        # Messages
+        CallbackQueryHandler(conv_cancel, pattern="^msg_donate_thanks$"),
+        CallbackQueryHandler(conv_cancel, pattern="^msg_sub_pending$"),
+        CallbackQueryHandler(conv_cancel, pattern="^msg_sub_approved$"),
+        CallbackQueryHandler(conv_cancel, pattern="^msg_sub_rejected$"),
+        CallbackQueryHandler(conv_cancel, pattern="^msg_file_warning$"),
+        # User Sub
+        CallbackQueryHandler(conv_cancel, pattern="^user_upload_ss$"),
+        # Admin Approve
+        CallbackQueryHandler(conv_cancel, pattern="^admin_approve_"),
     ]
     
     # Local Fallbacks (Sirf "Back" buttons ke liye)
@@ -2058,20 +2181,8 @@ def main():
     set_price_conv = ConversationHandler(entry_points=[CallbackQueryHandler(set_price_start, pattern="^admin_set_price$")], states={CP_GET_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_price_save)]}, fallbacks=global_fallbacks + sub_settings_fallback)
     set_donate_qr_conv = ConversationHandler(entry_points=[CallbackQueryHandler(set_donate_qr_start, pattern="^admin_set_donate_qr$")], states={CD_GET_QR: [MessageHandler(filters.PHOTO, set_donate_qr_save)]}, fallbacks=global_fallbacks + donate_settings_fallback)
     set_links_conv = ConversationHandler(entry_points=[CallbackQueryHandler(set_links_start, pattern="^admin_set_backup_link$|^admin_set_support_link$")], states={CL_GET_BACKUP: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_link), CommandHandler("skip", skip_link)]}, fallbacks=global_fallbacks + links_fallback) 
-    
-    # NAYA FIX: Post Gen Conv (सिर्फ Season Post के लिए simplified)
-    post_gen_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(post_gen_menu, pattern="^admin_post_gen$")], 
-        states={
-            PG_MENU: [CallbackQueryHandler(post_gen_select_anime, pattern="^post_gen_season$")], # Only Season Post remains
-            PG_GET_ANIME: [CallbackQueryHandler(post_gen_select_season, pattern="^post_anime_")], 
-            PG_GET_SEASON: [CallbackQueryHandler(post_gen_final_season, pattern="^post_season_")], # Confirms season, skips to chat
-            PG_GET_EPISODE: [], # This state is now redundant and empty, but kept for flow structure
-            PG_GET_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, post_gen_send_to_chat)]
-        }, 
-        fallbacks=global_fallbacks + admin_menu_fallback
-    )
-    
+    # NAYA FIX: Post Gen Conv
+    post_gen_conv = ConversationHandler(entry_points=[CallbackQueryHandler(post_gen_menu, pattern="^admin_post_gen$")], states={PG_MENU: [CallbackQueryHandler(post_gen_select_anime, pattern="^post_gen_season$"), CallbackQueryHandler(post_gen_select_anime, pattern="^post_gen_episode$")], PG_GET_ANIME: [CallbackQueryHandler(post_gen_select_season, pattern="^post_anime_")], PG_GET_SEASON: [CallbackQueryHandler(post_gen_select_episode, pattern="^post_season_")], PG_GET_EPISODE: [CallbackQueryHandler(post_gen_final_episode, pattern="^post_ep_")], PG_GET_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, post_gen_send_to_chat)]}, fallbacks=global_fallbacks + admin_menu_fallback)
     del_anime_conv = ConversationHandler(entry_points=[CallbackQueryHandler(delete_anime_start, pattern="^admin_del_anime$")], states={DA_GET_ANIME: [CallbackQueryHandler(delete_anime_confirm, pattern="^del_anime_")], DA_CONFIRM: [CallbackQueryHandler(delete_anime_do, pattern="^del_anime_confirm_yes$")]}, fallbacks=global_fallbacks + manage_fallback)
     del_season_conv = ConversationHandler(entry_points=[CallbackQueryHandler(delete_season_start, pattern="^admin_del_season$")], states={DS_GET_ANIME: [CallbackQueryHandler(delete_season_select, pattern="^del_season_anime_")], DS_GET_SEASON: [CallbackQueryHandler(delete_season_confirm, pattern="^del_season_")], DS_CONFIRM: [CallbackQueryHandler(delete_season_do, pattern="^del_season_confirm_yes$")]}, fallbacks=global_fallbacks + manage_fallback)
     
@@ -2154,6 +2265,7 @@ def main():
     application.add_handler(CallbackQueryHandler(other_links_menu, pattern="^admin_menu_other_links$"))
     application.add_handler(CallbackQueryHandler(bot_messages_menu, pattern="^admin_menu_messages$"))
     application.add_handler(CallbackQueryHandler(post_gen_menu, pattern="^admin_post_gen$")) # NAYA: Stuck Fix
+    application.add_handler(CallbackQueryHandler(admin_list_subs, pattern="^admin_list_subs$")) # NAYA
 
     # Conversations
     application.add_handler(add_anime_conv)
