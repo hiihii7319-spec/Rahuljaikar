@@ -167,14 +167,15 @@ async def send_donate_thank_you(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.warning(f"Thank you message bhejte waqt error: {e}")
 
-async def delete_message_job(context: ContextTypes.DEFAULT_TYPE):
-    """File ko delete karega"""
-    job = context.job
+# NAYA FIX: asyncio.sleep ke saath delete function (job_queue ki jagah)
+async def delete_message_after_delay(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, delay_seconds: int):
+    """Waits for delay and then deletes a message. Runs as a separate task."""
     try:
-        await context.bot.delete_message(chat_id=job.chat_id, message_id=job.data)
-        logger.info(f"Auto-deleted message {job.data} for user {job.chat_id}")
+        await asyncio.sleep(delay_seconds)
+        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+        logger.info(f"Auto-deleted message {message_id} for user {chat_id} after {delay_seconds}s")
     except Exception as e:
-        logger.warning(f"Message (job_queue) delete karne me error: {e}")
+        logger.warning(f"Failed to auto-delete message {message_id}: {e}")
 
 
 # --- Conversation States ---
@@ -207,12 +208,20 @@ async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Aap kisi active operation mein nahi hain.")
         else:
             await update.callback_query.answer("Aap kisi active operation mein nahi hain.", show_alert=True)
-        return ConversationHandler.END # Conversation me nahi tha, bas end karo
+        
+        # NAYA FIX: Agar state nahi hai, toh bhi naya command/button chalao
+        if update.message and update.message.text == '/start':
+            await start_command(update, context)
+        elif update.message and update.message.text == '/admin':
+            await admin_command(update, context)
+        elif update.message and update.message.text == '/menu':
+            await menu_command(update, context)
+        return ConversationHandler.END
 
     # User conversation me tha, data clear karo
     context.user_data.clear() 
     
-    cancel_text = "Operation cancel kar diya gaya hai. Menu dikha raha hoon..."
+    cancel_text = "Operation cancel kar diya gaya hai. Naya command process ho raha hai..."
     
     if update.message:
         # Agar /cancel, /start etc. type kiya
@@ -240,14 +249,37 @@ async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Conversation end karne ke baad, check karo user admin hai ya nahi
     await asyncio.sleep(0.1) # Delay for ConversationHandler.END to process
     
-    is_admin_user = await is_admin(user_id)
-    
-    # NAYA FIX: Hamesha user ko uske main menu par bhejo
-    if is_admin_user:
-        await admin_command(update, context, from_callback=True)
-    else:
-        await menu_command(update, context, from_callback=True)
-            
+    # NAYA LOGIC: Naya command/button kya tha? Usse run karo
+    if update.message:
+        if update.message.text in ['/start', '/menu', '/admin', '/cancel']:
+            await start_command(update, context) # start_command handles admin/user logic
+    elif update.callback_query:
+        query = update.callback_query
+        data = query.data
+        
+        # Check ALL main menu button patterns
+        if data == "admin_menu":
+            await admin_command(update, context, from_callback=True)
+        elif data == "admin_menu_add_content":
+            await add_content_menu(update, context)
+        elif data == "admin_menu_manage_content":
+            await manage_content_menu(update, context)
+        elif data == "admin_menu_sub_settings":
+            await sub_settings_menu(update, context)
+        elif data == "admin_menu_donate_settings":
+            await donate_settings_menu(update, context)
+        elif data == "admin_menu_other_links":
+            await other_links_menu(update, context)
+        elif data == "admin_menu_messages":
+            await bot_messages_menu(update, context)
+        elif data == "admin_post_gen":
+            await post_gen_menu(update, context)
+        # (User buttons)
+        elif data == "user_back_menu":
+            await menu_command(update, context, from_callback=True)
+        elif data == "user_subscribe":
+            await user_subscribe_start(update, context)
+        
     return ConversationHandler.END
 
 async def back_to_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -402,7 +434,6 @@ async def add_episode_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ **Error!** Pehle `➕ Add Anime` se anime add karo.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_add_content")]]))
         return ConversationHandler.END
     
-    # NAYA: 2x2 Grid
     buttons = [InlineKeyboardButton(anime['name'], callback_data=f"ep_anime_{anime['name']}") for anime in all_animes]
     keyboard = build_grid_keyboard(buttons, 2)
     keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="back_to_add_content")])
@@ -421,7 +452,6 @@ async def get_anime_for_episode(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text(f"❌ **Error!** '{anime_name}' mein koi season nahi hai.\n\nPehle `➕ Add Season` se season add karo.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_add_content")]]))
         return ConversationHandler.END
     
-    # NAYA: 2x2 Grid
     sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
     buttons = [InlineKeyboardButton(f"Season {s}", callback_data=f"ep_season_{s}") for s in sorted_seasons]
     keyboard = build_grid_keyboard(buttons, 2)
@@ -1448,7 +1478,6 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
     user_id = update.effective_user.id
     if not await is_admin(user_id):
         if not from_callback: 
-            # Agar menu se aaya hai, toh message bhej do
             if update.message:
                 await update.message.reply_text("Aap admin nahi hain.")
             else:
@@ -1588,18 +1617,27 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                     logger.error(f"User {user_id} ko DM bhejte waqt error: {e}")
                     if "blocked" in str(e) or "bot was blocked" in str(e):
                         await context.bot.send_message(user_id, "❌ Error! File nahi bhej paya. Aapne bot ko block kiya hua hai.")
-                    # NAYA FIX: Yahan se error message hata diya taaki screenshot jaisa na lage
+                    else:
+                        # NAYA FIX: User ko "Try again" message do
+                        await context.bot.send_message(user_id, "❌ Error! File nahi bhej paya. Please try again.")
                 
-                # NAYA FIX: Ab job_queue yahan hai. Agar yeh fail hota hai, toh user ko error nahi dikhega.
+                # NAYA FIX: Ab job_queue ki jagah asyncio.create_task use karo
                 if sent_message:
                     try:
                         config = await get_config()
                         delete_time = config.get("delete_seconds", 180)
-                        context.job_queue.run_once(delete_message_job, delete_time, chat_id=user_id, data=sent_message.message_id)
-                        logger.info(f"Scheduled message {sent_message.message_id} for deletion in {delete_time}s")
+                        asyncio.create_task(
+                            delete_message_after_delay(
+                                context=context,
+                                chat_id=user_id,
+                                message_id=sent_message.message_id,
+                                delay_seconds=delete_time
+                            )
+                        )
+                        logger.info(f"Scheduled message {sent_message.message_id} for deletion in {delete_time}s (using asyncio.create_task)")
                     except Exception as e:
-                        # Agar job_queue fail hota hai, toh user ko pareshan mat karo
-                        logger.error(f"JobQueue schedule failed for user {user_id}: {e}")
+                        # Agar task schedule fail hota hai, toh user ko pareshan mat karo
+                        logger.error(f"asyncio.create_task failed for user {user_id}: {e}")
 
             else:
                 await query.edit_message_caption("❌ Error: File ID nahi mili.")
@@ -1693,11 +1731,12 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
 
     except Exception as e:
         logger.error(f"Download button handler me error: {e}", exc_info=True)
+        # NAYA FIX: User ko "Try again" message do
         if query.message and query.message.chat.type in ['channel', 'supergroup', 'group']:
-             await query.answer("❌ Ek error aa gaya hai. Baad mein try karein.", show_alert=True)
+             await query.answer("❌ Error! Please try again.", show_alert=True)
         else:
              try:
-                 await context.bot.send_message(user_id, "❌ Ek error aa gaya hai. Baad mein try karein.")
+                 await context.bot.send_message(user_id, "❌ Error! Please try again.")
              except Exception: pass
 
 
@@ -1720,13 +1759,17 @@ def main():
         CommandHandler("menu", conv_cancel),
         CommandHandler("admin", conv_cancel),
         CommandHandler("cancel", conv_cancel),
-        # Agar user kisi conversation me hai aur naya button dabata hai
-        CallbackQueryHandler(conv_cancel, pattern="^admin_menu"),
-        CallbackQueryHandler(conv_cancel, pattern="^admin_add_"),
-        CallbackQueryHandler(conv_cancel, pattern="^admin_del_"),
-        CallbackQueryHandler(conv_cancel, pattern="^admin_set_"),
+        # Agar user kisi conversation me hai aur naya MAIN MENU button dabata hai
+        CallbackQueryHandler(conv_cancel, pattern="^admin_menu$"),
+        CallbackQueryHandler(conv_cancel, pattern="^admin_menu_add_content$"),
+        CallbackQueryHandler(conv_cancel, pattern="^admin_menu_manage_content$"),
+        CallbackQueryHandler(conv_cancel, pattern="^admin_menu_sub_settings$"),
+        CallbackQueryHandler(conv_cancel, pattern="^admin_menu_donate_settings$"),
+        CallbackQueryHandler(conv_cancel, pattern="^admin_menu_other_links$"),
+        CallbackQueryHandler(conv_cancel, pattern="^admin_menu_messages$"),
         CallbackQueryHandler(conv_cancel, pattern="^admin_post_gen$"),
-        CallbackQueryHandler(conv_cancel, pattern="^msg_"),
+        CallbackQueryHandler(conv_cancel, pattern="^user_back_menu$"),
+        CallbackQueryHandler(conv_cancel, pattern="^user_subscribe$"),
     ]
     
     # Local Fallbacks (Sirf "Back" buttons ke liye)
