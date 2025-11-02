@@ -77,7 +77,7 @@ async def get_config():
             "_id": "bot_config", "sub_qr_id": None, "donate_qr_id": None, "price": None, 
             "links": {"backup": None, "support": None}, 
             "validity_days": None,
-            "delete_seconds": 300, # NAYA: 5 Minute (300 sec)
+            "delete_seconds": 180, # NAYA: 3 Minute (180 sec)
             "messages": { # NAYA FEATURE: Custom Messages
                 "sub_pending": "✅ **Screenshot Bhej Diya Gaya!**\n\nAdmin jald hi aapka payment check karke approve kar denge. Intezaar karein.",
                 "sub_approved": "🎉 **Congratulations!**\n\nAapka subscription approve ho gaya hai.\nAapka plan {days} din mein expire hoga ({expiry_date}).\n\n/menu se anime download karna shuru karein.",
@@ -91,7 +91,7 @@ async def get_config():
     
     # Purane users ke liye compatibility
     if "validity_days" not in config: config["validity_days"] = None
-    if "delete_seconds" not in config: config["delete_seconds"] = 300 # NAYA
+    if "delete_seconds" not in config: config["delete_seconds"] = 180 # NAYA
     if "messages" not in config: config["messages"] = {}
     
     # Default messages check
@@ -112,7 +112,7 @@ async def get_config():
             {"_id": "bot_config"}, 
             {"$set": {
                 "messages": config["messages"], 
-                "delete_seconds": config.get("delete_seconds", 300)
+                "delete_seconds": config.get("delete_seconds", 180)
             }}
         )
         
@@ -167,15 +167,15 @@ async def send_donate_thank_you(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.warning(f"Thank you message bhejte waqt error: {e}")
 
-# NAYA FIX: asyncio.sleep ke saath delete function (job_queue ki jagah)
-async def delete_message_after_delay(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, delay_seconds: int):
-    """Waits for delay and then deletes a message. Runs as a separate task."""
+# NAYA FIX: Job Queue waala delete function waapas aa gaya
+async def delete_message_job(context: ContextTypes.DEFAULT_TYPE):
+    """File ko delete karega"""
+    job = context.job
     try:
-        await asyncio.sleep(delay_seconds)
-        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
-        logger.info(f"Auto-deleted message {message_id} for user {chat_id} after {delay_seconds}s")
+        await context.bot.delete_message(chat_id=job.chat_id, message_id=job.data)
+        logger.info(f"Auto-deleted message {job.data} for user {job.chat_id} (Job Queue)")
     except Exception as e:
-        logger.warning(f"Failed to auto-delete message {message_id}: {e}")
+        logger.warning(f"Message (job_queue) delete karne me error: {e}")
 
 
 # --- Conversation States ---
@@ -189,11 +189,15 @@ async def delete_message_after_delay(context: ContextTypes.DEFAULT_TYPE, chat_id
 (PG_MENU, PG_GET_ANIME, PG_GET_SEASON, PG_GET_EPISODE, PG_GET_CHAT) = range(20, 25)
 (DA_GET_ANIME, DA_CONFIRM) = range(25, 27)
 (DS_GET_ANIME, DS_GET_SEASON, DS_CONFIRM) = range(27, 30)
-(SUB_GET_SCREENSHOT,) = range(30, 31)
-(ADMIN_GET_DAYS,) = range(31, 32)
-(CV_GET_DAYS,) = range(32, 33) 
-(M_GET_DONATE_THANKS, M_GET_SUB_PENDING, M_GET_SUB_APPROVED, M_GET_SUB_REJECTED, M_GET_FILE_WARNING) = range(33, 38)
-(CS_GET_DELETE_TIME,) = range(38, 39)
+(DE_GET_ANIME, DE_GET_SEASON, DE_GET_EPISODE, DE_CONFIRM) = range(30, 34)
+(SUB_GET_SCREENSHOT,) = range(34, 35)
+(ADMIN_GET_DAYS,) = range(35, 36)
+(CV_GET_DAYS,) = range(36, 37) 
+(M_GET_DONATE_THANKS, M_GET_SUB_PENDING, M_GET_SUB_APPROVED, M_GET_SUB_REJECTED, M_GET_FILE_WARNING) = range(37, 42)
+(CS_GET_DELETE_TIME,) = range(42, 43)
+# NAYA: Remove Subscription States
+(RS_GET_ID, RS_CONFIRM) = range(43, 45)
+
 
 # --- Common Conversation Fallbacks (NAYA GLOBAL CANCEL FIX) ---
 async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -229,7 +233,7 @@ async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         # Agar button dabaya (jaise Back button)
         query = update.callback_query
-        await query.answer("Operation cancel kar diya gaya hai.")
+        await query.answer("Puraana operation cancel kar diya gaya hai.")
         try:
             # Check karo ki message photo hai ya text
             if query.message.photo:
@@ -274,6 +278,8 @@ async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await bot_messages_menu(update, context)
         elif data == "admin_post_gen":
             await post_gen_menu(update, context)
+        elif data == "admin_remove_sub": # NAYA
+            await remove_sub_start(update, context)
         # (User buttons)
         elif data == "user_back_menu":
             await menu_command(update, context, from_callback=True)
@@ -619,10 +625,10 @@ async def set_delete_time_start(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     config = await get_config()
-    current_seconds = config.get("delete_seconds", 300) # NAYA: Default 300
+    current_seconds = config.get("delete_seconds", 180) # NAYA: Default 180
     current_minutes = current_seconds // 60
     text = f"Abhi file auto-delete **{current_minutes} minute(s)** ({current_seconds} seconds) par set hai.\n\n"
-    text += "Naya time **seconds** mein bhejo.\n(Example: `300` for 5 minutes, `600` for 10 minutes)\n\n/cancel - Cancel."
+    text += "Naya time **seconds** mein bhejo.\n(Example: `180` for 3 minutes, `300` for 5 minutes)\n\n/cancel - Cancel."
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_sub_settings")]]))
     return CS_GET_DELETE_TIME
 async def set_delete_time_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -634,7 +640,7 @@ async def set_delete_time_save(update: Update, context: ContextTypes.DEFAULT_TYP
              
         config_collection.update_one({"_id": "bot_config"}, {"$set": {"delete_seconds": seconds}}, upsert=True)
         logger.info(f"Auto-delete time update ho gaya: {seconds} seconds")
-        await update.message.reply_text(f"✅ **Success!** Auto-delete time ab **{seconds} seconds** par set ho gaya hai.")
+        await update.message.reply_text(f"✅ **Success!** Auto-delete time ab **{seconds} seconds** ({seconds // 60} min) par set ho gaya hai.")
         await sub_settings_menu(update, context) 
         return ConversationHandler.END
         
@@ -1000,6 +1006,144 @@ async def delete_season_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     return ConversationHandler.END
 
+# --- NAYA FEATURE: Conversation: Delete Episode ---
+async def delete_episode_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    all_animes = list(animes_collection.find({}, {"name": 1}).sort("created_at", -1))
+    if not all_animes:
+        await query.edit_message_text("❌ **Error!** Database mein koi anime nahi hai.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_manage")]]))
+        return ConversationHandler.END
+    buttons = [InlineKeyboardButton(anime['name'], callback_data=f"del_ep_anime_{anime['name']}") for anime in all_animes]
+    keyboard = build_grid_keyboard(buttons, 2)
+    keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="back_to_manage")])
+    await query.edit_message_text("Kaunse **Anime** ka episode delete karna hai? (Sabse naya upar hai)", reply_markup=InlineKeyboardMarkup(keyboard))
+    return DE_GET_ANIME
+
+async def delete_episode_select_season(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    anime_name = query.data.replace("del_ep_anime_", "")
+    context.user_data['anime_name'] = anime_name
+    anime_doc = animes_collection.find_one({"name": anime_name})
+    seasons = anime_doc.get("seasons", {})
+    if not seasons:
+        await query.edit_message_text(f"❌ **Error!** '{anime_name}' mein koi season nahi hai.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_manage")]]))
+        return ConversationHandler.END
+    sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+    buttons = [InlineKeyboardButton(f"Season {s}", callback_data=f"del_ep_season_{s}") for s in sorted_seasons]
+    keyboard = build_grid_keyboard(buttons, 2)
+    keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="back_to_manage")])
+    await query.edit_message_text(f"Aapne **{anime_name}** select kiya hai.\n\nKaunsa **Season** delete karna hai?", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    return DE_GET_SEASON
+
+async def delete_episode_select_episode(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    season_name = query.data.replace("del_ep_season_", "")
+    context.user_data['season_name'] = season_name
+    anime_name = context.user_data['anime_name']
+    anime_doc = animes_collection.find_one({"name": anime_name})
+    episodes = anime_doc.get("seasons", {}).get(season_name, {})
+    if not episodes:
+        await query.edit_message_text(f"❌ **Error!** '{anime_name}' - Season {season_name} mein koi episode nahi hai.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_manage")]]))
+        return ConversationHandler.END
+    sorted_eps = sorted(episodes.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+    buttons = [InlineKeyboardButton(f"Episode {ep}", callback_data=f"del_ep_num_{ep}") for ep in sorted_eps]
+    keyboard = build_grid_keyboard(buttons, 2)
+    keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="back_to_manage")])
+    await query.edit_message_text(f"Aapne **Season {season_name}** select kiya hai.\n\nKaunsa **Episode** delete karna hai?", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    return DE_GET_EPISODE
+
+async def delete_episode_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    ep_num = query.data.replace("del_ep_num_", "")
+    context.user_data['ep_num'] = ep_num
+    anime_name = context.user_data['anime_name']
+    season_name = context.user_data['season_name']
+    keyboard = [[InlineKeyboardButton(f"✅ Haan, Ep {ep_num} Delete Karo", callback_data="del_ep_confirm_yes")], [InlineKeyboardButton("⬅️ Back", callback_data="back_to_manage")]]
+    await query.edit_message_text(f"⚠️ **FINAL WARNING** ⚠️\n\nAap **{anime_name}** - **S{season_name}** - **Ep {ep_num}** delete karne wale hain. Iske saare qualities delete ho jayenge.\n\n**Are you sure?**", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    return DE_CONFIRM
+
+async def delete_episode_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer("Deleting...")
+    anime_name = context.user_data['anime_name']
+    season_name = context.user_data['season_name']
+    ep_num = context.user_data['ep_num']
+    try:
+        animes_collection.update_one({"name": anime_name}, {"$unset": {f"seasons.{season_name}.{ep_num}": ""}})
+        logger.info(f"Episode deleted: {anime_name} - S{season_name} - E{ep_num}")
+        await query.edit_message_text(f"✅ **Success!**\nEpisode '{ep_num}' delete ho gaya hai.")
+    except Exception as e:
+        logger.error(f"Episode delete karne me error: {e}")
+        await query.edit_message_text("❌ **Error!** Episode delete nahi ho paya.")
+    context.user_data.clear()
+    return ConversationHandler.END
+
+# --- NAYA FEATURE: Conversation: Remove Subscription ---
+async def remove_sub_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("Aap kis user ka subscription remove karna chahte hain?\n\nUs user ki **Telegram User ID** bhejein.\n\n/cancel - Cancel.")
+    return RS_GET_ID
+
+async def remove_sub_get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        user_id = int(update.message.text)
+    except ValueError:
+        await update.message.reply_text("Yeh valid User ID nahi hai. Please sirf number bhejein.\n\n/cancel - Cancel.")
+        return RS_GET_ID
+    
+    user_data = users_collection.find_one({"_id": user_id})
+    
+    if not user_data:
+        await update.message.reply_text("❌ Error: Is User ID se koi user database mein nahi mila.\n\n/cancel - Cancel.")
+        return RS_GET_ID
+    
+    if not user_data.get('subscribed', False):
+        await update.message.reply_text(f"ℹ️ User {user_id} ({user_data.get('first_name')}) pehle se subscribed nahi hai.\n\n/cancel - Cancel.")
+        return RS_GET_ID
+    
+    context.user_data['user_to_remove'] = user_id
+    context.user_data['user_to_remove_name'] = user_data.get('first_name')
+    
+    keyboard = [[InlineKeyboardButton(f"✅ Haan, {user_id} ka Subscription Remove Karo", callback_data="remove_sub_confirm_yes")], [InlineKeyboardButton("⬅️ Back", callback_data="admin_menu")]]
+    await update.message.reply_text(f"⚠️ **Warning!** ⚠️\nAap user **{user_data.get('first_name')}** (ID: `{user_id}`) ka subscription remove karne wale hain.\n\n**Are you sure?**", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    return RS_CONFIRM
+
+async def remove_sub_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer("Removing subscription...")
+    
+    user_id = context.user_data['user_to_remove']
+    user_name = context.user_data['user_to_remove_name']
+    
+    try:
+        # Remove subscription
+        users_collection.update_one(
+            {"_id": user_id},
+            {"$set": {"subscribed": False, "expiry_date": None}}
+        )
+        logger.info(f"Admin {query.from_user.id} ne user {user_id} ka subscription remove kar diya.")
+        
+        # Admin ko confirmation
+        await query.edit_message_text(f"✅ **Success!**\nUser {user_name} (ID: `{user_id}`) ka subscription remove kar diya gaya hai.")
+        
+        # User ko notification
+        try:
+            await context.bot.send_message(user_id, "ℹ️ Aapka subscription admin ne remove kar diya hai.")
+        except Exception as e:
+            logger.warning(f"User {user_id} ko removal notification bhejte waqt error: {e}")
+
+    except Exception as e:
+        logger.error(f"Subscription remove karne me error: {e}")
+        await query.edit_message_text("❌ **Error!** Subscription remove nahi ho paya.")
+    
+    context.user_data.clear()
+    return ConversationHandler.END
+
 # --- Conversation: User Subscription ---
 async def user_subscribe_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1223,6 +1367,7 @@ async def manage_content_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
     keyboard = [
         [InlineKeyboardButton("🗑️ Delete Anime", callback_data="admin_del_anime")],
         [InlineKeyboardButton("🗑️ Delete Season", callback_data="admin_del_season")],
+        [InlineKeyboardButton("🗑️ Delete Episode", callback_data="admin_del_episode")], # NAYA
         [InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]
     ]
     await query.edit_message_text("✏️ **Manage Content** ✏️\n\nAap kya manage karna chahte hain?", reply_markup=InlineKeyboardMarkup(keyboard))
@@ -1236,7 +1381,7 @@ async def sub_settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     price_status = "✅" if config.get('price') else "❌"
     days_val = config.get('validity_days')
     days_status = f"✅ ({days_val} days)" if days_val else "❌"
-    delete_seconds = config.get("delete_seconds", 300) # NAYA: 300
+    delete_seconds = config.get("delete_seconds", 180) # NAYA: 180
     delete_status = f"✅ ({delete_seconds // 60} min)"
     
     keyboard = [
@@ -1244,11 +1389,16 @@ async def sub_settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(f"Set Price Text {price_status}", callback_data="admin_set_price")],
         [InlineKeyboardButton(f"Set Validity Days {days_status}", callback_data="admin_set_days")],
         [InlineKeyboardButton(f"Set Auto-Delete Time {delete_status}", callback_data="admin_set_delete_time")],
+        [InlineKeyboardButton("🚫 Remove Subscription", callback_data="admin_remove_sub")], # NAYA
         [InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]
     ]
     text = "💲 **Subscription Settings** 💲\n\n`Set Validity Days` se automatic approval days set karein."
     if query: 
-        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        if query.message.photo:
+            await query.message.delete()
+            await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        else:
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
     else: 
         await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
 
@@ -1263,7 +1413,11 @@ async def donate_settings_menu(update: Update, context: ContextTypes.DEFAULT_TYP
     ]
     text = "❤️ **Donation Settings** ❤️\n\nSirf QR code se donation accept karein."
     if query: 
-        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        if query.message.photo:
+            await query.message.delete()
+            await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     else: 
         await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -1280,7 +1434,11 @@ async def other_links_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     text = "🔗 **Other Links** 🔗\n\nDoosre links yahan set karein."
     if query: 
-        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        if query.message.photo:
+            await query.message.delete()
+            await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     else: 
         await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -1337,7 +1495,6 @@ async def handle_deep_link_donate(user: User, context: ContextTypes.DEFAULT_TYPE
             parse_mode='Markdown',
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        # NAYA FIX: job_queue ab reliable hai Uptime Robot ke saath
         context.job_queue.run_once(send_donate_thank_you, 60, chat_id=user.id)
     except Exception as e:
         logger.error(f"Deep link Donate QR bhejte waqt error: {e}")
@@ -1599,7 +1756,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                     caption = f"🎬 **{anime_name}**\nS{season_name} - E{ep_num} ({quality})"
                     
                     config = await get_config()
-                    delete_time = config.get("delete_seconds", 300)
+                    delete_time = config.get("delete_seconds", 180) # NAYA: 180
                     delete_minutes = max(1, delete_time // 60)
                     msg_template = config.get("messages", {}).get("file_warning")
                     caption += f"\n\n{msg_template.replace('{minutes}', str(delete_minutes))}"
@@ -1622,23 +1779,16 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                         # NAYA FIX: User ko "Try again" message do
                         await context.bot.send_message(user_id, "❌ Error! File nahi bhej paya. Please try again.")
                 
-                # NAYA FIX: Ab job_queue ki jagah asyncio.create_task use karo
+                # NAYA FIX: Ab job_queue yahan hai.
                 if sent_message:
                     try:
                         config = await get_config()
-                        delete_time = config.get("delete_seconds", 300)
-                        asyncio.create_task(
-                            delete_message_after_delay(
-                                context=context,
-                                chat_id=user_id,
-                                message_id=sent_message.message_id,
-                                delay_seconds=delete_time
-                            )
-                        )
-                        logger.info(f"Scheduled message {sent_message.message_id} for deletion in {delete_time}s (using asyncio.create_task)")
+                        delete_time = config.get("delete_seconds", 180) # NAYA: 180
+                        context.job_queue.run_once(delete_message_job, delete_time, chat_id=user_id, data=sent_message.message_id)
+                        logger.info(f"Scheduled message {sent_message.message_id} for deletion in {delete_time}s (using job_queue)")
                     except Exception as e:
-                        # Agar task schedule fail hota hai, toh user ko pareshan mat karo
-                        logger.error(f"asyncio.create_task failed for user {user_id}: {e}")
+                        # Agar job_queue fail hota hai, toh user ko pareshan mat karo
+                        logger.error(f"JobQueue schedule failed for user {user_id}: {e}")
 
             else:
                 await query.edit_message_caption("❌ Error: File ID nahi mili.")
@@ -1769,6 +1919,7 @@ def main():
         CallbackQueryHandler(conv_cancel, pattern="^admin_menu_other_links$"),
         CallbackQueryHandler(conv_cancel, pattern="^admin_menu_messages$"),
         CallbackQueryHandler(conv_cancel, pattern="^admin_post_gen$"),
+        CallbackQueryHandler(conv_cancel, pattern="^admin_remove_sub$"), # NAYA
         CallbackQueryHandler(conv_cancel, pattern="^user_back_menu$"),
         CallbackQueryHandler(conv_cancel, pattern="^user_subscribe$"),
     ]
@@ -1809,6 +1960,29 @@ def main():
     post_gen_conv = ConversationHandler(entry_points=[CallbackQueryHandler(post_gen_menu, pattern="^admin_post_gen$")], states={PG_MENU: [CallbackQueryHandler(post_gen_select_anime, pattern="^post_gen_season$"), CallbackQueryHandler(post_gen_select_anime, pattern="^post_gen_episode$")], PG_GET_ANIME: [CallbackQueryHandler(post_gen_select_season, pattern="^post_anime_")], PG_GET_SEASON: [CallbackQueryHandler(post_gen_select_episode, pattern="^post_season_")], PG_GET_EPISODE: [CallbackQueryHandler(post_gen_final_episode, pattern="^post_ep_")], PG_GET_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, post_gen_send_to_chat)]}, fallbacks=global_fallbacks + admin_menu_fallback)
     del_anime_conv = ConversationHandler(entry_points=[CallbackQueryHandler(delete_anime_start, pattern="^admin_del_anime$")], states={DA_GET_ANIME: [CallbackQueryHandler(delete_anime_confirm, pattern="^del_anime_")], DA_CONFIRM: [CallbackQueryHandler(delete_anime_do, pattern="^del_anime_confirm_yes$")]}, fallbacks=global_fallbacks + manage_fallback)
     del_season_conv = ConversationHandler(entry_points=[CallbackQueryHandler(delete_season_start, pattern="^admin_del_season$")], states={DS_GET_ANIME: [CallbackQueryHandler(delete_season_select, pattern="^del_season_anime_")], DS_GET_SEASON: [CallbackQueryHandler(delete_season_confirm, pattern="^del_season_")], DS_CONFIRM: [CallbackQueryHandler(delete_season_do, pattern="^del_season_confirm_yes$")]}, fallbacks=global_fallbacks + manage_fallback)
+    
+    # NAYA: Delete Episode Conv
+    del_episode_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(delete_episode_start, pattern="^admin_del_episode$")], 
+        states={
+            DE_GET_ANIME: [CallbackQueryHandler(delete_episode_select_season, pattern="^del_ep_anime_")],
+            DE_GET_SEASON: [CallbackQueryHandler(delete_episode_select_episode, pattern="^del_ep_season_")],
+            DE_GET_EPISODE: [CallbackQueryHandler(delete_episode_confirm, pattern="^del_ep_num_")],
+            DE_CONFIRM: [CallbackQueryHandler(delete_episode_do, pattern="^del_ep_confirm_yes$")]
+        }, 
+        fallbacks=global_fallbacks + manage_fallback
+    )
+    
+    # NAYA: Remove Subscription Conv
+    remove_sub_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(remove_sub_start, pattern="^admin_remove_sub$")],
+        states={
+            RS_GET_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, remove_sub_get_id)],
+            RS_CONFIRM: [CallbackQueryHandler(remove_sub_do, pattern="^remove_sub_confirm_yes$")]
+        },
+        fallbacks=global_fallbacks + admin_menu_fallback # Back to main admin menu
+    )
+
     set_days_conv = ConversationHandler(entry_points=[CallbackQueryHandler(set_days_start, pattern="^admin_set_days$")], states={CV_GET_DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_days_save)]}, fallbacks=global_fallbacks + sub_settings_fallback)
     
     set_delete_time_conv = ConversationHandler(
@@ -1865,6 +2039,7 @@ def main():
     application.add_handler(CallbackQueryHandler(donate_settings_menu, pattern="^admin_menu_donate_settings$"))
     application.add_handler(CallbackQueryHandler(other_links_menu, pattern="^admin_menu_other_links$"))
     application.add_handler(CallbackQueryHandler(bot_messages_menu, pattern="^admin_menu_messages$"))
+    application.add_handler(CallbackQueryHandler(post_gen_menu, pattern="^admin_post_gen$")) # NAYA: Stuck Fix
 
     # Conversations
     application.add_handler(add_anime_conv)
@@ -1877,6 +2052,8 @@ def main():
     application.add_handler(post_gen_conv)
     application.add_handler(del_anime_conv)
     application.add_handler(del_season_conv)
+    application.add_handler(del_episode_conv) # NAYA
+    application.add_handler(remove_sub_conv) # NAYA
     application.add_handler(sub_conv)
     application.add_handler(approve_conv)
     application.add_handler(set_days_conv) 
