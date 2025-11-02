@@ -204,6 +204,7 @@ async def delete_message_job(context: ContextTypes.DEFAULT_TYPE):
 
 
 # --- Common Conversation Fallbacks (NAYA GLOBAL CANCEL FIX - Stuck Fix) ---
+# ===== YEH FUNCTION REPLACE KIYA GAYA HAI =====
 async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
@@ -273,55 +274,104 @@ async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         data = query.data
         
-        # Admin Main Menu buttons
-        if data == "admin_menu": await admin_command(update, context, from_callback=True)
-        elif data == "admin_menu_add_content": await add_content_menu(update, context)
-        elif data == "admin_menu_manage_content": await manage_content_menu(update, context)
-        elif data == "admin_menu_sub_settings": await sub_settings_menu(update, context)
-        elif data == "admin_menu_donate_settings": await donate_settings_menu(update, context)
-        elif data == "admin_menu_other_links": await other_links_menu(update, context)
-        elif data == "admin_menu_messages": await bot_messages_menu(update, context)
-        elif data == "admin_post_gen": await post_gen_menu(update, context)
-        elif data == "admin_remove_sub": await remove_sub_start(update, context)
-        elif data == "admin_list_subs": await admin_list_subs(update, context)
+        # Admin Main Menu buttons (Yeh normal menu navigation hai, yeh CONVERSATION END karte hain)
+        if data == "admin_menu": 
+            await admin_command(update, context, from_callback=True)
+        elif data == "admin_menu_add_content": 
+            await add_content_menu(update, context)
+        elif data == "admin_menu_manage_content": 
+            await manage_content_menu(update, context)
+        elif data == "admin_menu_sub_settings": 
+            await sub_settings_menu(update, context)
+        elif data == "admin_menu_donate_settings": 
+            await donate_settings_menu(update, context)
+        elif data == "admin_menu_other_links": 
+            await other_links_menu(update, context)
+        elif data == "admin_menu_messages": 
+            await bot_messages_menu(update, context)
+        elif data == "admin_list_subs": 
+            await admin_list_subs(update, context)
         
-        # NAYA FIX: Request 1 - Stuck buttons
+        # --- NAYA FIX: Yeh buttons NAYI CONVERSATION shuru karte hain ---
+        # Isliye yeh function call ke baad, state RETURN karte hain
+        
+        # Post Gen (Aapka Fix)
+        elif data == "admin_post_gen": 
+            await post_gen_menu(update, context)
+            return PG_MENU # <--- FIX YAHAN HAI
+        
+        # Remove Sub
+        elif data == "admin_remove_sub": 
+            await remove_sub_start(update, context)
+            return RS_GET_ID # <--- FIX
+        
         # Add Content Sub-menu
-        elif data == "admin_add_anime": await add_anime_start(update, context)
-        elif data == "admin_add_season": await add_season_start(update, context)
-        elif data == "admin_add_episode": await add_episode_start(update, context)
+        elif data == "admin_add_anime": 
+            await add_anime_start(update, context)
+            return A_GET_NAME # <--- FIX
+        elif data == "admin_add_season": 
+            await add_season_start(update, context)
+            return S_GET_ANIME # <--- FIX
+        elif data == "admin_add_episode": 
+            await add_episode_start(update, context)
+            return E_GET_ANIME # <--- FIX
         
         # Manage Content Sub-menu
-        elif data == "admin_del_anime": await delete_anime_start(update, context)
-        elif data == "admin_del_season": await delete_season_start(update, context)
-        elif data == "admin_del_episode": await delete_episode_start(update, context)
+        elif data == "admin_del_anime": 
+            await delete_anime_start(update, context)
+            return DA_GET_ANIME # <--- FIX
+        elif data == "admin_del_season": 
+            await delete_season_start(update, context)
+            return DS_GET_ANIME # <--- FIX
+        elif data == "admin_del_episode": 
+            await delete_episode_start(update, context)
+            return DE_GET_ANIME # <--- FIX
         
         # Sub-Settings Sub-menu
-        elif data == "admin_set_sub_qr": await set_sub_qr_start(update, context)
-        elif data == "admin_set_price": await set_price_start(update, context)
-        elif data == "admin_set_days": await set_days_start(update, context)
-        elif data == "admin_set_delete_time": await set_delete_time_start(update, context)
+        elif data == "admin_set_sub_qr": 
+            await set_sub_qr_start(update, context)
+            return CS_GET_QR # <--- FIX
+        elif data == "admin_set_price": 
+            await set_price_start(update, context)
+            return CP_GET_PRICE # <--- FIX
+        elif data == "admin_set_days": 
+            await set_days_start(update, context)
+            return CV_GET_DAYS # <--- FIX
+        elif data == "admin_set_delete_time": 
+            await set_delete_time_start(update, context)
+            return CS_GET_DELETE_TIME # <--- FIX
         
         # Donate Settings Sub-menu
-        elif data == "admin_set_donate_qr": await set_donate_qr_start(update, context)
+        elif data == "admin_set_donate_qr": 
+            await set_donate_qr_start(update, context)
+            return CD_GET_QR # <--- FIX
         
         # Links Sub-menu
-        elif data == "admin_set_backup_link" or data == "admin_set_support_link": await set_links_start(update, context)
+        elif data == "admin_set_backup_link" or data == "admin_set_support_link": 
+            await set_links_start(update, context)
+            return CL_GET_BACKUP # <--- FIX
         
-        # Messages Sub-menu
-        elif data.startswith("msg_"): await set_msg_start(update, context)
+        # Messages Sub-menu (Yeh function khud state return karta hai)
+        elif data.startswith("msg_"):
+            return await set_msg_start(update, context) # <--- FIX
         
-        # User Menu buttons
-        elif data == "user_back_menu": await menu_command(update, context, from_callback=True)
-        elif data == "user_subscribe": await user_subscribe_start(update, context, from_conv_cancel=True)
+        # User Menu buttons (Yeh normal navigation hai)
+        elif data == "user_back_menu": 
+            await menu_command(update, context, from_callback=True)
+        elif data == "user_subscribe": 
+            await user_subscribe_start(update, context, from_conv_cancel=True)
         
         # User Subscription
-        elif data == "user_upload_ss": await user_upload_ss_start(update, context)
+        elif data == "user_upload_ss": 
+            await user_upload_ss_start(update, context)
+            return SUB_GET_SCREENSHOT # <--- FIX
         
-        # Admin Approval
-        elif data.startswith("admin_approve_"): await admin_approve_start(update, context)
-        
-    return ConversationHandler.END # Hamesha conversation ko end karo
+        # Admin Approval (Yeh function khud state ya END return karta hai)
+        elif data.startswith("admin_approve_"):
+            return await admin_approve_start(update, context) # <--- FIX
+            
+    return ConversationHandler.END # Agar upar kuch bhi match nahi hua, toh conversation END karo
+# ===== YAHAN TAK REPLACE HUA HAI =====
 
 
 # NAYA FIX: Back button ke liye user_subscribe_start me naya argument
