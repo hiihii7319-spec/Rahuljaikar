@@ -215,12 +215,25 @@ async def delete_message_job(context: ContextTypes.DEFAULT_TYPE):
 (RS_GET_ID, RS_CONFIRM) = range(43, 45)
 
 
-# --- Common Conversation Fallbacks (NAYA GLOBAL CANCEL FIX - Stuck Fix) ---
+# --- Common Conversation Fallbacks (DEEP LINK FIX APPLIED) ---
 # ===== YEH FUNCTION REPLACE KIYA GAYA HAI =====
 async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
     current_state = context.user_data.get(ConversationHandler.STATE)
+
+    # --- NAYA DEEP LINK FIX (YAHAN FIX ADD KIYA GAYA HAI) ---
+    # Check if this is a /start command WITH a deep link payload
+    if update.message and update.message.text.startswith('/start') and context.args:
+        logger.info(f"User {user_id} ne deep link /start use kiya (payload: {context.args[0]}), conversation (State: {current_state}) ko cancel kar raha hoon.")
+        if context.user_data:
+            context.user_data.clear()
+        
+        # END return karo taaki main start_command isse handle kar sake
+        # Isse ye update dobara process hoga, lekin is baar conversation state 'None' hogi
+        return ConversationHandler.END 
+    # --- END NAYA DEEP LINK FIX ---
+
     logger.info(f"User {user_id} ne conversation cancel/reset kiya (Current State: {current_state}).")
     
     # Data clear karo
@@ -247,7 +260,7 @@ async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
             return ConversationHandler.END # End the conversation
         
-        # Agar koi aur message hai (like /start), toh bas cancel bolo
+        # Agar koi aur message hai (like /start BINA PAYLOAD ke), toh bas cancel bolo
         try:
             # Don't send a reply if it's a command, let the command handler run
             if not update.message.text.startswith('/'):
@@ -286,7 +299,7 @@ async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Sirf END return karo.
     # Isse conversation ruk jayega, aur Telegram/PTB
     # button click ko dobara process karega.
-    # Is baar, bot state `None` me hoga, aur
+    # Is baar, bot state `None` hoga, aur
     # button ka entry_point trigger ho jayega.
             
     return ConversationHandler.END
@@ -308,7 +321,7 @@ async def user_subscribe_start(update: Update, context: ContextTypes.DEFAULT_TYP
         if not qr_id or not price or not days:
             await query.message.reply_text("❌ **Error!** Subscription system abhi setup nahi hua hai. Admin se baat karein.")
             if not from_conv_cancel:
-                  await back_to_user_menu(update, context) 
+                await back_to_user_menu(update, context) 
             return ConversationHandler.END
             
         text = f"**Subscription Plan**\n\n**Price:** {price}\n**Validity:** {days} days\n\n"
@@ -602,9 +615,9 @@ async def get_episode_number(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return E_GET_NUMBER
 
     await update.message.reply_text(f"Aapne **Episode {context.user_data['ep_num']}** select kiya hai.\n\n"
-                                      "Ab **480p** quality ki video file bhejein.\n"
-                                      "Ya /skip type karein.", 
-                                      parse_mode='Markdown')
+                                        "Ab **480p** quality ki video file bhejein.\n"
+                                        "Ya /skip type karein.", 
+                                        parse_mode='Markdown')
     return E_GET_480P
 
 # Naye handlers
@@ -615,8 +628,8 @@ async def get_480p_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def skip_480p(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ 480p skip kar diya.\n\n"
-                                      "Ab **720p** quality ki video file bhejein.\n"
-                                      "Ya /skip type karein.", parse_mode='Markdown')
+                                        "Ab **720p** quality ki video file bhejein.\n"
+                                        "Ya /skip type karein.", parse_mode='Markdown')
     return E_GET_720P
 
 async def get_720p_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -626,8 +639,8 @@ async def get_720p_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def skip_720p(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ 720p skip kar diya.\n\n"
-                                      "Ab **1080p** quality ki video file bhejein.\n"
-                                      "Ya /skip type karein.", parse_mode='Markdown')
+                                        "Ab **1080p** quality ki video file bhejein.\n"
+                                        "Ya /skip type karein.", parse_mode='Markdown')
     return E_GET_1080P
 
 async def get_1080p_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -637,8 +650,8 @@ async def get_1080p_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def skip_1080p(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ 1080p skip kar diya.\n\n"
-                                         "Ab **4K** quality ki video file bhejein.\n"
-                                         "Ya /skip type karein.", parse_mode='Markdown')
+                                      "Ab **4K** quality ki video file bhejein.\n"
+                                      "Ya /skip type karein.", parse_mode='Markdown')
     return E_GET_4K
 
 async def get_4k_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -649,7 +662,7 @@ async def get_4k_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def skip_4k(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ 4K skip kar diya.\n\n"
-                                         "✅ **Success!** Episode save ho gaya hai.", parse_mode='Markdown')
+                                      "✅ **Success!** Episode save ho gaya hai.", parse_mode='Markdown')
     context.user_data.clear()
     return ConversationHandler.END
 # --- End of Naya "Add Episode" Flow ---
@@ -677,7 +690,7 @@ async def set_price_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     await query.edit_message_text("Subscription ka **Price** bhejo.\n(Example: 50 INR)\n\n/cancel - Cancel.", 
-                                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_sub_settings")]]))
+                                   reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_sub_settings")]]))
     return CP_GET_PRICE
 async def set_price_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     price_text = update.message.text
@@ -1267,13 +1280,6 @@ async def remove_sub_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def user_upload_ss_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
-    # ====== REQUEST 2: FORCE /START CHECK =======
-    # Iski zaroorat nahi hai. User yahan tak pahunchne ke liye 
-    # /menu -> Subscribe -> Upload click karta hai.
-    # Iska matlab woh pehle hi bot ke DM mein hai aur /start kar chuka hai.
-    # Asli problem "block" karne ki hai, jo 'activate_subscription' me handled hai.
-    # ====== END OF CHECK =======
 
     await query.message.reply_text("Kripya apna payment screenshot yahan bhejein.\n\n/cancel - Cancel.")
     return SUB_GET_SCREENSHOT
