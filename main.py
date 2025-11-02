@@ -174,7 +174,19 @@ async def send_donate_thank_you(context: ContextTypes.DEFAULT_TYPE):
         logger.warning(f"Thank you message bhejte waqt error: {e}")
 
 # NAYA FIX: Job Queue waala delete function waapas aa gaya (Auto-Delete Fix)
+# NAYA FIX: Job Queue Alternative
+async def delete_message_later(bot, chat_id: int, message_id: int, seconds: int):
+    """asyncio.sleep ka use karke message delete karega (Job Queue Alternative)"""
+    try:
+        await asyncio.sleep(seconds)
+        await bot.delete_message(chat_id=chat_id, message_id=message_id)
+        logger.info(f"Auto-deleted message {message_id} for user {chat_id} (asyncio.sleep)")
+    except Exception as e:
+        logger.warning(f"Message (asyncio.sleep) delete karne me error: {e}")
+
+# NAYA FIX: Job Queue waala delete function waapas aa gaya (Auto-Delete Fix)
 async def delete_message_job(context: ContextTypes.DEFAULT_TYPE):
+    # ... (baaki ka function waise hi rahega) ...async def delete_message_job(context: ContextTypes.DEFAULT_TYPE):
     """File ko delete karega"""
     job = context.job
     try:
