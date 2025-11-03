@@ -2699,19 +2699,18 @@ def main():
     async_thread = threading.Thread(target=run_async_bot_tasks, args=(async_loop, bot_app))
     async_thread.start() # Bot ka thread start ho gaya
 
-    # Ab, Flask/Waitress server ko main thread mein chalao
+# Ab, Flask/Waitress server ko main thread mein chalao
     logger.info(f"Flask server port {PORT} par start ho raha hai...")
     try:
         serve(app, host="0.0.0.0", port=PORT)
     except KeyboardInterrupt:
-        logger.error("Server band ho raha hai...")
-    except Exception as e:
-        logger.error(f"Flask/Waitress server crash ho gaya: {e}", exc_info=True)
+        logger.info("Server band ho raha hai...")
     
- logger.info("Flask server band ho gaya. Async loop ko stop kar raha hai...")
+    # Jab server band hoga (Ctrl+C), tab bot ke thread ko bhi band karo
+    logger.info("Flask server band ho gaya. Async loop ko stop kar raha hai...")
     async_loop.call_soon_threadsafe(async_loop.stop) # Bot ke loop ko stop ka signal do
     async_thread.join() # Thread ke band hone ka intezaar karo
     logger.info("Bot thread successfully band ho gaya.")
 
 if __name__ == "__main__":
-    main().
+    main()
