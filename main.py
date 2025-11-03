@@ -1365,7 +1365,7 @@ async def co_admin_remove_do(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await asyncio.sleep(3)
     await admin_settings_menu(update, context)
     return ConversationHandler.END
-async def co_admin_list(update: Update, context: ContextTypes.DEFAULT_T):
+async def co_admin_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     config = await get_config()
