@@ -2666,13 +2666,17 @@ def main():
     try:
         # Webhook URL set karo (aapke token ke path par)
         # NAYA: httpx ka istemaal karke set_webhook call karo
+       # NAYA: httpx ka istemaal karke set_webhook call karo (Synchronous fix)
         webhook_path_url = f"{WEBHOOK_URL}/{BOT_TOKEN}"
         logger.info(f"Webhook ko {webhook_path_url} par set kar raha hai...")
         
-        async with httpx.AsyncClient() as client:
-            await client.get(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_path_url}")
-
-        logger.info("Webhook successfully set!")
+        try:
+            # async with ki jagah normal .get() use karo
+            httpx.get(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_path_url}")
+            logger.info("Webhook successfully set!")
+        except Exception as e:
+            logger.error(f"Webhook set karne mein error: {e}")
+            # Agar set nahi bhi hua, toh server ko chalne do
         
         # Bot ke internal processes (jobs, etc.) ko start karo
         loop.run_until_complete(bot_app.initialize())
