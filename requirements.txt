@@ -1,5 +1,6 @@
 python-dotenv
 pymongo[srv]
 python-telegram-bot
-Flask
+Flask[async]
 waitress
+httpx
