@@ -2252,16 +2252,32 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             msg = msg.replace("{anime_name}", anime_name).replace("{season_name}", season_name).replace("{ep_num}", ep_num)
             await query.edit_message_caption(caption=msg, parse_mode='Markdown')
 
+           # --- NAYA FIX: Poster message ko bhi delete ke liye schedule karo ---
+            delete_time = config.get("delete_seconds", 300) 
+            try:
+                # Poster message (jisko abhi edit kiya hai) ko delete ke liye schedule karo
+                asyncio.create_task(delete_message_later(
+                    bot=context.bot,
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id,
+                    seconds=delete_time
+                ))
+            except Exception as e:
+                logger.error(f"asyncio.create_task (poster) schedule failed for user {user_id}: {e}")
+            # --- END NAYA FIX ---
+
             QUALITY_ORDER = ['480p', '720p', '1080p', '4K']
             available_qualities = qualities_dict.keys()
             sorted_q_list = [q for q in QUALITY_ORDER if q in available_qualities]
             extra_q = [q for q in available_qualities if q not in sorted_q_list]
             sorted_q_list.extend(extra_q)
             
-            delete_time = config.get("delete_seconds", 300) # NAYA: 5 min
+            # delete_time pehle se le liya hai
             delete_minutes = max(1, delete_time // 60)
             warning_template = config.get("messages", {}).get("file_warning", "Warning")
             warning_msg = warning_template.replace('{minutes}', str(delete_minutes))
+            
+            # Loop karke saari files bhejo
             
             # Loop karke saari files bhejo
             for quality in sorted_q_list:
