@@ -1,3 +1,5 @@
 python-dotenv
 pymongo[srv]
 python-telegram-bot
+Flask
+waitress
