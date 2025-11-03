@@ -1,9 +1,12 @@
-import asyncio
-import threading
+# ============================================
+# ===        COMPLETE FINAL FIX            ===
+# ============================================
 import os
 import logging
 import re
-import asyncio # Auto-delete ke liye
+import asyncio # Auto-delete aur Threading ke liye
+import threading # Threading ke liye
+import httpx # Webhook set karne ke liye
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from pymongo import MongoClient
@@ -19,10 +22,9 @@ from telegram.ext import (
     filters,
 )
 from telegram.error import BadRequest
-# NAYA: Flask server aur Webhook ke liye
-from flask import Flask, request
+# Flask server ke liye
+from flask import Flask, request # NAYA: 'request' add kiya
 from waitress import serve 
-import httpx # Webhook set karne ke liye
 
 # --- Baaki ka Bot Code ---
 load_dotenv()
@@ -37,12 +39,13 @@ try:
     MONGO_URI = os.getenv("MONGO_URI")
     ADMIN_ID = int(os.getenv("ADMIN_ID"))
     LOG_CHANNEL_ID = os.getenv("LOG_CHANNEL_ID") 
+    WEBHOOK_URL = os.environ.get('WEBHOOK_URL') # NAYA: Webhook URL
     
-    # NAYA: Render par yeh Env Var zaroor set karna
-    WEBHOOK_URL = os.getenv("WEBHOOK_URL") # Example: https://rahuljaikar-iqtk.onrender.com
-    
-    if not BOT_TOKEN or not MONGO_URI or not ADMIN_ID or not LOG_CHANNEL_ID or not WEBHOOK_URL:
-        logger.error("Error: Secrets missing! BOT_TOKEN, MONGO_URI, ADMIN_ID, LOG_CHANNEL_ID, aur WEBHOOK_URL check karo.")
+    if not BOT_TOKEN or not MONGO_URI or not ADMIN_ID or not LOG_CHANNEL_ID:
+        logger.error("Error: Secrets missing. BOT_TOKEN, MONGO_URI, ADMIN_ID, aur LOG_CHANNEL_ID check karo.")
+        exit()
+    if not WEBHOOK_URL:
+        logger.error("Error: WEBHOOK_URL missing! Render > Environment mein set karo.")
         exit()
 except Exception as e:
     logger.error(f"Error reading secrets: {e}")
@@ -53,10 +56,8 @@ try:
     logger.info("MongoDB se connect karne ki koshish...")
     client = MongoClient(MONGO_URI)
     db = client['AnimeBotDB']
-    
-    # NAYA: Collection ka naam 'animes' hai (aapke screenshot ke hisab se)
     users_collection = db['users']
-    animes_collection = db['animes'] # Pehle 'animes' tha, correct hai
+    animes_collection = db['animes'] 
     config_collection = db['config'] 
     client.admin.command('ping') # Check connection
     logger.info("MongoDB se successfully connect ho gaya!")
@@ -995,7 +996,6 @@ async def post_gen_send_to_chat(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text(f"❌ **Error!**\nPost '{chat_id}' par nahi bhej paya. Check karo ki bot uss channel me admin hai ya ID sahi hai.\nError: {e}")
     context.user_data.clear()
     return ConversationHandler.END
-
 # --- Conversation: Delete Anime ---
 async def delete_anime_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -2359,15 +2359,17 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Error: {context.error} \nUpdate: {update}", exc_info=True)
 
-# --- [YAHAN SE NAYA CODE PASTE KARO] ---
+# ============================================
+# ===  NAYA WEBHOOK AUR THREADING SETUP    ===
+# ============================================
 
-# --- [YAHAN SE NAYA CODE PASTE KARO] ---
-
-# --- NAYA Flask Server Setup ---
+# --- NAYA: Flask Server Setup ---
 app = Flask(__name__)
 
 # Global variable to hold the bot application
 bot_app = None
+# Global variable to hold the bot's event loop
+bot_loop = None
 
 @app.route('/')
 def home():
@@ -2375,18 +2377,21 @@ def home():
     return "I am alive and running!", 200
 
 @app.route(f"/{BOT_TOKEN}", methods=['POST'])
-async def webhook():
-    """Telegram se updates yahaan aayenge."""
-    global bot_app
+def webhook():
+    """
+    Yeh SYNC function hai jo Waitress chalaayega.
+    Yeh message ko pakad kar ASYNC bot ko de dega.
+    """
+    global bot_app, bot_loop
     if request.is_json:
         update_data = request.get_json()
         update = Update.de_json(update_data, bot_app.bot)
         
         try:
-            # Hum bot ko bolenge ki update ko uske async thread mein process kare
-            asyncio.run_coroutine_threadsafe(bot_app.process_update(update), bot_app.loop)
+            # Update ko bot ke async thread mein process karne ke liye bhejo
+            asyncio.run_coroutine_threadsafe(bot_app.process_update(update), bot_loop)
         except Exception as e:
-            logger.error(f"Update process karne mein error: {e}", exc_info=True)
+            logger.error(f"Update ko threadsafe bhejne mein error: {e}", exc_info=True)
             
         return "OK", 200
     else:
@@ -2394,12 +2399,19 @@ async def webhook():
 
 # --- NAYA: Bot ko alag thread mein chalaane ke liye function ---
 def run_async_bot_tasks(loop, app):
-    """Runs the bot's async setup and keeps its loop running."""
+    """
+    Yeh function ek naye thread mein chalega.
+    Yeh bot ka async setup karega aur uske loop ko zinda rakhega.
+    """
+    global bot_loop
+    bot_loop = loop # Loop ko global variable mein save karo
     asyncio.set_event_loop(loop) # Is thread ko naya loop do
+    
     try:
         # Webhook set karo
-        webhook_path_url = f"{os.environ.get('WEBHOOK_URL')}/{BOT_TOKEN}"
+        webhook_path_url = f"{WEBHOOK_URL}/{BOT_TOKEN}"
         logger.info(f"Webhook ko {webhook_path_url} par set kar raha hai...")
+        # Normal (sync) httpx request ka istemaal karo
         httpx.get(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_path_url}")
         logger.info("Webhook successfully set!")
 
@@ -2418,21 +2430,16 @@ def run_async_bot_tasks(loop, app):
         loop.run_until_complete(app.stop())
         loop.close()
 
-# --- NAYA Main Bot Function ---
+# --- NAYA Main Bot Function (FINAL) ---
 def main():
     global bot_app
     PORT = int(os.environ.get("PORT", 8080))
-    WEBHOOK_URL = os.environ.get('WEBHOOK_URL')
     
-    if not WEBHOOK_URL or not BOT_TOKEN:
-        logger.error("Error: WEBHOOK_URL ya BOT_TOKEN missing hai!")
-        return
-
     # Bot ko banao (lekin abhi chalao mat)
+    # `application` ka naam badal kar `bot_app` kar rahe hain
     bot_app = Application.builder().token(BOT_TOKEN).build()
     
-    # --- Yahaan aapke saare handlers hain ---
-    # (Yeh aapke purane main() function se copy kiye gaye hain)
+    # --- Saare Handlers (Aapke original code se) ---
     
     global_cancel_handler = CommandHandler("cancel", cancel)
     global_fallbacks = [
@@ -2697,15 +2704,14 @@ def main():
     try:
         serve(app, host="0.0.0.0", port=PORT)
     except KeyboardInterrupt:
-        logger.info("Server band ho raha hai...")
+        logger.error("Server band ho raha hai...")
+    except Exception as e:
+        logger.error(f"Flask/Waitress server crash ho gaya: {e}", exc_info=True)
     
-    # Jab server band hoga (Ctrl+C), tab bot ke thread ko bhi band karo
-    logger.info("Flask server band ho gaya. Async loop ko stop kar raha hai...")
+ logger.info("Flask server band ho gaya. Async loop ko stop kar raha hai...")
     async_loop.call_soon_threadsafe(async_loop.stop) # Bot ke loop ko stop ka signal do
     async_thread.join() # Thread ke band hone ka intezaar karo
     logger.info("Bot thread successfully band ho gaya.")
 
 if __name__ == "__main__":
-    main()
-
-# --- [NAYA CODE YAHAN KHATAM HOTA HAI] ---
+    main().
