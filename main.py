@@ -2361,6 +2361,8 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- [YAHAN SE NAYA CODE PASTE KARO] ---
 
+# --- [YAHAN SE NAYA CODE PASTE KARO] ---
+
 # --- NAYA Flask Server Setup ---
 app = Flask(__name__)
 
@@ -2381,7 +2383,8 @@ async def webhook():
         update = Update.de_json(update_data, bot_app.bot)
         
         try:
-            await bot_app.process_update(update)
+            # Hum bot ko bolenge ki update ko uske async thread mein process kare
+            asyncio.run_coroutine_threadsafe(bot_app.process_update(update), bot_app.loop)
         except Exception as e:
             logger.error(f"Update process karne mein error: {e}", exc_info=True)
             
@@ -2389,22 +2392,43 @@ async def webhook():
     else:
         return "Bad request", 400
 
+# --- NAYA: Bot ko alag thread mein chalaane ke liye function ---
+def run_async_bot_tasks(loop, app):
+    """Runs the bot's async setup and keeps its loop running."""
+    asyncio.set_event_loop(loop) # Is thread ko naya loop do
+    try:
+        # Webhook set karo
+        webhook_path_url = f"{os.environ.get('WEBHOOK_URL')}/{BOT_TOKEN}"
+        logger.info(f"Webhook ko {webhook_path_url} par set kar raha hai...")
+        httpx.get(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_path_url}")
+        logger.info("Webhook successfully set!")
+
+        # Bot ko start karo
+        loop.run_until_complete(app.initialize())
+        loop.run_until_complete(app.start())
+        logger.info("Bot application initialized and started (async).")
+        
+        # Is thread mein loop ko hamesha zinda rakho
+        loop.run_forever() 
+        
+    except Exception as e:
+        logger.error(f"Async thread fail ho gaya: {e}", exc_info=True)
+    finally:
+        logger.info("Async loop stop ho raha hai...")
+        loop.run_until_complete(app.stop())
+        loop.close()
+
 # --- NAYA Main Bot Function ---
 def main():
-    global bot_app # Use the global variable
-    
-    # Render se PORT aur WEBHOOK_URL uthao
+    global bot_app
     PORT = int(os.environ.get("PORT", 8080))
-    WEBHOOK_URL = os.environ.get('WEBHOOK_URL') # https://rahuljaikar-iqtk.onrender.com
+    WEBHOOK_URL = os.environ.get('WEBHOOK_URL')
     
-    # Check karo ki secrets load ho gaye hain
     if not WEBHOOK_URL or not BOT_TOKEN:
         logger.error("Error: WEBHOOK_URL ya BOT_TOKEN missing hai!")
         return
 
-    logger.info("Bot Application ban raha hai...")
-    # NOTE: `application` ka naam badal kar `bot_app` kar rahe hain
-    # Taa ki upar ke webhook function se match kare
+    # Bot ko banao (lekin abhi chalao mat)
     bot_app = Application.builder().token(BOT_TOKEN).build()
     
     # --- Yahaan aapke saare handlers hain ---
@@ -2662,42 +2686,24 @@ def main():
     bot_app.add_error_handler(error_handler)
     # --- Yahaan tak aapke saare handlers copy-paste ho gaye ---
 
-    # Ab bot ka async setup karte hain
-    loop = asyncio.get_event_loop()
-    
-    try:
-        # Webhook URL set karo (aapke token ke path par)
-        # NAYA: httpx ka istemaal karke set_webhook call karo
-       # NAYA: httpx ka istemaal karke set_webhook call karo (Synchronous fix)
-        webhook_path_url = f"{WEBHOOK_URL}/{BOT_TOKEN}"
-        logger.info(f"Webhook ko {webhook_path_url} par set kar raha hai...")
-        
-        try:
-            # async with ki jagah normal .get() use karo
-            httpx.get(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_path_url}")
-            logger.info("Webhook successfully set!")
-        except Exception as e:
-            logger.error(f"Webhook set karne mein error: {e}")
-            # Agar set nahi bhi hua, toh server ko chalne do
-        
-        # Bot ke internal processes (jobs, etc.) ko start karo
-        loop.run_until_complete(bot_app.initialize())
-        loop.run_until_complete(bot_app.start())
-        
-        logger.info("Bot application initialized and started (async).")
+    # Ab, Bot ko ek alag Thread mein chalao
+    logger.info("Async bot thread start kar raha hai...")
+    async_loop = asyncio.new_event_loop()
+    async_thread = threading.Thread(target=run_async_bot_tasks, args=(async_loop, bot_app))
+    async_thread.start() # Bot ka thread start ho gaya
 
-    except Exception as e:
-        logger.error(f"Bot setup (async) failed: {e}", exc_info=True)
-        return
-
-    # Ab, Flask/Waitress server ko chalao
-    # Yeh main thread ko block karega
+    # Ab, Flask/Waitress server ko main thread mein chalao
     logger.info(f"Flask server port {PORT} par start ho raha hai...")
-    serve(app, host="0.0.0.0", port=PORT)
+    try:
+        serve(app, host="0.0.0.0", port=PORT)
+    except KeyboardInterrupt:
+        logger.info("Server band ho raha hai...")
     
-    # Jab server band hoga (Ctrl+C), tab bot ko bhi band karo
-    logger.info("Flask server band ho raha hai. Bot ko stop kar raha hai...")
-    loop.run_until_complete(bot_app.stop())
+    # Jab server band hoga (Ctrl+C), tab bot ke thread ko bhi band karo
+    logger.info("Flask server band ho gaya. Async loop ko stop kar raha hai...")
+    async_loop.call_soon_threadsafe(async_loop.stop) # Bot ke loop ko stop ka signal do
+    async_thread.join() # Thread ke band hone ka intezaar karo
+    logger.info("Bot thread successfully band ho gaya.")
 
 if __name__ == "__main__":
     main()
