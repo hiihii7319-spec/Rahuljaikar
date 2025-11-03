@@ -20,19 +20,6 @@ from telegram.ext import (
     filters,
 )
 from telegram.error import BadRequest
-# Flask server ke liye
-from flask import Flask
-from threading import Thread
-from waitress import serve 
-
-# --- Flask Server Setup ---
-app = Flask(__name__)
-@app.route('/')
-def home():
-    return "I am alive and running!"
-def run_flask():
-    port = int(os.environ.get("PORT", 8080))
-    serve(app, host="0.0.0.0", port=port)
 
 # --- Baaki ka Bot Code ---
 load_dotenv()
@@ -2384,9 +2371,17 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Main Bot Function ---
 def main():
-    logger.info("Flask web server start ho raha hai (Render port ke liye)...")
-    flask_thread = Thread(target=run_flask)
-    flask_thread.start()
+  # Render se PORT aur WEBHOOK_URL uthao
+    PORT = int(os.environ.get("PORT", 8080))
+    WEBHOOK_URL = os.environ.get('WEBHOOK_URL') # Yeh humne Render par set kiya
+
+    # Check karo ki Render par Env Var set hai ya nahi
+    if not WEBHOOK_URL:
+        logger.error("Error: WEBHOOK_URL missing hai! (Render Env mein set karo)")
+        return
+    if not BOT_TOKEN:
+        logger.error("Error: BOT_TOKEN missing hai!")
+        return
     
     logger.info("Bot Application ban raha hai...")
     application = Application.builder().token(BOT_TOKEN).build()
@@ -2677,8 +2672,22 @@ def main():
 
     application.add_error_handler(error_handler)
 
-    logger.info("Bot polling start kar raha hai...")
-    application.run_polling()
+    # === YEH HAI ASLI FIX ===
+    
+    # Ab Webhook set karo
+    logger.info(f"Webhook ko {WEBHOOK_URL} par set kar raha hai...")
+    application.run_async(
+        application.bot.set_webhook(url=WEBHOOK_URL)
+    )
+
+    logger.info(f"Bot ab port {PORT} par sun raha hai...")
+    
+    # Bot ko as a web server chalao
+    application.run_webhook(
+        listen="0.0.0.0",  
+        port=PORT,         
+        webhook_url=WEBHOOK_URL
+    )
 
 if __name__ == "__main__":
     main()
