@@ -1,6 +1,3 @@
-# ============================================
-# === PART 1 of 2 ============================
-# ============================================
 import os
 import logging
 import re
@@ -20,6 +17,10 @@ from telegram.ext import (
     filters,
 )
 from telegram.error import BadRequest
+# NAYA: Flask server aur Webhook ke liye
+from flask import Flask, request
+from waitress import serve 
+import httpx # Webhook set karne ke liye
 
 # --- Baaki ka Bot Code ---
 load_dotenv()
@@ -34,8 +35,12 @@ try:
     MONGO_URI = os.getenv("MONGO_URI")
     ADMIN_ID = int(os.getenv("ADMIN_ID"))
     LOG_CHANNEL_ID = os.getenv("LOG_CHANNEL_ID") 
-    if not BOT_TOKEN or not MONGO_URI or not ADMIN_ID or not LOG_CHANNEL_ID:
-        logger.error("Error: Secrets missing. BOT_TOKEN, MONGO_URI, ADMIN_ID, aur LOG_CHANNEL_ID check karo.")
+    
+    # NAYA: Render par yeh Env Var zaroor set karna
+    WEBHOOK_URL = os.getenv("WEBHOOK_URL") # Example: https://rahuljaikar-iqtk.onrender.com
+    
+    if not BOT_TOKEN or not MONGO_URI or not ADMIN_ID or not LOG_CHANNEL_ID or not WEBHOOK_URL:
+        logger.error("Error: Secrets missing! BOT_TOKEN, MONGO_URI, ADMIN_ID, LOG_CHANNEL_ID, aur WEBHOOK_URL check karo.")
         exit()
 except Exception as e:
     logger.error(f"Error reading secrets: {e}")
@@ -46,8 +51,10 @@ try:
     logger.info("MongoDB se connect karne ki koshish...")
     client = MongoClient(MONGO_URI)
     db = client['AnimeBotDB']
+    
+    # NAYA: Collection ka naam 'animes' hai (aapke screenshot ke hisab se)
     users_collection = db['users']
-    animes_collection = db['animes'] 
+    animes_collection = db['animes'] # Pehle 'animes' tha, correct hai
     config_collection = db['config'] 
     client.admin.command('ping') # Check connection
     logger.info("MongoDB se successfully connect ho gaya!")
@@ -986,9 +993,6 @@ async def post_gen_send_to_chat(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text(f"❌ **Error!**\nPost '{chat_id}' par nahi bhej paya. Check karo ki bot uss channel me admin hai ya ID sahi hai.\nError: {e}")
     context.user_data.clear()
     return ConversationHandler.END
-# ============================================
-# === PART 2 of 2 ============================
-# ============================================
 
 # --- Conversation: Delete Anime ---
 async def delete_anime_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2239,32 +2243,16 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             msg = msg.replace("{anime_name}", anime_name).replace("{season_name}", season_name).replace("{ep_num}", ep_num)
             await query.edit_message_caption(caption=msg, parse_mode='Markdown')
 
-           # --- NAYA FIX: Poster message ko bhi delete ke liye schedule karo ---
-            delete_time = config.get("delete_seconds", 300) 
-            try:
-                # Poster message (jisko abhi edit kiya hai) ko delete ke liye schedule karo
-                asyncio.create_task(delete_message_later(
-                    bot=context.bot,
-                    chat_id=query.message.chat_id,
-                    message_id=query.message.message_id,
-                    seconds=delete_time
-                ))
-            except Exception as e:
-                logger.error(f"asyncio.create_task (poster) schedule failed for user {user_id}: {e}")
-            # --- END NAYA FIX ---
-
             QUALITY_ORDER = ['480p', '720p', '1080p', '4K']
             available_qualities = qualities_dict.keys()
             sorted_q_list = [q for q in QUALITY_ORDER if q in available_qualities]
             extra_q = [q for q in available_qualities if q not in sorted_q_list]
             sorted_q_list.extend(extra_q)
             
-            # delete_time pehle se le liya hai
+            delete_time = config.get("delete_seconds", 300) # NAYA: 5 min
             delete_minutes = max(1, delete_time // 60)
             warning_template = config.get("messages", {}).get("file_warning", "Warning")
             warning_msg = warning_template.replace('{minutes}', str(delete_minutes))
-            
-            # Loop karke saari files bhejo
             
             # Loop karke saari files bhejo
             for quality in sorted_q_list:
@@ -2369,37 +2357,64 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Error: {context.error} \nUpdate: {update}", exc_info=True)
 
-# --- Main Bot Function ---
-def main():
-  # Render se PORT aur WEBHOOK_URL uthao
-    PORT = int(os.environ.get("PORT", 8080))
-    WEBHOOK_URL = os.environ.get('WEBHOOK_URL') # Yeh humne Render par set kiya
+# --- [YAHAN SE NAYA CODE PASTE KARO] ---
 
-    # Check karo ki Render par Env Var set hai ya nahi
-    if not WEBHOOK_URL:
-        logger.error("Error: WEBHOOK_URL missing hai! (Render Env mein set karo)")
-        return
-    if not BOT_TOKEN:
-        logger.error("Error: BOT_TOKEN missing hai!")
-        return
+# --- NAYA Flask Server Setup ---
+app = Flask(__name__)
+
+# Global variable to hold the bot application
+bot_app = None
+
+@app.route('/')
+def home():
+    """Render ka health check yahaan aayega."""
+    return "I am alive and running!", 200
+
+@app.route(f"/{BOT_TOKEN}", methods=['POST'])
+async def webhook():
+    """Telegram se updates yahaan aayenge."""
+    global bot_app
+    if request.is_json:
+        update_data = request.get_json()
+        update = Update.de_json(update_data, bot_app.bot)
+        
+        try:
+            await bot_app.process_update(update)
+        except Exception as e:
+            logger.error(f"Update process karne mein error: {e}", exc_info=True)
+            
+        return "OK", 200
+    else:
+        return "Bad request", 400
+
+# --- NAYA Main Bot Function ---
+def main():
+    global bot_app # Use the global variable
     
+    # Render se PORT aur WEBHOOK_URL uthao
+    PORT = int(os.environ.get("PORT", 8080))
+    WEBHOOK_URL = os.environ.get('WEBHOOK_URL') # https://rahuljaikar-iqtk.onrender.com
+    
+    # Check karo ki secrets load ho gaye hain
+    if not WEBHOOK_URL or not BOT_TOKEN:
+        logger.error("Error: WEBHOOK_URL ya BOT_TOKEN missing hai!")
+        return
+
     logger.info("Bot Application ban raha hai...")
-    application = Application.builder().token(BOT_TOKEN).build()
+    # NOTE: `application` ka naam badal kar `bot_app` kar rahe hain
+    # Taa ki upar ke webhook function se match kare
+    bot_app = Application.builder().token(BOT_TOKEN).build()
     
-    # --- NAYA: Global Cancel Handler (Request 9, 10) ---
-    # Yeh kisi bhi conversation me /cancel ko pakad lega
+    # --- Yahaan aapke saare handlers hain ---
+    # (Yeh aapke purane main() function se copy kiye gaye hain)
+    
     global_cancel_handler = CommandHandler("cancel", cancel)
-    
-    # NAYA: Fallback handlers jo conversations ko automatically cancel karte hain (Request 1)
-    # Agar user conversation ke beech me /start ya /admin dabata hai
     global_fallbacks = [
         CommandHandler("start", cancel),
         CommandHandler("menu", cancel),
         CommandHandler("admin", cancel),
-        global_cancel_handler # /cancel ko bhi include karo
+        global_cancel_handler 
     ]
-    
-    # Local Fallbacks (Sirf "Back" buttons ke liye)
     admin_menu_fallback = [CallbackQueryHandler(back_to_admin_menu, pattern="^admin_menu$"), global_cancel_handler]
     add_content_fallback = [CallbackQueryHandler(back_to_add_content_menu, pattern="^back_to_add_content$"), global_cancel_handler]
     manage_fallback = [CallbackQueryHandler(back_to_manage_menu, pattern="^back_to_manage$"), global_cancel_handler]
@@ -2410,12 +2425,6 @@ def main():
     messages_fallback = [CallbackQueryHandler(back_to_messages_menu, pattern="^admin_menu_messages$"), global_cancel_handler]
     admin_settings_fallback = [CallbackQueryHandler(back_to_admin_settings_menu, pattern="^back_to_admin_settings$"), global_cancel_handler]
 
-    # --- NAYA: Conversation Entry Points ---
-    # Ab entry points global_fallbacks se check nahi honge, 
-    # taaki /admin /start etc. chalne par conversation END ho.
-    # Har conversation me `allow_reentry=True` add kiya gaya hai.
-    
-    # Admin Conversations
     add_anime_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(add_anime_start, pattern="^admin_add_anime$")], 
         states={
@@ -2517,7 +2526,6 @@ def main():
         fallbacks=global_fallbacks + manage_fallback,
         allow_reentry=True 
     )
-    # NAYA: Change Poster Conv (Request 11)
     change_poster_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(change_poster_start, pattern="^admin_change_poster$")],
         states={
@@ -2536,7 +2544,6 @@ def main():
         fallbacks=global_fallbacks + sub_settings_fallback, 
         allow_reentry=True 
     )
-    # NAYA: Co-Admin Conv (Request 7)
     add_co_admin_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(co_admin_add_start, pattern="^admin_add_co_admin$")],
         states={
@@ -2555,7 +2562,6 @@ def main():
         fallbacks=global_fallbacks + admin_settings_fallback,
         allow_reentry=True
     )
-    # NAYA: Custom Post Conv (Request 8)
     custom_post_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(custom_post_start, pattern="^admin_custom_post$")],
         states={
@@ -2569,7 +2575,6 @@ def main():
         fallbacks=global_fallbacks + admin_settings_fallback,
         allow_reentry=True
     )
-
     set_days_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(set_days_start, pattern="^admin_set_days$")], 
         states={CV_GET_DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_days_save)]}, 
@@ -2582,8 +2587,6 @@ def main():
         fallbacks=global_fallbacks + sub_settings_fallback,
         allow_reentry=True 
     )
-    
-    # NAYA: Bot Messages Conv (Request 2)
     set_messages_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(bot_messages_menu, pattern="^admin_menu_messages$")],
         states={
@@ -2600,16 +2603,12 @@ def main():
         fallbacks=global_fallbacks + admin_menu_fallback,
         allow_reentry=True
     )
-
-    # User Subscription Conversation
     sub_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(user_upload_ss_start, pattern="^user_upload_ss$")],
         states={SUB_GET_SCREENSHOT: [MessageHandler(filters.PHOTO, user_get_screenshot)]},
         fallbacks=global_fallbacks + user_menu_fallback,
         allow_reentry=True 
     )
-    
-    # Admin Approval Conversation
     approve_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_approve_start, pattern="^admin_approve_")],
         states={ADMIN_GET_DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_get_days_save)]},
@@ -2618,76 +2617,83 @@ def main():
     )
 
     # --- Handlers ko Add Karo ---
-    # Global commands
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("admin", admin_command))
-    application.add_handler(CommandHandler("menu", menu_command))
-    # Add the global cancel handler with a low group number to catch it
-    application.add_handler(CommandHandler("cancel", cancel), group=10) 
-    
-    # Main menu handlers (group 0)
-    application.add_handler(CallbackQueryHandler(admin_command, pattern="^admin_menu$"))
-    application.add_handler(CallbackQueryHandler(back_to_user_menu, pattern="^user_back_menu$"))
-    
-    # Admin Sub-Menu Handlers (group 0)
-    application.add_handler(CallbackQueryHandler(add_content_menu, pattern="^admin_menu_add_content$"))
-    application.add_handler(CallbackQueryHandler(manage_content_menu, pattern="^admin_menu_manage_content$"))
-    application.add_handler(CallbackQueryHandler(sub_settings_menu, pattern="^admin_menu_sub_settings$"))
-    application.add_handler(CallbackQueryHandler(donate_settings_menu, pattern="^admin_menu_donate_settings$"))
-    application.add_handler(CallbackQueryHandler(other_links_menu, pattern="^admin_menu_other_links$"))
-    application.add_handler(CallbackQueryHandler(admin_list_subs, pattern="^admin_list_subs$"))
-    application.add_handler(CallbackQueryHandler(admin_settings_menu, pattern="^admin_menu_admin_settings$"))
-    application.add_handler(CallbackQueryHandler(co_admin_list, pattern="^admin_list_co_admin$"))
+    bot_app.add_handler(CommandHandler("start", start_command))
+    bot_app.add_handler(CommandHandler("admin", admin_command))
+    bot_app.add_handler(CommandHandler("menu", menu_command))
+    bot_app.add_handler(CommandHandler("cancel", cancel), group=10) 
+    bot_app.add_handler(CallbackQueryHandler(admin_command, pattern="^admin_menu$"))
+    bot_app.add_handler(CallbackQueryHandler(back_to_user_menu, pattern="^user_back_menu$"))
+    bot_app.add_handler(CallbackQueryHandler(add_content_menu, pattern="^admin_menu_add_content$"))
+    bot_app.add_handler(CallbackQueryHandler(manage_content_menu, pattern="^admin_menu_manage_content$"))
+    bot_app.add_handler(CallbackQueryHandler(sub_settings_menu, pattern="^admin_menu_sub_settings$"))
+    bot_app.add_handler(CallbackQueryHandler(donate_settings_menu, pattern="^admin_menu_donate_settings$"))
+    bot_app.add_handler(CallbackQueryHandler(other_links_menu, pattern="^admin_menu_other_links$"))
+    bot_app.add_handler(CallbackQueryHandler(admin_list_subs, pattern="^admin_list_subs$"))
+    bot_app.add_handler(CallbackQueryHandler(admin_settings_menu, pattern="^admin_menu_admin_settings$"))
+    bot_app.add_handler(CallbackQueryHandler(co_admin_list, pattern="^admin_list_co_admin$"))
+    bot_app.add_handler(add_anime_conv, group=1)
+    bot_app.add_handler(add_season_conv, group=1)
+    bot_app.add_handler(add_episode_conv, group=1)
+    bot_app.add_handler(set_sub_qr_conv, group=1)
+    bot_app.add_handler(set_price_conv, group=1)
+    bot_app.add_handler(set_donate_qr_conv, group=1)
+    bot_app.add_handler(set_links_conv, group=1)
+    bot_app.add_handler(post_gen_conv, group=1)
+    bot_app.add_handler(del_anime_conv, group=1)
+    bot_app.add_handler(del_season_conv, group=1)
+    bot_app.add_handler(del_episode_conv, group=1)
+    bot_app.add_handler(change_poster_conv, group=1)
+    bot_app.add_handler(remove_sub_conv, group=1)
+    bot_app.add_handler(add_co_admin_conv, group=1)
+    bot_app.add_handler(remove_co_admin_conv, group=1)
+    bot_app.add_handler(custom_post_conv, group=1)
+    bot_app.add_handler(sub_conv, group=1)
+    bot_app.add_handler(approve_conv, group=1)
+    bot_app.add_handler(set_days_conv, group=1) 
+    bot_app.add_handler(set_delete_time_conv, group=1)
+    bot_app.add_handler(set_messages_conv, group=1)
+    bot_app.add_handler(CallbackQueryHandler(user_subscribe_start, pattern="^user_subscribe$"))
+    bot_app.add_handler(CallbackQueryHandler(admin_reject_user, pattern="^admin_reject_"))
+    bot_app.add_handler(CallbackQueryHandler(user_show_donate_menu, pattern="^user_show_donate_menu$"))
+    bot_app.add_handler(CallbackQueryHandler(download_button_handler, pattern="^dl_"))
+    bot_app.add_handler(CallbackQueryHandler(placeholder_button_handler, pattern="^user_check_sub$"))
+    bot_app.add_error_handler(error_handler)
+    # --- Yahaan tak aapke saare handlers copy-paste ho gaye ---
 
-
-    # Conversations (group 1)
-    application.add_handler(add_anime_conv, group=1)
-    application.add_handler(add_season_conv, group=1)
-    application.add_handler(add_episode_conv, group=1)
-    application.add_handler(set_sub_qr_conv, group=1)
-    application.add_handler(set_price_conv, group=1)
-    application.add_handler(set_donate_qr_conv, group=1)
-    application.add_handler(set_links_conv, group=1)
-    application.add_handler(post_gen_conv, group=1)
-    application.add_handler(del_anime_conv, group=1)
-    application.add_handler(del_season_conv, group=1)
-    application.add_handler(del_episode_conv, group=1)
-    application.add_handler(change_poster_conv, group=1)
-    application.add_handler(remove_sub_conv, group=1)
-    application.add_handler(add_co_admin_conv, group=1)
-    application.add_handler(remove_co_admin_conv, group=1)
-    application.add_handler(custom_post_conv, group=1)
-    application.add_handler(sub_conv, group=1)
-    application.add_handler(approve_conv, group=1)
-    application.add_handler(set_days_conv, group=1) 
-    application.add_handler(set_delete_time_conv, group=1)
-    application.add_handler(set_messages_conv, group=1)
+    # Ab bot ka async setup karte hain
+    loop = asyncio.get_event_loop()
     
-    # Other Handlers (group 0)
-    application.add_handler(CallbackQueryHandler(user_subscribe_start, pattern="^user_subscribe$"))
-    application.add_handler(CallbackQueryHandler(admin_reject_user, pattern="^admin_reject_"))
-    application.add_handler(CallbackQueryHandler(user_show_donate_menu, pattern="^user_show_donate_menu$"))
-    application.add_handler(CallbackQueryHandler(download_button_handler, pattern="^dl_"))
-    application.add_handler(CallbackQueryHandler(placeholder_button_handler, pattern="^user_check_sub$"))
+    try:
+        # Webhook URL set karo (aapke token ke path par)
+        # NAYA: httpx ka istemaal karke set_webhook call karo
+        webhook_path_url = f"{WEBHOOK_URL}/{BOT_TOKEN}"
+        logger.info(f"Webhook ko {webhook_path_url} par set kar raha hai...")
+        
+        async with httpx.AsyncClient() as client:
+            await client.get(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_path_url}")
 
-    application.add_error_handler(error_handler)
+        logger.info("Webhook successfully set!")
+        
+        # Bot ke internal processes (jobs, etc.) ko start karo
+        loop.run_until_complete(bot_app.initialize())
+        loop.run_until_complete(bot_app.start())
+        
+        logger.info("Bot application initialized and started (async).")
 
-    # === YEH HAI ASLI FIX ===
+    except Exception as e:
+        logger.error(f"Bot setup (async) failed: {e}", exc_info=True)
+        return
+
+    # Ab, Flask/Waitress server ko chalao
+    # Yeh main thread ko block karega
+    logger.info(f"Flask server port {PORT} par start ho raha hai...")
+    serve(app, host="0.0.0.0", port=PORT)
     
-    # Ab Webhook set karo
-    logger.info(f"Webhook ko {WEBHOOK_URL} par set kar raha hai...")
-    application.run_async(
-        application.bot.set_webhook(url=WEBHOOK_URL)
-    )
-
-    logger.info(f"Bot ab port {PORT} par sun raha hai...")
-    
-    # Bot ko as a web server chalao
-    application.run_webhook(
-        listen="0.0.0.0",  
-        port=PORT,         
-        webhook_url=WEBHOOK_URL
-    )
+    # Jab server band hoga (Ctrl+C), tab bot ko bhi band karo
+    logger.info("Flask server band ho raha hai. Bot ko stop kar raha hai...")
+    loop.run_until_complete(bot_app.stop())
 
 if __name__ == "__main__":
     main()
+
+# --- [NAYA CODE YAHAN KHATAM HOTA HAI] ---
