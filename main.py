@@ -1056,7 +1056,7 @@ async def post_gen_select_episode(update: Update, context: ContextTypes.DEFAULT_
         return ConversationHandler.END
     sorted_eps = sorted(episode_keys, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
     buttons = [InlineKeyboardButton(f"Episode {ep}", callback_data=f"post_ep_{ep}") for ep in sorted_eps]
-    keyboard = build_grid_keyboard(buttons, 1) # NAYA: 1-column list
+    keyboard = build_grid_keyboard(buttons, 2) # NAYA: 1-column list -> 2-column grid
     keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="admin_menu")])
     await query.edit_message_text(f"Aapne **Season {season_name}** select kiya hai.\n\nAb **Episode** select karein:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
     return PG_GET_EPISODE
@@ -1380,7 +1380,7 @@ async def delete_episode_select_episode(update: Update, context: ContextTypes.DE
         return ConversationHandler.END
     sorted_eps = sorted(episode_keys, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
     buttons = [InlineKeyboardButton(f"Episode {ep}", callback_data=f"del_ep_num_{ep}") for ep in sorted_eps]
-    keyboard = build_grid_keyboard(buttons, 1) # NAYA: 1-column list
+    keyboard = build_grid_keyboard(buttons, 2) # NAYA: 1-column list -> 2-column grid
     keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="back_to_manage")])
     await query.edit_message_text(f"Aapne **Season {season_name}** select kiya hai.\n\nKaunsa **Episode** delete karna hai?", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
     return DE_GET_EPISODE
@@ -2598,7 +2598,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             
             sorted_eps = sorted(episode_keys, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
             buttons = [InlineKeyboardButton(f"Episode {ep}", callback_data=f"dl_{anime_name}__{season_name}__{ep}") for ep in sorted_eps]
-            keyboard = build_grid_keyboard(buttons, 1) # NAYA: 1-column list
+            keyboard = build_grid_keyboard(buttons, 2) # NAYA: 1-column list -> 2-column grid
             keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data=f"dl_{anime_name}")])
             
             msg = config.get("messages", {}).get("user_dl_select_episode", "Select episode")
