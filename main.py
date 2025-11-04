@@ -1,5 +1,5 @@
 # ============================================
-# ===       COMPLETE FINAL FIX (v3)        ===
+# ===       COMPLETE FINAL FIX (v4)        ===
 # ============================================
 import os
 import logging
@@ -120,7 +120,11 @@ async def get_config():
         "user_menu_greeting": "Salaam {first_name}! Ye raha aapka menu:",
         "user_donate_qr_error": "❌ Donation info abhi admin ne set nahi ki hai.",
         "user_donate_qr_text": "❤️ **Support Us!**\n\nAgar aapko hamara kaam pasand aata hai, toh aap humein support kar sakte hain.",
-        "donate_thanks": "❤️ Support karne ke liye shukriya!"
+        "donate_thanks": "❤️ Support karne ke liye shukriya!",
+        
+        # NAYA (v4): Post Generator Messages
+        "post_gen_season_caption": "✅ **{anime_name}**\n**[ S{season_name} ]**\n\n**📖 Synopsis:**\n{description}\n\nNeeche [Download] button dabake download karein!",
+        "post_gen_episode_caption": "✨ **Episode {ep_num} Added** ✨\n\n🎬 **Anime:** {anime_name}\n➡️ **Season:** {season_name}\n\nNeeche [Download] button dabake download karein!"
     }
 
     if not config:
@@ -275,8 +279,8 @@ async def delete_message_later(bot, chat_id: int, message_id: int, seconds: int)
 # NAYA: Custom Post States
 (CPOST_GET_CHAT, CPOST_GET_POSTER, CPOST_GET_CAPTION, CPOST_GET_BTN_TEXT, CPOST_GET_BTN_URL, CPOST_CONFIRM) = range(52, 58)
 
-# NAYA: Bot Messages States
-(M_MENU_MAIN, M_MENU_SUB, M_MENU_DL, M_MENU_GEN, M_GET_MSG) = range(58, 63)
+# NAYA: Bot Messages States (v4: Naya state add kiya)
+(M_MENU_MAIN, M_MENU_SUB, M_MENU_DL, M_MENU_GEN, M_MENU_POSTGEN, M_GET_MSG) = range(58, 64)
 
 
 # --- NAYA: Global Cancel Function (Request 9, 10, 1) ---
@@ -940,6 +944,8 @@ async def set_msg_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         back_cb = "msg_menu_sub"
     elif msg_key in ["user_dl_unsubscribed_alert", "user_dl_unsubscribed_dm", "user_dl_dm_alert", "user_dl_anime_not_found", "user_dl_file_error", "user_dl_blocked_error", "user_dl_episodes_not_found", "user_dl_seasons_not_found", "user_dl_general_error", "user_dl_sending_files", "user_dl_select_episode", "user_dl_select_season", "file_warning"]:
         back_cb = "msg_menu_dl"
+    elif msg_key in ["post_gen_season_caption", "post_gen_episode_caption"]: # NAYA (v4)
+        back_cb = "msg_menu_postgen" # NAYA (v4)
     else:
         back_cb = "msg_menu_gen"
         
@@ -1079,44 +1085,52 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         season_name = context.user_data.get('season_name')
         ep_num = context.user_data.get('ep_num') 
         anime_doc = animes_collection.find_one({"name": anime_name})
+        anime_description = anime_doc.get('description', '') # NAYA (v4)
         
-        # NAYA: Logic for Season Post vs Episode Post (Caption aur Poster)
+        # NAYA (v4): Logic for Season Post vs Episode Post (Caption aur Poster)
         if not ep_num and season_name:
             # --- YEH SEASON POST HAI ---
+            context.user_data['is_episode_post'] = False # NAYA (v4)
+            
             # Season poster check karo, nahi toh anime poster lo
             poster_id = anime_doc.get("seasons", {}).get(season_name, {}).get("_poster_id")
             if not poster_id:
                 poster_id = anime_doc['poster_id'] # Fallback
             
-            caption = f"✅ **{anime_name}**\n"
-            caption += f"**[ S{season_name} ]**\n\n"
-            if anime_doc.get('description'): caption += f"**📖 Synopsis:**\n{anime_doc['description']}\n\n"
-            caption += "Neeche [Download] button dabake download karein!"
+            # NAYA (v4): Use config message
+            caption_template = config.get("messages", {}).get("post_gen_season_caption", "✅ **{anime_name}**\n**[ S{season_name} ]**\n\n**📖 Synopsis:**\n{description}\n\nNeeche [Download] button dabake download karein!")
+            caption = caption_template.replace("{anime_name}", anime_name) \
+                                      .replace("{season_name}", season_name) \
+                                      .replace("{description}", anime_description if anime_description else "")
         
         elif ep_num:
              # --- YEH EPISODE POST HAI ---
-            caption = f"✨ **Episode {ep_num} Added** ✨\n\n🎬 **Anime:** {anime_name}\n➡️ **Season:** {season_name}\n\nNeeche [Download] button dabake download karein!"
-            poster_id = anime_doc['poster_id'] # Episode post hamesha main poster use karega
+            context.user_data['is_episode_post'] = True # NAYA (v4)
+            
+            # NAYA (v4): Use config message
+            caption_template = config.get("messages", {}).get("post_gen_episode_caption", "✨ **Episode {ep_num} Added** ✨\n\n🎬 **Anime:** {anime_name}\n➡️ **Season:** {season_name}\n\nNeeche [Download] button dabake download karein!")
+            caption = caption_template.replace("{anime_name}", anime_name) \
+                                      .replace("{season_name}", season_name) \
+                                      .replace("{ep_num}", ep_num)
+            
+            poster_id = None # NAYA (v4): Episode post ke liye koi poster nahi (User Request)
         
         else:
-            # --- YEH SIRF ANIME POST HAI (Fallback) ---
-            caption = f"✅ **{anime_name}**\n"
-            if anime_doc.get('description'): caption += f"**📖 Synopsis:**\n{anime_doc['description']}\n\n"
-            caption += "Neeche [Download] button dabake download karein!"
-            poster_id = anime_doc['poster_id']
-        
+            # Fallback (Should not happen)
+            logger.warning("Post generator me invalid state (na season, na episode)")
+            await query.edit_message_text("❌ Error! Invalid state. Please start over.")
+            return ConversationHandler.END
         
         links = config.get('links', {})
         
-        # NAYA: Logic for Download Button Callback (SEASON POST)
+        # NAYA: Logic for Download Button Callback
         ep_num_check = context.user_data.get('ep_num')
         season_name_check = context.user_data.get('season_name')
         
         if not ep_num_check and season_name_check: # This means it's a Season Post
             dl_callback_data = f"dl_{anime_name}__{season_name_check}"
-        else: # This is an Episode Post or general Anime Post
-            dl_callback_data = f"dl_{anime_name}"
-        # --- END NAYA LOGIC ---
+        else: # This is an Episode Post
+            dl_callback_data = f"dl_{anime_name}" # NAYA (v4): Episode post should point to anime
             
         donate_url = f"https://t.me/{bot_username}?start=donate" 
         subscribe_url = f"https://t.me/{bot_username}?start=subscribe"
@@ -1130,13 +1144,21 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         btn_download = InlineKeyboardButton("Download", callback_data=dl_callback_data) 
         btn_subscribe = InlineKeyboardButton("Subscribe Now", url=subscribe_url)
         
-        keyboard = [
-            [btn_subscribe, btn_download], 
-            [btn_backup, btn_donate, btn_support]
-        ]
+        # NAYA (v4): Keyboard logic for Req B
+        if context.user_data.get('is_episode_post', False):
+            # Episode post: Sirf Subscribe aur Download
+            keyboard = [
+                [btn_subscribe, btn_download]
+            ]
+        else:
+            # Season post: Poora keyboard
+            keyboard = [
+                [btn_subscribe, btn_download], 
+                [btn_backup, btn_donate, btn_support]
+            ]
         
         context.user_data['post_caption'] = caption
-        context.user_data['post_poster_id'] = poster_id
+        context.user_data['post_poster_id'] = poster_id # Yeh None hoga agar episode post hai
         context.user_data['post_keyboard'] = InlineKeyboardMarkup(keyboard)
         
         await query.edit_message_text(
@@ -1153,20 +1175,34 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
 
 async def post_gen_send_to_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.text
+    is_episode_post = context.user_data.get('is_episode_post', False) # NAYA (v4)
+    
     try:
-        await context.bot.send_photo(
-            chat_id=chat_id,
-            photo=context.user_data['post_poster_id'],
-            caption=context.user_data['post_caption'],
-            parse_mode='Markdown',
-            reply_markup=context.user_data['post_keyboard']
-        )
+        if is_episode_post:
+            # NAYA (v4): Sirf text message bhejo (User Request)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=context.user_data['post_caption'],
+                parse_mode='Markdown',
+                reply_markup=context.user_data['post_keyboard']
+            )
+        else:
+            # Purana behavior: Photo + Caption bhejo
+            await context.bot.send_photo(
+                chat_id=chat_id,
+                photo=context.user_data['post_poster_id'],
+                caption=context.user_data['post_caption'],
+                parse_mode='Markdown',
+                reply_markup=context.user_data['post_keyboard']
+            )
+
         await update.message.reply_text(f"✅ **Success!**\nPost ko '{chat_id}' par bhej diya gaya hai.")
     except Exception as e:
         logger.error(f"Post channel me bhejme me error: {e}")
         await update.message.reply_text(f"❌ **Error!**\nPost '{chat_id}' par nahi bhej paya. Check karo ki bot uss channel me admin hai ya ID sahi hai.\nError: {e}")
     context.user_data.clear()
     return ConversationHandler.END
+
 # --- Conversation: Delete Anime (NAYA: A-Z Index) ---
 async def delete_anime_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -2046,6 +2082,7 @@ async def bot_messages_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("💲 Subscription Messages", callback_data="msg_menu_sub")],
         [InlineKeyboardButton("📥 Download Flow Messages", callback_data="msg_menu_dl")],
+        [InlineKeyboardButton("✍️ Post Generator Messages", callback_data="msg_menu_postgen")], # NAYA (v4)
         [InlineKeyboardButton("⚙️ General Messages", callback_data="msg_menu_gen")],
         [InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]
     ]
@@ -2110,6 +2147,18 @@ async def bot_messages_menu_gen(update: Update, context: ContextTypes.DEFAULT_TY
     ]
     await query.edit_message_text("⚙️ **General Messages** ⚙️\n\nKaunsa message edit karna hai?", reply_markup=InlineKeyboardMarkup(keyboard))
     return M_MENU_GEN
+
+# NAYA (v4): PostGen Messages Menu
+async def bot_messages_menu_postgen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    keyboard = [
+        [InlineKeyboardButton("Edit Season Post Caption", callback_data="msg_edit_post_gen_season_caption")],
+        [InlineKeyboardButton("Edit Episode Post Caption", callback_data="msg_edit_post_gen_episode_caption")],
+        [InlineKeyboardButton("⬅️ Back", callback_data="admin_menu_messages")]
+    ]
+    await query.edit_message_text("✍️ **Post Generator Messages** ✍️\n\nKaunsa message edit karna hai?", reply_markup=InlineKeyboardMarkup(keyboard))
+    return M_MENU_POSTGEN
 
 # NAYA: Admin Settings Menu (Request 7)
 async def admin_settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2519,11 +2568,6 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             msg = config.get("messages", {}).get("user_dl_sending_files", "Sending...")
             msg = msg.replace("{anime_name}", anime_name).replace("{season_name}", season_name).replace("{ep_num}", ep_num)
             await query.edit_message_caption(caption=msg, parse_mode='Markdown')
-            # NAYA: Season poster get karo, agar nahi hai toh main anime poster use karo
-            season_data = anime_doc.get("seasons", {}).get(season_name, {})
-            season_poster_id = season_data.get("_poster_id")
-            main_anime_poster_id = anime_doc.get('poster_id')
-            poster_id_for_thumb = season_poster_id or main_anime_poster_id
 
             QUALITY_ORDER = ['480p', '720p', '1080p', '4K']
             available_qualities = qualities_dict.keys()
@@ -2550,8 +2594,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                         chat_id=user_id, 
                         video=file_id, 
                         caption=caption,
-                        parse_mode='Markdown',
-                        thumbnail=poster_id_for_thumb # YEH LINE ADD KARNI HAI
+                        parse_mode='Markdown'
                     )
                 except Exception as e:
                     logger.error(f"User {user_id} ko file bhejte waqt error: {e}")
@@ -2985,10 +3028,12 @@ def main():
             M_MENU_MAIN: [
                 CallbackQueryHandler(bot_messages_menu_sub, pattern="^msg_menu_sub$"),
                 CallbackQueryHandler(bot_messages_menu_dl, pattern="^msg_menu_dl$"),
+                CallbackQueryHandler(bot_messages_menu_postgen, pattern="^msg_menu_postgen$"), # NAYA (v4)
                 CallbackQueryHandler(bot_messages_menu_gen, pattern="^msg_menu_gen$"),
             ],
             M_MENU_SUB: [CallbackQueryHandler(set_msg_start, pattern="^msg_edit_")],
             M_MENU_DL: [CallbackQueryHandler(set_msg_start, pattern="^msg_edit_")],
+            M_MENU_POSTGEN: [CallbackQueryHandler(set_msg_start, pattern="^msg_edit_")], # NAYA (v4)
             M_MENU_GEN: [CallbackQueryHandler(set_msg_start, pattern="^msg_edit_")],
             M_GET_MSG: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_msg_save)],
         },
