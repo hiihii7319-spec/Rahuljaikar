@@ -2288,7 +2288,47 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                         ))
                     except Exception as e:
                         logger.error(f"asyncio.create_task schedule failed for user {user_id}: {e}")
-            return
+                        # --- Loop karke saari files bhejo ---
+            for quality in sorted_q_list:
+                file_id = qualities_dict.get(quality)
+                if not file_id: continue
+                
+                sent_message = None 
+                try:
+                    # ... (File bhejme ka poora code jaisa hai waisa hi rakho)
+                    # ...
+                except Exception as e:
+                    # ... (Error handling jaisa hai waisa hi rakho)
+                
+                if sent_message:
+                    try:
+                        asyncio.create_task(delete_message_later(
+                            bot=context.bot, 
+                            chat_id=user_id, 
+                            message_id=sent_message.message_id, 
+                            seconds=delete_time
+                        ))
+                    except Exception as e:
+                        logger.error(f"asyncio.create_task schedule failed for user {user_id}: {e}")
+            
+            # ============================================
+            # === YEH HAI FIX 1 (AUTO-DELETE POSTER) ===
+            # ============================================
+            # Ab "Sending files..." wale message ko bhi delete ke liye schedule karo
+            try:
+                asyncio.create_task(delete_message_later(
+                    bot=context.bot,
+                    chat_id=user_id,
+                    message_id=query.message.message_id, # Yeh woh message hai jise edit kiya tha
+                    seconds=delete_time 
+                ))
+            except Exception as e:
+                logger.error(f"Async 'Sending files...' message delete schedule failed: {e}")
+            # ============================================
+            # === END FIX 1 ===
+            # ============================================
+            
+            return # Yahaan se function return ho jaata hai
             
         # Case 2: Season click hua hai -> Episode Bhejo
         if season_name:
