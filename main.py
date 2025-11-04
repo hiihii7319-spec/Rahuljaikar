@@ -1012,7 +1012,7 @@ async def set_msg_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     await query.edit_message_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data=back_cb)]]))
     return M_GET_MSG
-    async def set_msg_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def set_msg_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Generic function to save edited message"""
     try:
         msg_text = update.message.text
