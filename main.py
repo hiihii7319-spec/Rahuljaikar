@@ -2498,6 +2498,8 @@ async def placeholder_button_handler(update: Update, context: ContextTypes.DEFAU
         
 # --- User Download Handler (CallbackQuery) ---
 # NAYA: YEH FUNCTION AB CHANNEL AUR DM DONO HANDLE KAREGA
+# --- User Download Handler (CallbackQuery) ---
+# NAYA: YEH FUNCTION AB CHANNEL AUR DM DONO HANDLE KAREGA
 async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Callback data 'dl_' se shuru hone wale sabhi buttons ko handle karega.
@@ -2561,25 +2563,33 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             qualities_dict = anime_doc.get("seasons", {}).get(season_name, {}).get(ep_num, {})
             if not qualities_dict:
                 msg = config.get("messages", {}).get("user_dl_episodes_not_found", "Error")
-                # NAYA (v5) FIX: Agar message text hai (episode post se aaya hai), toh edit nahi, reply karo
-                if query.message.photo:
-                    await query.edit_message_caption(msg)
+                
+                # NAYA (v6) FIX: DM me hi reply karo
+                if is_in_dm:
+                    if query.message.photo:
+                        await query.edit_message_caption(msg)
+                    else:
+                        await query.message.reply_text(msg) # Reply to the text message
                 else:
-                    await query.message.reply_text(msg) # Reply to the text message
+                    await context.bot.send_message(user_id, msg) # Channel click hai toh DM me error bhejo
                 return
             
             # Message edit karke user ko batao
             msg = config.get("messages", {}).get("user_dl_sending_files", "Sending...")
             msg = msg.replace("{anime_name}", anime_name).replace("{season_name}", season_name).replace("{ep_num}", ep_num)
             
-            # NAYA (v5) FIX: Agar message text hai (episode post se aaya hai), toh edit nahi, reply karo
-            if query.message.photo:
-                 await query.edit_message_caption(caption=msg, parse_mode='Markdown')
-                 msg_to_delete_id = query.message.message_id # Poster message ko delete karo
-            else:
-                # Episode post (text) se click hua hai, naya message bhejo
-                sent_msg = await query.message.reply_text(msg, parse_mode='Markdown')
-                msg_to_delete_id = sent_msg.message_id # Is naye message ko delete karo
+            msg_to_delete_id = None # NAYA (v6)
+
+            # NAYA (v6) FIX: Sirf DM me hi "Sending files..." message bhejo/edit karo
+            if is_in_dm:
+                if query.message.photo:
+                     await query.edit_message_caption(caption=msg, parse_mode='Markdown')
+                     msg_to_delete_id = query.message.message_id # Poster message ko delete karo
+                else:
+                    # Episode post (text) se click hua hai, naya message bhejo
+                    sent_msg = await query.message.reply_text(msg, parse_mode='Markdown')
+                    msg_to_delete_id = sent_msg.message_id # Is naye message ko delete karo
+            # Agar channel me click hua hai, toh kuch mat karo, seedha files bhejo
 
             QUALITY_ORDER = ['480p', '720p', '1080p', '4K']
             available_qualities = qualities_dict.keys()
@@ -2592,8 +2602,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             warning_template = config.get("messages", {}).get("file_warning", "Warning")
             warning_msg = warning_template.replace('{minutes}', str(delete_minutes))
             
-            # === BUG FIX: YAHAN SE DUPLICATE LOOP HATAYA ===
-            # Loop karke saari files bhejo
+            # Loop karke saari files bhejo (Yeh hamesha DM me jaayengi - user_id)
             for quality in sorted_q_list:
                 file_id = qualities_dict.get(quality)
                 if not file_id: continue
@@ -2603,7 +2612,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                     caption = f"🎬 **{anime_name}**\nS{season_name} - E{ep_num} ({quality})\n\n{warning_msg}"
                     
                     sent_message = await context.bot.send_video(
-                        chat_id=user_id, 
+                        chat_id=user_id, # Hamesha DM me bhejega
                         video=file_id, 
                         caption=caption,
                         parse_mode='Markdown'
@@ -2613,7 +2622,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                     error_msg_key = "user_dl_blocked_error" if "blocked" in str(e) else "user_dl_file_error"
                     msg = config.get("messages", {}).get(error_msg_key, "Error")
                     msg = msg.replace("{quality}", quality)
-                    await context.bot.send_message(user_id, msg)
+                    await context.bot.send_message(user_id, msg) # Error DM me bhejega
                 
                 if sent_message:
                     try:
@@ -2626,22 +2635,18 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                     except Exception as e:
                         logger.error(f"asyncio.create_task schedule failed for user {user_id}: {e}")
             
-            # ============================================
-            # === YEH HAI FIX 1 (AUTO-DELETE POSTER) ===
-            # ============================================
             # Ab "Sending files..." wale message ko bhi delete ke liye schedule karo
-            try:
-                asyncio.create_task(delete_message_later(
-                    bot=context.bot,
-                    chat_id=user_id,
-                    message_id=msg_to_delete_id, # Yeh woh message hai jise edit/reply kiya tha
-                    seconds=delete_time 
-                ))
-            except Exception as e:
-                logger.error(f"Async 'Sending files...' message delete schedule failed: {e}")
-            # ============================================
-            # === END FIX 1 ===
-            # ============================================
+            # NAYA (v6) FIX: Sirf tabhi delete karo agar woh message DM me bana tha
+            if msg_to_delete_id:
+                try:
+                    asyncio.create_task(delete_message_later(
+                        bot=context.bot,
+                        chat_id=user_id,
+                        message_id=msg_to_delete_id, # Yeh woh message hai jise edit/reply kiya tha
+                        seconds=delete_time 
+                    ))
+                except Exception as e:
+                    logger.error(f"Async 'Sending files...' message delete schedule failed: {e}")
             
             return # Yahaan se function return ho jaata hai
             
@@ -2654,11 +2659,14 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             
             if not episode_keys:
                 msg = config.get("messages", {}).get("user_dl_episodes_not_found", "Error")
-                # NAYA (v5) FIX
-                if query.message.photo:
-                    await query.edit_message_caption(msg)
+                # NAYA (v6) FIX
+                if is_in_dm:
+                    if query.message.photo:
+                        await query.edit_message_caption(msg)
+                    else:
+                        await query.message.reply_text(msg)
                 else:
-                    await query.message.reply_text(msg)
+                    await context.bot.send_message(user_id, msg)
                 return
             
             sorted_eps = sorted(episode_keys, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
@@ -2675,7 +2683,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             
             if not is_in_dm:
                 await context.bot.send_photo(
-                    chat_id=user_id,
+                    chat_id=user_id, # Yeh correct hai (DM me bhejega)
                     photo=poster_to_use, 
                     caption=msg,
                     reply_markup=InlineKeyboardMarkup(keyboard),
@@ -2725,7 +2733,8 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                     await query.edit_message_caption(msg)
                 else:
                     await query.edit_message_text(msg)
-            else: await context.bot.send_message(user_id, msg)
+            else: 
+                await context.bot.send_message(user_id, msg) # NAYA (v6) FIX
             return
         
         sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
@@ -2738,7 +2747,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
 
         if not is_in_dm:
             await context.bot.send_photo(
-                chat_id=user_id,
+                chat_id=user_id, # Yeh correct hai (DM me bhejega)
                 photo=anime_doc['poster_id'], # Case 1 hamesha main anime poster bhejega
                 caption=msg,
                 reply_markup=InlineKeyboardMarkup(keyboard),
