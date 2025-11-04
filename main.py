@@ -1172,7 +1172,6 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         await query.edit_message_text("❌ **Error!** Post generate nahi ho paya. Logs check karein.")
         context.user_data.clear()
         return ConversationHandler.END
-
 async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     try:
