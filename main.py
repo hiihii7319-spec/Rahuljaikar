@@ -2489,8 +2489,6 @@ async def admin_list_subs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Re-show admin menu
     await admin_command(update, context, from_callback=True)
-
-
 async def placeholder_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if query.data == "user_check_sub":
@@ -2563,7 +2561,11 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             qualities_dict = anime_doc.get("seasons", {}).get(season_name, {}).get(ep_num, {})
             if not qualities_dict:
                 msg = config.get("messages", {}).get("user_dl_episodes_not_found", "Error")
-                await query.edit_message_caption(msg)
+                # NAYA (v5) FIX: Agar message text hai (episode post se aaya hai), toh edit nahi, reply karo
+                if query.message.photo:
+                    await query.edit_message_caption(msg)
+                else:
+                    await query.message.reply_text(msg) # Reply to the text message
                 return
             
             # Message edit karke user ko batao
@@ -2652,7 +2654,11 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             
             if not episode_keys:
                 msg = config.get("messages", {}).get("user_dl_episodes_not_found", "Error")
-                await query.edit_message_caption(msg)
+                # NAYA (v5) FIX
+                if query.message.photo:
+                    await query.edit_message_caption(msg)
+                else:
+                    await query.message.reply_text(msg)
                 return
             
             sorted_eps = sorted(episode_keys, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
@@ -2825,7 +2831,7 @@ def run_async_bot_tasks(loop, app):
         webhook_path_url = f"{WEBHOOK_URL}/{BOT_TOKEN}"
         logger.info(f"Webhook ko {webhook_path_url} par set kar raha hai...")
         # Normal (sync) httpx request ka istemaal karo
-        httpx.get(f"httpsa://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_path_url}")
+        httpx.get(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_path_url}")
         logger.info("Webhook successfully set!")
 
         # Bot ko start karo
@@ -3144,18 +3150,6 @@ def main():
     # User Download Flow (Non-conversation)
     bot_app.add_handler(CallbackQueryHandler(download_button_handler, pattern="^dl_"))
 
-SERVICE_CHARGE = 12.5
-
-def calculate_total_price(base_price, tax_rate):
-    """Calculates the total price including tax and service charge."""
-    tax = base_price * tax_rate
-    total = base_price + tax + SERVICE_CHARGE
-    return total
-
-# Example usage:
-price_before_tax = 100
-final_price = calculate_total_price(price_before_tax, 0.05)
-print(f"The final price is: {final_price}")
     # Placeholders
     bot_app.add_handler(CallbackQueryHandler(placeholder_button_handler, pattern="^user_check_sub$"))
 
