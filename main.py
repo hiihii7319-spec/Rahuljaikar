@@ -2868,7 +2868,7 @@ def main():
         fallbacks=global_fallbacks + admin_menu_fallback,
         allow_reentry=True
     )
-   sub_conv = ConversationHandler(
+sub_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(user_upload_ss_start, pattern="^user_upload_ss$")],
         states={
             SUB_GET_SCREENSHOT: [MessageHandler(filters.PHOTO, user_get_screenshot)],
@@ -2896,7 +2896,7 @@ def main():
     bot_app.add_handler(set_links_conv)
     bot_app.add_handler(post_gen_conv)
     bot_app.add_handler(del_anime_conv)
-  s   bot_app.add_handler(del_season_conv)
+    bot_app.add_handler(del_season_conv)
     bot_app.add_handler(del_episode_conv)
     bot_app.add_handler(change_poster_conv) # NAYA
     bot_app.add_handler(remove_sub_conv)
@@ -2920,19 +2920,19 @@ def main():
     bot_app.add_handler(CallbackQueryHandler(sub_settings_menu, pattern="^admin_menu_sub_settings$"))
     bot_app.add_handler(CallbackQueryHandler(donate_settings_menu, pattern="^admin_menu_donate_settings$"))
     bot_app.add_handler(CallbackQueryHandler(other_links_menu, pattern="^admin_menu_other_links$"))
-s   bot_app.add_handler(CallbackQueryHandler(admin_list_subs, pattern="^admin_list_subs$"))
+    bot_app.add_handler(CallbackQueryHandler(admin_list_subs, pattern="^admin_list_subs$"))
     bot_app.add_handler(CallbackQueryHandler(admin_settings_menu, pattern="^admin_menu_admin_settings$")) # NAYA
-s   bot_app.add_handler(CallbackQueryHandler(co_admin_list, pattern="^admin_list_co_admin$")) # NAYA
+    bot_app.add_handler(CallbackQueryHandler(co_admin_list, pattern="^admin_list_co_admin$")) # NAYA
 
     # User menu navigation (non-conversation)
     bot_app.add_handler(CallbackQueryHandler(user_subscribe_start, pattern="^user_subscribe$"))
-    bot_app.add_handler(CallbackQueryHandler(user_show_donate_menu, pattern="^user_show_donate_menu$"))
+.   bot_app.add_handler(CallbackQueryHandler(user_show_donate_menu, pattern="^user_show_donate_menu$"))
     bot_app.add_handler(CallbackQueryHandler(back_to_user_menu, pattern="^user_back_menu$"))
 
     # Admin log channel actions (non-conversation)
     bot_app.add_handler(CallbackQueryHandler(admin_reject_user, pattern="^admin_reject_"))
 
-s   # User Download Flow (Non-conversation)
+    # User Download Flow (Non-conversation)
     bot_app.add_handler(CallbackQueryHandler(download_button_handler, pattern="^dl_"))
 
     # Placeholders
@@ -2949,7 +2949,7 @@ s   # User Download Flow (Non-conversation)
     bot_thread = threading.Thread(
         target=run_async_bot_tasks,
         args=(bot_event_loop, bot_app), # 'bot_app' pass karein
-        daemon=True
+V       daemon=True
     )
     bot_thread.start()
     
