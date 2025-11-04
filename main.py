@@ -2868,94 +2868,94 @@ def main():
         fallbacks=global_fallbacks + admin_menu_fallback,
         allow_reentry=True
     )
-sub_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(user_upload_ss_start, pattern="^user_upload_ss$")],
-        states={
-            SUB_GET_SCREENSHOT: [MessageHandler(filters.PHOTO, user_get_screenshot)],
-        },
-        fallbacks=global_fallbacks + user_menu_fallback,
-        allow_reentry=True
-    )
-    
-    admin_approve_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(admin_approve_start, pattern="^admin_approve_")],
-        states={
-            ADMIN_GET_DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_get_days_save)],
-        },
-        fallbacks=global_fallbacks, # Yeh log channel me hai, menu fallback nahi chahiye
-        allow_reentry=True
-    )
-    
-    # --- Saare handlers ko bot_app me add karo ---
-    bot_app.add_handler(add_anime_conv)
-    bot_app.add_handler(add_season_conv)
-    bot_app.add_handler(add_episode_conv)
-    bot_app.add_handler(set_sub_qr_conv)
-    bot_app.add_handler(set_price_conv)
-    bot_app.add_handler(set_donate_qr_conv)
-    bot_app.add_handler(set_links_conv)
-    bot_app.add_handler(post_gen_conv)
-    bot_app.add_handler(del_anime_conv)
-    bot_app.add_handler(del_season_conv)
-    bot_app.add_handler(del_episode_conv)
-    bot_app.add_handler(change_poster_conv) # NAYA
-    bot_app.add_handler(remove_sub_conv)
-    bot_app.add_handler(add_co_admin_conv) # NAYA
-    bot_app.add_handler(remove_co_admin_conv) # NAYA
-    bot_app.add_handler(custom_post_conv) # NAYA
-    bot_app.add_handler(set_days_conv)
-    bot_app.add_handler(set_delete_time_conv) # NAYA
-    bot_app.add_handler(set_messages_conv) # NAYA
-    bot_app.add_handler(sub_conv)
-    bot_app.add_handler(admin_approve_conv)
+     sub_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(user_upload_ss_start, pattern="^user_upload_ss$")],
+        states={
+            SUB_GET_SCREENSHOT: [MessageHandler(filters.PHOTO, user_get_screenshot)],
+        },
+        fallbacks=global_fallbacks + user_menu_fallback,
+        allow_reentry=True
+    )
+    
+    admin_approve_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(admin_approve_start, pattern="^admin_approve_")],
+        states={
+            ADMIN_GET_DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_get_days_save)],
+        },
+        fallbacks=global_fallbacks, # Yeh log channel me hai, menu fallback nahi chahiye
+        allow_reentry=True
+    )
+    
+    # --- Saare handlers ko bot_app me add karo ---
+    bot_app.add_handler(add_anime_conv)
+    bot_app.add_handler(add_season_conv)
+    bot_app.add_handler(add_episode_conv)
+    bot_app.add_handler(set_sub_qr_conv)
+    bot_app.add_handler(set_price_conv)
+    bot_app.add_handler(set_donate_qr_conv)
+    bot_app.add_handler(set_links_conv)
+    bot_app.add_handler(post_gen_conv)
+    bot_app.add_handler(del_anime_conv)
+    bot_app.add_handler(del_season_conv)
+    bot_app.add_handler(del_episode_conv)
+    bot_app.add_handler(change_poster_conv) # NAYA
+    bot_app.add_handler(remove_sub_conv)
+    bot_app.add_handler(add_co_admin_conv) # NAYA
+    bot_app.add_handler(remove_co_admin_conv) # NAYA
+    bot_app.add_handler(custom_post_conv) # NAYA
+    bot_app.add_handler(set_days_conv)
+    bot_app.add_handler(set_delete_time_conv) # NAYA
+    bot_app.add_handler(set_messages_conv) # NAYA
+    bot_app.add_handler(sub_conv)
+    bot_app.add_handler(admin_approve_conv)
 
-    # Standard commands
-    bot_app.add_handler(CommandHandler("start", start_command))
-    bot_app.add_handler(CommandHandler("menu", menu_command))
-    bot_app.add_handler(CommandHandler("admin", admin_command))
+    # Standard commands
+    bot_app.add_handler(CommandHandler("start", start_command))
+    bot_app.add_handler(CommandHandler("menu", menu_command))
+    bot_app.add_handler(CommandHandler("admin", admin_command))
 
-    # Admin menu navigation (non-conversation)
-    bot_app.add_handler(CallbackQueryHandler(add_content_menu, pattern="^admin_menu_add_content$"))
-    bot_app.add_handler(CallbackQueryHandler(manage_content_menu, pattern="^admin_menu_manage_content$"))
-    bot_app.add_handler(CallbackQueryHandler(sub_settings_menu, pattern="^admin_menu_sub_settings$"))
-    bot_app.add_handler(CallbackQueryHandler(donate_settings_menu, pattern="^admin_menu_donate_settings$"))
-    bot_app.add_handler(CallbackQueryHandler(other_links_menu, pattern="^admin_menu_other_links$"))
-    bot_app.add_handler(CallbackQueryHandler(admin_list_subs, pattern="^admin_list_subs$"))
-    bot_app.add_handler(CallbackQueryHandler(admin_settings_menu, pattern="^admin_menu_admin_settings$")) # NAYA
-    bot_app.add_handler(CallbackQueryHandler(co_admin_list, pattern="^admin_list_co_admin$")) # NAYA
+    # Admin menu navigation (non-conversation)
+    bot_app.add_handler(CallbackQueryHandler(add_content_menu, pattern="^admin_menu_add_content$"))
+    bot_app.add_handler(CallbackQueryHandler(manage_content_menu, pattern="^admin_menu_manage_content$"))
+    bot_app.add_handler(CallbackQueryHandler(sub_settings_menu, pattern="^admin_menu_sub_settings$"))
+    bot_app.add_handler(CallbackQueryHandler(donate_settings_menu, pattern="^admin_menu_donate_settings$"))
+    bot_app.add_handler(CallbackQueryHandler(other_links_menu, pattern="^admin_menu_other_links$"))
+    bot_app.add_handler(CallbackQueryHandler(admin_list_subs, pattern="^admin_list_subs$"))
+    bot_app.add_handler(CallbackQueryHandler(admin_settings_menu, pattern="^admin_menu_admin_settings$")) # NAYA
+    bot_app.add_handler(CallbackQueryHandler(co_admin_list, pattern="^admin_list_co_admin$")) # NAYA
 
-    # User menu navigation (non-conversation)
-    bot_app.add_handler(CallbackQueryHandler(user_subscribe_start, pattern="^user_subscribe$"))
-.   bot_app.add_handler(CallbackQueryHandler(user_show_donate_menu, pattern="^user_show_donate_menu$"))
-    bot_app.add_handler(CallbackQueryHandler(back_to_user_menu, pattern="^user_back_menu$"))
+    # User menu navigation (non-conversation)
+    bot_app.add_handler(CallbackQueryHandler(user_subscribe_start, pattern="^user_subscribe$"))
+    bot_app.add_handler(CallbackQueryHandler(user_show_donate_menu, pattern="^user_show_donate_menu$"))
+    bot_app.add_handler(CallbackQueryHandler(back_to_user_menu, pattern="^user_back_menu$"))
 
-    # Admin log channel actions (non-conversation)
-    bot_app.add_handler(CallbackQueryHandler(admin_reject_user, pattern="^admin_reject_"))
+    # Admin log channel actions (non-conversation)
+    bot_app.add_handler(CallbackQueryHandler(admin_reject_user, pattern="^admin_reject_"))
 
-    # User Download Flow (Non-conversation)
-    bot_app.add_handler(CallbackQueryHandler(download_button_handler, pattern="^dl_"))
+    # User Download Flow (Non-conversation)
+    bot_app.add_handler(CallbackQueryHandler(download_button_handler, pattern="^dl_"))
 
-    # Placeholders
-    bot_app.add_handler(CallbackQueryHandler(placeholder_button_handler, pattern="^user_check_sub$"))
+    # Placeholders
+    bot_app.add_handler(CallbackQueryHandler(placeholder_button_handler, pattern="^user_check_sub$"))
 
-    # Error handler
-    bot_app.add_error_handler(error_handler)
-    
-    # --- NAYA: Threading setup ---
-    # 1. Bot ke liye naya event loop banayein
-    bot_event_loop = asyncio.new_event_loop()
-    
-    # 2. Bot ko naye thread mein start karein
-    bot_thread = threading.Thread(
-        target=run_async_bot_tasks,
-        args=(bot_event_loop, bot_app), # 'bot_app' pass karein
-V       daemon=True
-    )
-    bot_thread.start()
-    
-    # 3. Main thread mein Flask/Waitress server start karein
-    logger.info(f"Main thread mein Waitress server ko 0.0.0.0:{PORT} par start kar raha hai...")
-    serve(app, host='0.0.0.0', port=PORT)
+    # Error handler
+    bot_app.add_error_handler(error_handler)
+    
+    # --- NAYA: Threading setup ---
+    # 1. Bot ke liye naya event loop banayein
+    bot_event_loop = asyncio.new_event_loop()
+    
+    # 2. Bot ko naye thread mein start karein
+    bot_thread = threading.Thread(
+        target=run_async_bot_tasks,
+        args=(bot_event_loop, bot_app), # 'bot_app' pass karein
+        daemon=True
+    )
+    bot_thread.start()
+    
+    # 3. Main thread mein Flask/Waitress server start karein
+    logger.info(f"Main thread mein Waitress server ko 0.0.0.0:{PORT} par start kar raha hai...")
+    serve(app, host='0.0.0.0', port=PORT)
 
 if __name__ == "__main__":
-    main()
+    main()
