@@ -3557,7 +3557,7 @@ def main():
     
     # 3. Main thread mein Flask/Waitress server start karein
     logger.info(f"Main thread mein Waitress server ko 0.0.0.0:{PORT} par start kar raha hai...")
-     serve(app, host='0.0.0.0', port=PORT)
+serve(app, host='0.0.0.0', port=PORT)
 
 if __name__ == "__main__":
     main()
