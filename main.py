@@ -2868,7 +2868,7 @@ def main():
         fallbacks=global_fallbacks + admin_menu_fallback,
         allow_reentry=True
     )
-sub_conv = ConversationHandler(
+    sub_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(user_upload_ss_start, pattern="^user_upload_ss$")],
         states={
             SUB_GET_SCREENSHOT: [MessageHandler(filters.PHOTO, user_get_screenshot)],
@@ -2876,23 +2876,8 @@ sub_conv = ConversationHandler(
         fallbacks=global_fallbacks + user_menu_fallback,
         allow_reentry=True
     )
-sub_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(user_upload_ss_start, pattern="^user_upload_ss$")],
-        states={
-            SUB_GET_SCREENSHOT: [MessageHandler(filters.PHOTO, user_get_screenshot)],
-        },
-        fallbacks=global_fallbacks + user_menu_fallback,
-        allow_reentry=True
-    )
-sub_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(user_upload_ss_start, pattern="^user_upload_ss$")],
-        states={
-            SUB_GET_SCREENSHOT: [MessageHandler(filters.PHOTO, user_get_screenshot)],
-        },
-        fallbacks=global_fallbacks + user_menu_fallback,
-        allow_reentry=True
-    )
-admin_approve_conv = ConversationHandler(
+    
+    admin_approve_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_approve_start, pattern="^admin_approve_")],
         states={
             ADMIN_GET_DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_get_days_save)],
