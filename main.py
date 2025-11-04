@@ -1012,6 +1012,7 @@ async def set_msg_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     await query.edit_message_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data=back_cb)]]))
     return M_GET_MSG
+
 async def set_msg_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Generic function to save edited message"""
     try:
@@ -1597,7 +1598,7 @@ async def update_photo_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-# --- NAYA (v9): Conversation: Generate Link (URL Feature) ---
+# --- NAYA (v6): Conversation: Generate Link (Paginated) ---
 async def generate_link_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -1661,7 +1662,7 @@ async def generate_link_select_episode(update: Update, context: ContextTypes.DEF
     query = update.callback_query
     await query.answer()
     season_name = query.data.replace("genlink_season_", "")
-    context.user_data['season_name'] = season_name # Yeh 'WHOLE_SEASON' ya 'S1' etc. ho sakta hai
+    context.user_data['season_name'] = season_name
     anime_name = context.user_data['anime_name']
     
     # Handle "Link Whole Season"
@@ -1683,7 +1684,7 @@ async def generate_link_select_episode(update: Update, context: ContextTypes.DEF
         await query.edit_message_text(f"Aap **{anime_name}** ka kaunsa **Season** link karna chahte hain?", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
         return GL_GET_EPISODE # Go to final step
 
-    # Handle "Select specific episode" (season_name will be 'S1' etc.)
+    # Handle "Select specific episode"
     anime_doc = animes_collection.find_one({"name": anime_name})
     episodes = anime_doc.get("seasons", {}).get(season_name, {})
     
@@ -1707,42 +1708,44 @@ async def generate_link_final_link(update: Update, context: ContextTypes.DEFAULT
     query = update.callback_query
     await query.answer("Generating link...")
     
-    ep_num = query.data.replace("genlink_ep_", "") # Yeh '1' ya 'S__1' ho sakta hai
+    ep_num = query.data.replace("genlink_ep_", "")
     anime_name = context.user_data['anime_name']
+    season_name = context.user_data['season_name']
     
     bot_username = (await context.bot.get_me()).username
     config = await get_config()
+    
+    # NAYA (v9) - Link generate karo
     
     # Check if this is a "Link Season" request
     if ep_num.startswith("S__"):
         season_name_for_link = ep_num.replace("S__", "")
         # This is a Season Link
-        dl_payload = f"dl_{anime_name}__{season_name_for_link}"
+        dl_callback_data = f"dl_{anime_name}__{season_name_for_link}"
         caption_template = config.get("messages", {}).get("gen_link_caption_season", "...")
-        download_url = f"https://t.me/{bot_username}?start={dl_payload}"
+        download_url = f"https://t.me/{bot_username}?start={dl_callback_data}"
         
         caption = caption_template.replace("{anime_name}", anime_name) \
                                     .replace("{season_name}", season_name_for_link) \
                                     .replace("{download_url}", download_url)
-
+        
     else:
         # This is an Episode Link
-        season_name = context.user_data['season_name'] # 'S1' etc.
-        dl_payload = f"dl_{anime_name}__{season_name}__{ep_num}"
+        dl_callback_data = f"dl_{anime_name}__{season_name}__{ep_num}"
         caption_template = config.get("messages", {}).get("gen_link_caption_ep", "...")
-        download_url = f"https://t.me/{bot_username}?start={dl_payload}"
-        
+        download_url = f"https://t.me/{bot_username}?start={dl_callback_data}"
+
         caption = caption_template.replace("{anime_name}", anime_name) \
                                     .replace("{season_name}", season_name) \
                                     .replace("{ep_num}", ep_num) \
                                     .replace("{download_url}", download_url)
+
     
-    # Admin ko text message (link ke saath) bhejo
+    # Bot ab photo nahi, seedha text message (link ke saath) bhejega
     await context.bot.send_message(
         chat_id=query.from_user.id,
         text=caption,
-        parse_mode='Markdown',
-        disable_web_page_preview=True
+        parse_mode='Markdown'
     )
     
     await query.message.delete() # Delete the menu
@@ -2516,6 +2519,7 @@ async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TY
             self.message_id = message_id or 12345
             self.photo = None # Force it to send a new message
             self.text = "Deep link request"
+            self.caption = None
 
     class DummyCallbackQuery:
         def __init__(self, user, data):
@@ -2574,7 +2578,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif payload == "subscribe": 
             await handle_deep_link_subscribe(user, context)
             return
-        elif payload.startswith("dl_"): # NAYA (v6): Download deep link
+        elif payload.startswith("dl_"): # NAYA (v9): Download deep link
             await handle_deep_link_download(user, context, payload)
             return
     
@@ -2659,8 +2663,8 @@ async def user_show_donate_menu(update: Update, context: ContextTypes.DEFAULT_TY
         
         # NAYA (v6) FIX: Purana menu message delete karo
         if not query.message.photo:
-             await query.message.delete()
-             
+              await query.message.delete()
+              
         await context.bot.send_photo(
             chat_id=query.from_user.id,
             photo=qr_id,
@@ -2823,7 +2827,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
     config = await get_config() 
     
     # NAYA (v9): Dummy object check
-    is_deep_link = not hasattr(query.message, 'chat')
+    is_deep_link = not (hasattr(query, 'message') and hasattr(query.message, 'chat'))
     
     try:
         # Step 1: Check Subscription
@@ -2913,7 +2917,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                     sent_msg = await query.message.reply_text(msg, parse_mode='Markdown')
                     msg_to_delete_id = sent_msg.message_id 
             else:
-                 # NAYA (v6): Deep link/Channel click ke liye naya message
+                 # NAYA (v9): Deep link/Channel click ke liye naya message
                  sent_msg = await context.bot.send_message(user_id, msg, parse_mode='Markdown')
                  msg_to_delete_id = sent_msg.message_id
             
@@ -3535,6 +3539,7 @@ def main():
 
     # Placeholders
     bot_app.add_handler(CallbackQueryHandler(placeholder_button_handler, pattern="^user_check_sub$"))
+
     # Error handler
     bot_app.add_error_handler(error_handler)
     
