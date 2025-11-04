@@ -2519,6 +2519,11 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             msg = config.get("messages", {}).get("user_dl_sending_files", "Sending...")
             msg = msg.replace("{anime_name}", anime_name).replace("{season_name}", season_name).replace("{ep_num}", ep_num)
             await query.edit_message_caption(caption=msg, parse_mode='Markdown')
+            # NAYA: Season poster get karo, agar nahi hai toh main anime poster use karo
+            season_data = anime_doc.get("seasons", {}).get(season_name, {})
+            season_poster_id = season_data.get("_poster_id")
+            main_anime_poster_id = anime_doc.get('poster_id')
+            poster_id_for_thumb = season_poster_id or main_anime_poster_id
 
             QUALITY_ORDER = ['480p', '720p', '1080p', '4K']
             available_qualities = qualities_dict.keys()
@@ -2545,7 +2550,8 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                         chat_id=user_id, 
                         video=file_id, 
                         caption=caption,
-                        parse_mode='Markdown'
+                        parse_mode='Markdown',
+                        thumbnail=poster_id_for_thumb # YEH LINE ADD KARNI HAI
                     )
                 except Exception as e:
                     logger.error(f"User {user_id} ko file bhejte waqt error: {e}")
