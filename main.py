@@ -1,9 +1,8 @@
 # ============================================
-# ===       COMPLETE FINAL FIX (v7)        ===
+# ===       COMPLETE FINAL FIX (v8)        ===
 # ============================================
-# ===       (2x2 Grid Layout)            ===
-# ===       (Pagination Bug Fix)         ===
-# ===       (Back Button Bug Fix)        ===
+# ===       (Pagination Back Button Fix)   ===
+# ===       (All Converations Fixed)       ===
 # ============================================
 import os
 import logging
@@ -223,9 +222,6 @@ def build_grid_keyboard(buttons, items_per_row=2):
     if row: # Bachi hui buttons ko add karo
         keyboard.append(row)
     return keyboard
-
-# NAYA (v6): A-Z Index Keyboard (REMOVED)
-# def build_az_keyboard(purpose: str): ... (Hata diya gaya)
 
 # NAYA (v6): Pagination Helper
 async def build_paginated_keyboard(
@@ -566,7 +562,7 @@ async def add_season_show_anime_list(update: Update, context: ContextTypes.DEFAU
         back_callback="back_to_add_content"
     )
     
-    text = "Aap kis anime mein season add karna chahte hain?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
+    text = f"Aap kis anime mein season add karna chahte hain?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
     
     if not animes and page == 0:
         text = "❌ Error: Abhi koi anime add nahi hua hai. Pehle 'Add Anime' se add karein."
@@ -695,7 +691,7 @@ async def add_episode_show_anime_list(update: Update, context: ContextTypes.DEFA
         back_callback="back_to_add_content"
     )
     
-    text = "Aap kis anime mein episode add karna chahte hain?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
+    text = f"Aap kis anime mein episode add karna chahte hain?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
     
     if not animes and page == 0:
         text = "❌ Error: Abhi koi anime add nahi hua hai. Pehle 'Add Anime' se add karein."
@@ -737,8 +733,6 @@ async def get_season_for_episode(update: Update, context: ContextTypes.DEFAULT_T
     await query.edit_message_text(f"Aapne **Season {season_name}** select kiya hai.\n\nAb **Episode Number** bhejo.\n(Jaise: 1, 2, 3...)\n\n(Agar yeh ek movie hai, toh `1` type karein.)\n\n/cancel - Cancel.")
     
     # NAYA (v7) FIX: State change
-    # Abhi hum E_GET_SEASON me hain, lekin hum text input (number) ka wait kar rahe hain
-    # Isliye return E_GET_NUMBER karna zaroori hai
     return E_GET_NUMBER
 
 async def _save_episode_file_helper(update: Update, context: ContextTypes.DEFAULT_TYPE, quality: str):
@@ -1077,7 +1071,7 @@ async def post_gen_show_anime_list(update: Update, context: ContextTypes.DEFAULT
         back_callback="admin_post_gen" # Back to Post Gen Menu
     )
     
-    text = "Kaunsa **Anime** select karna hai?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
+    text = f"Kaunsa **Anime** select karna hai?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
     
     if not animes and page == 0:
         text = "❌ Error: Abhi koi anime add nahi hua hai."
@@ -1287,7 +1281,7 @@ async def delete_anime_show_anime_list(update: Update, context: ContextTypes.DEF
         back_callback="back_to_manage"
     )
     
-    text = "Kaunsa **Anime** delete karna hai?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
+    text = f"Kaunsa **Anime** delete karna hai?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
     
     if not animes and page == 0:
         text = "❌ Error: Abhi koi anime add nahi hua hai."
@@ -1342,7 +1336,7 @@ async def delete_season_show_anime_list(update: Update, context: ContextTypes.DE
         back_callback="back_to_manage"
     )
     
-    text = "Kaunse **Anime** ka season delete karna hai?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
+    text = f"Kaunse **Anime** ka season delete karna hai?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
     
     if not animes and page == 0:
         text = "❌ Error: Abhi koi anime add nahi hua hai."
@@ -1419,7 +1413,7 @@ async def delete_episode_show_anime_list(update: Update, context: ContextTypes.D
         back_callback="back_to_manage"
     )
     
-    text = "Kaunse **Anime** ka episode delete karna hai?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
+    text = f"Kaunse **Anime** ka episode delete karna hai?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
     
     if not animes and page == 0:
         text = "❌ Error: Abhi koi anime add nahi hua hai."
@@ -1522,7 +1516,7 @@ async def update_photo_show_anime_list(update: Update, context: ContextTypes.DEF
         back_callback="admin_menu" # Back to main admin menu
     )
     
-    text = "Kaunse **Anime** ka poster update karna hai?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
+    text = f"Kaunse **Anime** ka poster update karna hai?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
     
     if not animes and page == 0:
         text = "❌ Error: Abhi koi anime add nahi hua hai."
@@ -1629,7 +1623,7 @@ async def generate_link_show_anime_list(update: Update, context: ContextTypes.DE
         back_callback="admin_menu" # Back to main admin menu
     )
     
-    text = "Kaunse **Anime** ka link generate karna hai?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
+    text = f"Kaunse **Anime** ka link generate karna hai?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
     
     if not animes and page == 0:
         text = "❌ Error: Abhi koi anime add nahi hua hai."
@@ -2551,8 +2545,8 @@ async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TY
             
     class DummyUpdate:
          def __init__(self, user, data):
-             self.callback_query = DummyCallbackQuery(user, data)
-             self.effective_user = user
+               self.callback_query = DummyCallbackQuery(user, data)
+               self.effective_user = user
 
     dummy_update = DummyUpdate(user, payload)
     
@@ -2837,7 +2831,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
     config = await get_config() 
     
     # NAYA (v6): Dummy object check
-    is_deep_link = not hasattr(query.message, 'chat')
+    is_deep_link = not hasattr(query, 'message') or not hasattr(query.message, 'chat')
     
     try:
         # Step 1: Check Subscription
@@ -3147,7 +3141,7 @@ def webhook():
         update = Update.de_json(update_data, bot_app.bot)
         
         try:
-            # Update ko bot ke async thread mein process karne ke liye bhejo
+           # Update ko bot ke async thread mein process karne ke liye bhejo
             asyncio.run_coroutine_threadsafe(bot_app.process_update(update), bot_loop)
         except Exception as e:
             logger.error(f"Update ko threadsafe bhejne mein error: {e}", exc_info=True)
@@ -3257,7 +3251,8 @@ def main():
             ], 
             E_GET_SEASON: [
                 CallbackQueryHandler(get_season_for_episode, pattern="^ep_season_"),
-                CallbackQueryHandler(add_episode_show_anime_list, pattern="^addep_page_") # NAYA (v7) FIX
+                # NAYA (v8) BUG FIX: Back button ko state me add karo
+                CallbackQueryHandler(add_episode_show_anime_list, pattern="^addep_page_") 
             ], 
             E_GET_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_episode_number)],
             E_GET_480P: [MessageHandler(filters.ALL & ~filters.COMMAND, get_480p_file), CommandHandler("skip", skip_480p)],
@@ -3302,11 +3297,13 @@ def main():
             ], 
             PG_GET_SEASON: [
                 CallbackQueryHandler(post_gen_select_episode, pattern="^post_season_"),
-                CallbackQueryHandler(post_gen_show_anime_list, pattern="^postgen_page_") # NAYA (v7) FIX
+                # NAYA (v8) BUG FIX: Back button ko state me add karo
+                CallbackQueryHandler(post_gen_show_anime_list, pattern="^postgen_page_") 
             ], 
             PG_GET_EPISODE: [
                 CallbackQueryHandler(post_gen_final_episode, pattern="^post_ep_"),
-                CallbackQueryHandler(post_gen_select_season, pattern="^post_anime_") # NAYA (v7) FIX
+                # NAYA (v8) BUG FIX: Back button ko state me add karo
+                CallbackQueryHandler(post_gen_select_season, pattern="^post_anime_") 
             ], 
             PG_GET_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, post_gen_send_to_chat)]
         }, 
@@ -3334,7 +3331,8 @@ def main():
             ], 
             DS_GET_SEASON: [
                 CallbackQueryHandler(delete_season_confirm, pattern="^del_season_"),
-                CallbackQueryHandler(delete_season_show_anime_list, pattern="^delseason_page_") # NAYA (v7) FIX
+                # NAYA (v8) BUG FIX: Back button ko state me add karo
+                CallbackQueryHandler(delete_season_show_anime_list, pattern="^delseason_page_") 
             ], 
             DS_CONFIRM: [CallbackQueryHandler(delete_season_do, pattern="^del_season_confirm_yes$")]
         }, 
@@ -3350,11 +3348,13 @@ def main():
             ],
             DE_GET_SEASON: [
                 CallbackQueryHandler(delete_episode_select_episode, pattern="^del_ep_season_"),
-                CallbackQueryHandler(delete_episode_show_anime_list, pattern="^delep_page_") # NAYA (v7) FIX
+                # NAYA (v8) BUG FIX: Back button ko state me add karo
+                CallbackQueryHandler(delete_episode_show_anime_list, pattern="^delep_page_") 
             ],
             DE_GET_EPISODE: [
                 CallbackQueryHandler(delete_episode_confirm, pattern="^del_ep_num_"),
-                CallbackQueryHandler(delete_episode_select_season, pattern="^del_ep_anime_") # NAYA (v7) FIX
+                # NAYA (v8) BUG FIX: Back button ko state me add karo
+                CallbackQueryHandler(delete_episode_select_season, pattern="^del_ep_anime_") 
             ],
             DE_CONFIRM: [CallbackQueryHandler(delete_episode_do, pattern="^del_ep_confirm_yes$")]
         }, 
@@ -3371,7 +3371,8 @@ def main():
             ],
             UP_GET_TARGET: [
                 CallbackQueryHandler(update_photo_get_poster, pattern="^upphoto_target_"),
-                CallbackQueryHandler(update_photo_show_anime_list, pattern="^upphoto_page_") # NAYA (v7) FIX
+                # NAYA (v8) BUG FIX: Back button ko state me add karo
+                CallbackQueryHandler(update_photo_show_anime_list, pattern="^upphoto_page_") 
             ],
             UP_GET_POSTER: [MessageHandler(filters.PHOTO, update_photo_save)]
         },
@@ -3388,11 +3389,13 @@ def main():
             ],
             GL_GET_SEASON: [
                 CallbackQueryHandler(generate_link_select_episode, pattern="^genlink_season_"),
-                CallbackQueryHandler(generate_link_show_anime_list, pattern="^genlink_page_") # NAYA (v7) FIX
+                # NAYA (v8) BUG FIX: Back button ko state me add karo
+                CallbackQueryHandler(generate_link_show_anime_list, pattern="^genlink_page_") 
             ],
             GL_GET_EPISODE: [
                 CallbackQueryHandler(generate_link_final_link, pattern="^genlink_ep_"),
-                CallbackQueryHandler(generate_link_select_season, pattern="^genlink_anime_") # NAYA (v7) FIX
+                # NAYA (v8) BUG FIX: Back button ko state me add karo
+                CallbackQueryHandler(generate_link_select_season, pattern="^genlink_anime_") 
             ]
         },
         fallbacks=global_fallbacks + admin_menu_fallback,
