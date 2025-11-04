@@ -1173,35 +1173,104 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         context.user_data.clear()
         return ConversationHandler.END
 
-async def post_gen_send_to_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.message.text
-    is_episode_post = context.user_data.get('is_episode_post', False) # NAYA (v4)
-    
+async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
     try:
-        if is_episode_post:
-            # NAYA (v4): Sirf text message bhejo (User Request)
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=context.user_data['post_caption'],
-                parse_mode='Markdown',
-                reply_markup=context.user_data['post_keyboard']
-            )
+        bot_username = (await context.bot.get_me()).username
+        
+        config = await get_config()
+        anime_name = context.user_data['anime_name']
+        season_name = context.user_data.get('season_name')
+        ep_num = context.user_data.get('ep_num') 
+        anime_doc = animes_collection.find_one({"name": anime_name})
+        anime_description = anime_doc.get('description', '') # NAYA (v4)
+        
+        # NAYA (v4): Logic for Season Post vs Episode Post (Caption aur Poster)
+        if not ep_num and season_name:
+            # --- YEH SEASON POST HAI ---
+            context.user_data['is_episode_post'] = False # NAYA (v4)
+            
+            # Season poster check karo, nahi toh anime poster lo
+            poster_id = anime_doc.get("seasons", {}).get(season_name, {}).get("_poster_id")
+            if not poster_id:
+                poster_id = anime_doc['poster_id'] # Fallback
+            
+            # NAYA (v4): Use config message
+            caption_template = config.get("messages", {}).get("post_gen_season_caption", "✅ **{anime_name}**\n**[ S{season_name} ]**\n\n**📖 Synopsis:**\n{description}\n\nNeeche [Download] button dabake download karein!")
+            caption = caption_template.replace("{anime_name}", anime_name) \
+                                        .replace("{season_name}", season_name) \
+                                        .replace("{description}", anime_description if anime_description else "")
+        
+        elif ep_num:
+             # --- YEH EPISODE POST HAI ---
+            context.user_data['is_episode_post'] = True # NAYA (v4)
+            
+            # NAYA (v4): Use config message
+            caption_template = config.get("messages", {}).get("post_gen_episode_caption", "✨ **Episode {ep_num} Added** ✨\n\n🎬 **Anime:** {anime_name}\n➡️ **Season:** {season_name}\n\nNeeche [Download] button dabake download karein!")
+            caption = caption_template.replace("{anime_name}", anime_name) \
+                                        .replace("{season_name}", season_name) \
+                                        .replace("{ep_num}", ep_num)
+            
+            poster_id = None # NAYA (v4): Episode post ke liye koi poster nahi (User Request)
+        
         else:
-            # Purana behavior: Photo + Caption bhejo
-            await context.bot.send_photo(
-                chat_id=chat_id,
-                photo=context.user_data['post_poster_id'],
-                caption=context.user_data['post_caption'],
-                parse_mode='Markdown',
-                reply_markup=context.user_data['post_keyboard']
-            )
-
-        await update.message.reply_text(f"✅ **Success!**\nPost ko '{chat_id}' par bhej diya gaya hai.")
+            # Fallback (Should not happen)
+            logger.warning("Post generator me invalid state (na season, na episode)")
+            await query.edit_message_text("❌ Error! Invalid state. Please start over.")
+            return ConversationHandler.END
+        
+        links = config.get('links', {})
+        
+        # NAYA: Logic for Download Button Callback
+        ep_num_check = context.user_data.get('ep_num')
+        season_name_check = context.user_data.get('season_name')
+        
+        if not ep_num_check and season_name_check: # This means it's a Season Post
+            dl_callback_data = f"dl_{anime_name}__{season_name_check}"
+        else: # This is an Episode Post
+            # NAYA (v5) FIX: Episode post must point directly to the episode files
+            dl_callback_data = f"dl_{anime_name}__{season_name_check}__{ep_num_check}" 
+            
+        donate_url = f"https://t.me/{bot_username}?start=donate" 
+        subscribe_url = f"https://t.me/{bot_username}?start=subscribe"
+        
+        backup_url = links.get('backup') or "https://t.me/"
+        support_url = links.get('support') or "https://t.me/"
+            
+        btn_backup = InlineKeyboardButton("Backup", url=backup_url)
+        btn_donate = InlineKeyboardButton("Donate", url=donate_url)
+        btn_support = InlineKeyboardButton("Support", url=support_url)
+        btn_download = InlineKeyboardButton("Download", callback_data=dl_callback_data) 
+        btn_subscribe = InlineKeyboardButton("Subscribe Now", url=subscribe_url)
+        
+        # NAYA (v4): Keyboard logic for Req B
+        if context.user_data.get('is_episode_post', False):
+            # Episode post: Sirf Subscribe aur Download
+            keyboard = [
+                [btn_subscribe, btn_download]
+            ]
+        else:
+            # Season post: Poora keyboard
+            keyboard = [
+                [btn_subscribe, btn_download], 
+                [btn_backup, btn_donate, btn_support]
+            ]
+        
+        context.user_data['post_caption'] = caption
+        context.user_data['post_poster_id'] = poster_id # Yeh None hoga agar episode post hai
+        context.user_data['post_keyboard'] = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            "✅ **Post Ready!**\n\nAb uss **Channel ka @username** ya **Group/Channel ki Chat ID** bhejo jahaan ye post karna hai.\n"
+            "(Example: @MyAnimeChannel ya -100123456789)\n\n/cancel - Cancel."
+        )
+        
     except Exception as e:
-        logger.error(f"Post channel me bhejme me error: {e}")
-        await update.message.reply_text(f"❌ **Error!**\nPost '{chat_id}' par nahi bhej paya. Check karo ki bot uss channel me admin hai ya ID sahi hai.\nError: {e}")
-    context.user_data.clear()
-    return ConversationHandler.END
+        logger.error(f"Post generate karne me error: {e}", exc_info=True)
+        await query.answer("Error! Post generate nahi kar paya.", show_alert=True)
+        await query.edit_message_text("❌ **Error!** Post generate nahi ho paya. Logs check karein.")
+        context.user_data.clear()
+        return ConversationHandler.END
 
 # --- Conversation: Delete Anime (NAYA: A-Z Index) ---
 async def delete_anime_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
