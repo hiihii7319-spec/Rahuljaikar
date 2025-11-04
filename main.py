@@ -1,8 +1,8 @@
 # ============================================
-# ===       COMPLETE FINAL FIX (v8)        ===
+# ===       COMPLETE FINAL FIX (v9)        ===
 # ============================================
-# ===       (Pagination Back Button Fix)   ===
-# ===       (All Converations Fixed)       ===
+# ===       (ALL BACK BUTTONS FIXED)       ===
+# ===       (GEN-LINK URL FEATURE)         ===
 # ============================================
 import os
 import logging
@@ -134,9 +134,9 @@ async def get_config():
         "post_gen_season_caption": "✅ **{anime_name}**\n**[ S{season_name} ]**\n\n**📖 Synopsis:**\n{description}\n\nNeeche [Download] button dabake download karein!",
         "post_gen_episode_caption": "✨ **Episode {ep_num} Added** ✨\n\n🎬 **Anime:** {anime_name}\n➡️ **Season:** {season_name}\n\nNeeche [Download] button dabake download karein!",
         
-        # NAYA (v6): Generate Link Messages
-        "gen_link_caption": "🔗 **Download Link Generated** 🔗\n\n**Anime:** {anime_name}\n**Season:** {season_name}\n**Episode:** {ep_num}\n\nIs link ko group/channel mein share karein. Sirf **subscribed users** hi isse download kar payenge.",
-        "gen_link_season_caption": "🔗 **Season Link Generated** 🔗\n\n**Anime:** {anime_name}\n**Season:** {season_name}\n\nIs link ko group/channel mein share karein. Sirf **subscribed users** hi isse download kar payenge."
+        # NAYA (v9): Generate Link Messages
+        "gen_link_caption_ep": "🔗 **Download Link Generated** 🔗\n\n**Anime:** {anime_name}\n**Season:** {season_name}\n**Episode:** {ep_num}\n\nYeh raha aapka **Direct Download Link**:\n`{download_url}`\n\nIs link ko group/channel mein share karein. Sirf **subscribed users** hi isse download kar payenge.",
+        "gen_link_caption_season": "🔗 **Season Link Generated** 🔗\n\n**Anime:** {anime_name}\n**Season:** {season_name}\n\nYeh raha aapka **Direct Download Link**:\n`{download_url}`\n\nIs link ko group/channel mein share karein. Sirf **subscribed users** hi isse download kar payenge."
     }
 
     if not config:
@@ -222,6 +222,8 @@ def build_grid_keyboard(buttons, items_per_row=2):
     if row: # Bachi hui buttons ko add karo
         keyboard.append(row)
     return keyboard
+
+# NAYA (v6): A-Z Index Keyboard (REMOVED)
 
 # NAYA (v6): Pagination Helper
 async def build_paginated_keyboard(
@@ -326,11 +328,11 @@ async def delete_message_later(bot, chat_id: int, message_id: int, seconds: int)
 # NAYA: Custom Post States
 (CPOST_GET_CHAT, CPOST_GET_POSTER, CPOST_GET_CAPTION, CPOST_GET_BTN_TEXT, CPOST_GET_BTN_URL, CPOST_CONFIRM) = range(54, 60)
 
-# NAYA: Bot Messages States
-(M_MENU_MAIN, M_MENU_SUB, M_MENU_DL, M_MENU_GEN, M_MENU_POSTGEN, M_GET_MSG) = range(60, 66)
+# NAYA: Bot Messages States (v9: Gen-Link state)
+(M_MENU_MAIN, M_MENU_SUB, M_MENU_DL, M_MENU_GEN, M_MENU_POSTGEN, M_MENU_GENLINK, M_GET_MSG) = range(60, 67)
 
 # NAYA (v6): Generate Link States
-(GL_GET_ANIME, GL_GET_SEASON, GL_GET_EPISODE) = range(66, 69)
+(GL_GET_ANIME, GL_GET_SEASON, GL_GET_EPISODE) = range(67, 70)
 
 
 # --- NAYA: Global Cancel Function ---
@@ -727,12 +729,8 @@ async def get_season_for_episode(update: Update, context: ContextTypes.DEFAULT_T
     season_name = query.data.replace("ep_season_", "")
     context.user_data['season_name'] = season_name
     
-    # NAYA (v7) FIX: Back button ke liye anime name save karo
-    anime_name = context.user_data['anime_name']
-    
     await query.edit_message_text(f"Aapne **Season {season_name}** select kiya hai.\n\nAb **Episode Number** bhejo.\n(Jaise: 1, 2, 3...)\n\n(Agar yeh ek movie hai, toh `1` type karein.)\n\n/cancel - Cancel.")
     
-    # NAYA (v7) FIX: State change
     return E_GET_NUMBER
 
 async def _save_episode_file_helper(update: Update, context: ContextTypes.DEFAULT_TYPE, quality: str):
@@ -1007,15 +1005,14 @@ async def set_msg_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         back_cb = "msg_menu_dl"
     elif msg_key in ["post_gen_season_caption", "post_gen_episode_caption"]: 
         back_cb = "msg_menu_postgen" 
-    elif msg_key in ["gen_link_caption", "gen_link_season_caption"]: # NAYA (v6)
+    elif msg_key in ["gen_link_caption_ep", "gen_link_caption_season"]: # NAYA (v9)
         back_cb = "msg_menu_genlink"
     else:
         back_cb = "msg_menu_gen"
         
     await query.edit_message_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data=back_cb)]]))
     return M_GET_MSG
-
-async def set_msg_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def set_msg_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Generic function to save edited message"""
     try:
         msg_text = update.message.text
@@ -1600,7 +1597,7 @@ async def update_photo_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-# --- NAYA (v6): Conversation: Generate Link (Paginated) ---
+# --- NAYA (v9): Conversation: Generate Link (URL Feature) ---
 async def generate_link_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -1645,7 +1642,7 @@ async def generate_link_select_season(update: Update, context: ContextTypes.DEFA
     sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
     
     buttons = []
-    # Option to link the whole Season
+    # NAYA (v9): Option to link the whole Season
     buttons.append(InlineKeyboardButton(f"🔗 Link Whole Season (All Episodes)", callback_data=f"genlink_season_WHOLE_SEASON"))
     
     for s in sorted_seasons:
@@ -1664,7 +1661,7 @@ async def generate_link_select_episode(update: Update, context: ContextTypes.DEF
     query = update.callback_query
     await query.answer()
     season_name = query.data.replace("genlink_season_", "")
-    context.user_data['season_name'] = season_name
+    context.user_data['season_name'] = season_name # Yeh 'WHOLE_SEASON' ya 'S1' etc. ho sakta hai
     anime_name = context.user_data['anime_name']
     
     # Handle "Link Whole Season"
@@ -1686,7 +1683,7 @@ async def generate_link_select_episode(update: Update, context: ContextTypes.DEF
         await query.edit_message_text(f"Aap **{anime_name}** ka kaunsa **Season** link karna chahte hain?", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
         return GL_GET_EPISODE # Go to final step
 
-    # Handle "Select specific episode"
+    # Handle "Select specific episode" (season_name will be 'S1' etc.)
     anime_doc = animes_collection.find_one({"name": anime_name})
     episodes = anime_doc.get("seasons", {}).get(season_name, {})
     
@@ -1710,9 +1707,8 @@ async def generate_link_final_link(update: Update, context: ContextTypes.DEFAULT
     query = update.callback_query
     await query.answer("Generating link...")
     
-    ep_num = query.data.replace("genlink_ep_", "")
+    ep_num = query.data.replace("genlink_ep_", "") # Yeh '1' ya 'S__1' ho sakta hai
     anime_name = context.user_data['anime_name']
-    season_name = context.user_data['season_name']
     
     bot_username = (await context.bot.get_me()).username
     config = await get_config()
@@ -1721,36 +1717,32 @@ async def generate_link_final_link(update: Update, context: ContextTypes.DEFAULT
     if ep_num.startswith("S__"):
         season_name_for_link = ep_num.replace("S__", "")
         # This is a Season Link
-        dl_callback_data = f"dl_{anime_name}__{season_name_for_link}"
-        caption_template = config.get("messages", {}).get("gen_link_season_caption", "...")
-        caption = caption_template.replace("{anime_name}", anime_name) \
-                                    .replace("{season_name}", season_name_for_link)
+        dl_payload = f"dl_{anime_name}__{season_name_for_link}"
+        caption_template = config.get("messages", {}).get("gen_link_caption_season", "...")
+        download_url = f"https://t.me/{bot_username}?start={dl_payload}"
         
-        anime_doc = animes_collection.find_one({"name": anime_name})
-        season_data = anime_doc.get("seasons", {}).get(season_name_for_link, {})
-        poster_id = season_data.get("_poster_id") or anime_doc.get('poster_id')
+        caption = caption_template.replace("{anime_name}", anime_name) \
+                                    .replace("{season_name}", season_name_for_link) \
+                                    .replace("{download_url}", download_url)
 
     else:
         # This is an Episode Link
-        dl_callback_data = f"dl_{anime_name}__{season_name}__{ep_num}"
-        caption_template = config.get("messages", {}).get("gen_link_caption", "...")
+        season_name = context.user_data['season_name'] # 'S1' etc.
+        dl_payload = f"dl_{anime_name}__{season_name}__{ep_num}"
+        caption_template = config.get("messages", {}).get("gen_link_caption_ep", "...")
+        download_url = f"https://t.me/{bot_username}?start={dl_payload}"
+        
         caption = caption_template.replace("{anime_name}", anime_name) \
                                     .replace("{season_name}", season_name) \
-                                    .replace("{ep_num}", ep_num)
-        
-        anime_doc = animes_collection.find_one({"name": anime_name})
-        season_data = anime_doc.get("seasons", {}).get(season_name, {})
-        poster_id = season_data.get("_poster_id") or anime_doc.get('poster_id')
-
+                                    .replace("{ep_num}", ep_num) \
+                                    .replace("{download_url}", download_url)
     
-    keyboard = [[InlineKeyboardButton("Download", callback_data=dl_callback_data)]]
-    
-    await context.bot.send_photo(
+    # Admin ko text message (link ke saath) bhejo
+    await context.bot.send_message(
         chat_id=query.from_user.id,
-        photo=poster_id,
-        caption=caption,
+        text=caption,
         parse_mode='Markdown',
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        disable_web_page_preview=True
     )
     
     await query.message.delete() # Delete the menu
@@ -2403,17 +2395,17 @@ async def bot_messages_menu_postgen(update: Update, context: ContextTypes.DEFAUL
     await query.edit_message_text("✍️ **Post Generator Messages** ✍️\n\nKaunsa message edit karna hai?", reply_markup=InlineKeyboardMarkup(keyboard))
     return M_MENU_POSTGEN
 
-# NAYA (v6): Gen-Link Messages Menu
+# NAYA (v9): Gen-Link Messages Menu
 async def bot_messages_menu_genlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     keyboard = [
-        [InlineKeyboardButton("Edit Season Link Caption", callback_data="msg_edit_gen_link_season_caption")],
-        [InlineKeyboardButton("Edit Episode Link Caption", callback_data="msg_edit_gen_link_caption")],
+        [InlineKeyboardButton("Edit Season Link Caption", callback_data="msg_edit_gen_link_caption_season")],
+        [InlineKeyboardButton("Edit Episode Link Caption", callback_data="msg_edit_gen_link_caption_ep")],
         [InlineKeyboardButton("⬅️ Back", callback_data="admin_menu_messages")]
     ]
     await query.edit_message_text("🔗 **Generate Link Messages** 🔗\n\nKaunsa message edit karna hai?", reply_markup=InlineKeyboardMarkup(keyboard))
-    return M_MENU_POSTGEN # Reuse state
+    return M_MENU_GENLINK
 
 # NAYA: Admin Settings Menu
 async def admin_settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2505,7 +2497,7 @@ async def handle_deep_link_subscribe(user: User, context: ContextTypes.DEFAULT_T
         if "blocked" in str(e):
             logger.warning(f"User {user.id} ne bot ko block kiya hua hai.")
 
-# NAYA (v6): Deep Link Download Handler
+# NAYA (v9): Deep Link Download Handler
 async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TYPE, payload: str):
     """Deep link se /start=dl_... ko handle karega"""
     logger.info(f"User {user.id} ne Download deep link use kiya: {payload}")
@@ -2830,8 +2822,8 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
     user_id = user.id
     config = await get_config() 
     
-    # NAYA (v6): Dummy object check
-    is_deep_link = not hasattr(query, 'message') or not hasattr(query.message, 'chat')
+    # NAYA (v9): Dummy object check
+    is_deep_link = not hasattr(query.message, 'chat')
     
     try:
         # Step 1: Check Subscription
@@ -2854,7 +2846,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             text = text.replace("{price}", str(price)).replace("{days}", str(days))
             
             try:
-                # NAYA (v6): Deep link ke liye keyboard
+                # NAYA (v9): Deep link ke liye keyboard
                 bot_username = (await context.bot.get_me()).username
                 keyboard = [[InlineKeyboardButton("Subscribe Now", url=f"https://t.me/{bot_username}?start=subscribe")]]
                 
@@ -3141,7 +3133,7 @@ def webhook():
         update = Update.de_json(update_data, bot_app.bot)
         
         try:
-           # Update ko bot ke async thread mein process karne ke liye bhejo
+            # Update ko bot ke async thread mein process karne ke liye bhejo
             asyncio.run_coroutine_threadsafe(bot_app.process_update(update), bot_loop)
         except Exception as e:
             logger.error(f"Update ko threadsafe bhejne mein error: {e}", exc_info=True)
@@ -3460,12 +3452,13 @@ def main():
                 CallbackQueryHandler(bot_messages_menu_sub, pattern="^msg_menu_sub$"),
                 CallbackQueryHandler(bot_messages_menu_dl, pattern="^msg_menu_dl$"),
                 CallbackQueryHandler(bot_messages_menu_postgen, pattern="^msg_menu_postgen$"),
-                CallbackQueryHandler(bot_messages_menu_genlink, pattern="^msg_menu_genlink$"), # NAYA (v6)
+                CallbackQueryHandler(bot_messages_menu_genlink, pattern="^msg_menu_genlink$"), # NAYA (v9)
                 CallbackQueryHandler(bot_messages_menu_gen, pattern="^msg_menu_gen$"),
             ],
             M_MENU_SUB: [CallbackQueryHandler(set_msg_start, pattern="^msg_edit_")],
             M_MENU_DL: [CallbackQueryHandler(set_msg_start, pattern="^msg_edit_")],
             M_MENU_POSTGEN: [CallbackQueryHandler(set_msg_start, pattern="^msg_edit_")],
+            M_MENU_GENLINK: [CallbackQueryHandler(set_msg_start, pattern="^msg_edit_")], # NAYA (v9)
             M_MENU_GEN: [CallbackQueryHandler(set_msg_start, pattern="^msg_edit_")],
             M_GET_MSG: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_msg_save)],
         },
@@ -3542,7 +3535,6 @@ def main():
 
     # Placeholders
     bot_app.add_handler(CallbackQueryHandler(placeholder_button_handler, pattern="^user_check_sub$"))
-
     # Error handler
     bot_app.add_error_handler(error_handler)
     
