@@ -1201,15 +1201,11 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         ep_num_check = context.user_data.get('ep_num')
         season_name_check = context.user_data.get('season_name')
         
-        # ============================================
-        # ===           NAYA FIX (v17)             ===
-        # ===    Extra underscore ('_') hatao      ===
-        # ============================================
+        # (v17 Fix: Extra underscore ('_') hatao)
         if not ep_num_check and season_name_check: # Season Post
             dl_callback_data = f"dl{anime_id}__{season_name_check}"
         else: # Episode Post
             dl_callback_data = f"dl{anime_id}__{season_name_check}__{ep_num_check}" 
-        # ============================================
             
         donate_url = f"https://t.me/{bot_username}?start=donate" 
         subscribe_url = f"https://t.me/{bot_username}?start=subscribe"
@@ -1220,7 +1216,15 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         btn_backup = InlineKeyboardButton("Backup", url=backup_url)
         btn_donate = InlineKeyboardButton("Donate", url=donate_url)
         btn_support = InlineKeyboardButton("Support", url=support_url)
-        btn_download = InlineKeyboardButton("Download", callback_data=dl_callback_data) 
+        
+        # ============================================
+        # ===           NAYA FIX (v18)             ===
+        # ===   Callback_data ko URL me badlo      ===
+        # ============================================
+        download_url = f"https://t.me/{bot_username}?start={dl_callback_data}"
+        btn_download = InlineKeyboardButton("Download", url=download_url) 
+        # ============================================
+
         btn_subscribe = InlineKeyboardButton("Subscribe Now", url=subscribe_url)
         
         if context.user_data.get('is_episode_post', False):
@@ -2620,19 +2624,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     args = context.args
     if args:
-        # ============================================
-        # ===           NAYA FIX (v13)             ===
-        # ===    Spaces in payload ko join karo    ===
-        # ============================================
+        # (v13 Fix: Spaces in payload ko join karo)
         payload = " ".join(args) 
-        # ============================================
         
         logger.info(f"User {user_id} ne deep link use kiya: {payload}")
         
-        # ============================================
-        # ===           NAYA FIX (v17)             ===
-        # ===  'dl_' aur 'dl' dono ko check karo   ===
-        # ============================================
+        # (v17 Fix: 'dl_' aur 'dl' dono ko check karo)
         if payload.startswith("dl"): # 'dl' ya 'dl_' dono match honge
             await handle_deep_link_download(user, context, payload)
             return
@@ -2886,14 +2883,44 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
     
     # NAYA (v10): Dummy object check
     is_deep_link = not hasattr(query.message, 'chat')
+    is_in_dm = False # Default
+    
+    checking_msg = None # Initialize
     
     try:
-        # Step 1: Check Subscription
-        if not await check_subscription(user_id):
-            alert_msg = config.get("messages", {}).get("user_dl_unsubscribed_alert", "Error")
-            if not is_deep_link: # Deep link par alert nahi dikha sakte
+        # ============================================
+        # ===           NAYA FIX (v19)             ===
+        # ============================================
+        
+        # Step 1: Click ko acknowledge karo
+        if not is_deep_link:
+            is_in_dm = query.message.chat.type == 'private'
+            if not is_in_dm:
+                # Channel/Group me click
+                alert_msg = config.get("messages", {}).get("user_dl_dm_alert", "Check DM")
                 await query.answer(alert_msg, show_alert=True)
-            
+            else:
+                # DM me click
+                await query.answer()
+        
+        # Step 2: "Checking..." message bhejo (Sabhi cases me)
+        try:
+            checking_msg = await context.bot.send_message(chat_id=user_id, text="⏳ Checking subscription...")
+            await asyncio.sleep(1.5) # 1.5 second ka delay
+        except Exception as e:
+            logger.error(f"User {user_id} ko 'Checking...' message nahi bhej paya. Shayad bot block hai? Error: {e}")
+            if not is_deep_link and not is_in_dm:
+                # Agar bot block hai aur channel me click hua hai, toh alert dikhao
+                await query.answer("❌ Error! Bot ko DM mein /start karke unblock karein.", show_alert=True)
+            return # Function rok do
+        # ============================================
+
+        # Step 3: Check Subscription
+        if not await check_subscription(user_id):
+            # NAYA: Checking message delete karo
+            if checking_msg: await checking_msg.delete()
+
+            # (Baaki ka QR code logic waisa hi rahega)
             qr_id = config.get('sub_qr_id')
             price = config.get('price')
             days = config.get('validity_days')
@@ -2909,7 +2936,6 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             text = text.replace("{price}", str(price)).replace("{days}", str(days))
             
             try:
-                # NAYA (v10): Deep link ke liye keyboard
                 bot_username = (await context.bot.get_me()).username
                 keyboard = [[InlineKeyboardButton("Subscribe Now", url=f"https://t.me/{bot_username}?start=subscribe")]]
                 
@@ -2918,25 +2944,17 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                     photo=qr_id, 
                     caption=text, 
                     parse_mode='Markdown',
-                    reply_markup=InlineKeyboardMarkup(keyboard) # NAYA (v10)
+                    reply_markup=InlineKeyboardMarkup(keyboard)
                 )
             except Exception as e:
                 logger.error(f"User {user_id} ko DM me QR bhejte waqt error: {e}")
-                if "blocked" in str(e) and not is_deep_link:
-                    await query.answer("❌ Error! Subscribe karne ke liye bot ko DM me /start karein.", show_alert=True)
             return
             
-        # Step 2: User Subscribed Hai
-        is_in_dm = False
-        if not is_deep_link:
-            is_in_dm = query.message.chat.type == 'private'
-        
-        if not is_in_dm:
-            msg = config.get("messages", {}).get("user_dl_dm_alert", "Check DM")
-            await query.answer(msg, show_alert=True)
-        else:
-            await query.answer() 
-        
+        # Step 4: User Subscribed Hai
+        # NAYA: Checking message delete karo
+        if checking_msg: await checking_msg.delete()
+
+        # (Baaki ka logic (v17 wala) waisa hi rahega)
         parts = query.data.split('__')
         
         # ============================================
@@ -2945,9 +2963,9 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
         # ============================================
         anime_key = parts[0]
         if anime_key.startswith("dl_"):
-            anime_key = anime_key.replace("dl_", "") # Puraana format (dl_...)
+            anime_key = anime_key.replace("dl_", "") # Puraana format (dl_ANIME_NAME...)
         elif anime_key.startswith("dl"):
-            anime_key = anime_key.replace("dl", "")  # Naya format (dl...)
+            anime_key = anime_key.replace("dl", "")  # Naya format (dlANIME_ID...)
             
         season_name = parts[1] if len(parts) > 1 else None
         ep_num = parts[2] if len(parts) > 2 else None
@@ -3192,7 +3210,15 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
         # ============================================
 
     except Exception as e:
+        # Main error handler
         logger.error(f"Download button handler me error: {e}", exc_info=True)
+        # NAYA: Yahan bhi checking message delete karo
+        try:
+            if checking_msg:
+                await context.bot.delete_message(chat_id=user_id, message_id=checking_msg.message_id)
+        except Exception:
+            pass # Agar delete na ho toh koi baat nahi
+            
         msg = config.get("messages", {}).get("user_dl_general_error", "Error")
         try:
             if not is_deep_link and query.message and query.message.chat.type in ['channel', 'supergroup', 'group']:
