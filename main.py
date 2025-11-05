@@ -406,9 +406,20 @@ async def back_to_links_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def back_to_user_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """User ko wapas main menu bhejega"""
-    await menu_command(update, context, from_callback=True)
+    # v22 FIX: menu_command ke bajaye show_user_menu call karo
+    await show_user_menu(update, context, from_callback=True) 
     return ConversationHandler.END
+    
+    async def subscription_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """NAYA (v22): /subscription command ko handle karega"""
+    logger.info(f"User {update.effective_user.id} ne /subscription dabaya.")
+    await show_user_menu(update, context)
 
+async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """NAYA (v22): /menu command ab admin panel kholega"""
+    logger.info(f"User {update.effective_user.id} ne /menu dabaya (Admin Panel).")
+    await admin_command(update, context)
+    
 async def back_to_messages_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -2607,11 +2618,12 @@ async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TY
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Smart /start command"""
+    """Smart /start command (v22)"""
     user = update.effective_user
     user_id, first_name = user.id, user.first_name
     logger.info(f"User {user_id} ({first_name}) ne /start dabaya.")
     
+    # User DB logic (waise hi rahega)
     user_data = users_collection.find_one({"_id": user_id})
     if not user_data:
         users_collection.insert_one({"_id": user_id, "first_name": first_name, "username": user.username, "subscribed": False, "expiry_date": None})
@@ -2624,12 +2636,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     args = context.args
     if args:
-        # (v13 Fix: Spaces in payload ko join karo)
+        # (v17 Fix: Handle deep links with spaces)
         payload = " ".join(args) 
-        
         logger.info(f"User {user_id} ne deep link use kiya: {payload}")
         
-        # (v17 Fix: 'dl_' aur 'dl' dono ko check karo)
+        # (v17 Fix: Handle 'dl' and 'dl_')
         if payload.startswith("dl"): # 'dl' ya 'dl_' dono match honge
             await handle_deep_link_download(user, context, payload)
             return
@@ -2640,14 +2651,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await handle_deep_link_subscribe(user, context)
             return
     
-    if await is_co_admin(user_id):
-        logger.info("Admin/Co-Admin detected. Admin panel dikha raha hoon.")
-        await admin_command(update, context) 
-    else:
-        logger.info("User detected. User menu dikha raha hoon.")
-        await menu_command(update, context)
-
-async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from_callback: bool = False):
+    # ============================================
+    # ===           NAYA FIX (v22)             ===
+    # === /start hamesha User Menu dikhayega ===
+    # === Admin panel ab /menu par hai       ===
+    # ============================================
+    logger.info("Koi deep link nahi. User menu dikha raha hoon.")
+    await show_user_menu(update, context) # Admin panel nahi, user menu dikhao
+    
+async def show_user_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, from_callback: bool = False):
     """User ka main menu (/menu)"""
     user = update.effective_user
     user_id = user.id
@@ -3647,9 +3659,11 @@ def main():
     bot_app.add_handler(admin_approve_conv)
 
     # Standard commands
-    bot_app.add_handler(CommandHandler("start", start_command))
-    bot_app.add_handler(CommandHandler("menu", menu_command))
-    bot_app.add_handler(CommandHandler("admin", admin_command))
+    # Standard commands (v22 RE-MAPPED)
+    bot_app.add_handler(CommandHandler("start", start_command)) # Start hamesha user menu/deep link
+    bot_app.add_handler(CommandHandler("subscription", subscription_command)) # Naya command user menu ke liye
+    bot_app.add_handler(CommandHandler("menu", menu_command)) # /menu ab admin panel hai
+    bot_app.add_handler(CommandHandler("admin", admin_command)) # /admin bhi admin panel hai (alias)
 
     # Admin menu navigation (non-conversation)
     bot_app.add_handler(CallbackQueryHandler(add_content_menu, pattern="^admin_menu_add_content$"))
