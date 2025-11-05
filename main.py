@@ -2973,15 +2973,8 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
     user_id = user.id
     config = await get_config() 
     
-    # ============================================
-    # ===           NAYA FIX (v23)             ===
-    # ===  'delete' crash ko fix karne ke liye   ===
-    # ===   is_deep_link check ko theek kiya   ===
-    # ============================================
-    # Ek 'real' message me 'edit_message_caption' hota hai, 'DummyMessage' me nahi.
+    # (v23 Fix: 'delete' crash ko fix karne ke liye)
     is_deep_link = not hasattr(query.message, 'edit_message_caption')
-    # ============================================
-
     is_in_dm = False # Default
     checking_msg = None # Initialize
     
@@ -3005,16 +2998,13 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
         except Exception as e:
             logger.error(f"User {user_id} ko 'Checking...' message nahi bhej paya. Shayad bot block hai? Error: {e}")
             if not is_deep_link and not is_in_dm:
-                # Agar bot block hai aur channel me click hua hai, toh alert dikhao
                 await query.answer("❌ Error! Bot ko DM mein /start karke unblock karein.", show_alert=True)
             return # Function rok do
 
         # Step 3: Check Subscription
         if not await check_subscription(user_id):
-            # NAYA: Checking message delete karo
             if checking_msg: await checking_msg.delete()
 
-            # (Baaki ka QR code logic waisa hi rahega)
             qr_id = config.get('sub_qr_id')
             price = config.get('price')
             days = config.get('validity_days')
@@ -3045,16 +3035,11 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             return
             
         # Step 4: User Subscribed Hai
-        # NAYA: Checking message delete karo
         if checking_msg: await checking_msg.delete()
 
-        # (Baaki ka logic (v17 wala) waisa hi rahega)
         parts = query.data.split('__')
         
-        # ============================================
-        # ===           NAYA FIX (v17)             ===
-        # ===  'dl_' aur 'dl' dono ko handle karo   ===
-        # ============================================
+        # (v17 Fix: 'dl_' aur 'dl' dono ko handle karo)
         anime_key = parts[0]
         if anime_key.startswith("dl_"):
             anime_key = anime_key.replace("dl_", "") # Puraana format (dl_ANIME_NAME...)
@@ -3074,16 +3059,21 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             anime_doc = animes_collection.find_one({"name": anime_key})
         
         if not anime_doc:
-            # Dono methods fail ho gaye
             logger.error(f"Anime '{anime_key}' na ID se mila na Name se.")
             msg = config.get("messages", {}).get("user_dl_anime_not_found", "Error")
             await context.bot.send_message(user_id, msg)
             return
             
-        anime_name = anime_doc['name'] # Get the real name for captions
-        anime_id_str = str(anime_doc['_id']) # Get the real ID for future buttons
-        # ============================================
+        anime_name = anime_doc['name'] 
+        anime_id_str = str(anime_doc['_id']) 
         
+        # ============================================
+        # ===           NAYA FIX (v24)             ===
+        # ===   Auto-delete ke liye seconds lao    ===
+        # ============================================
+        delete_time = config.get("delete_seconds", 300) 
+        # ============================================
+
         # Case 3: Episode click hua hai -> Saare Files Bhejo
         if ep_num:
             qualities_dict = anime_doc.get("seasons", {}).get(season_name, {}).get(ep_num, {})
@@ -3112,7 +3102,6 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                     sent_msg = await query.message.reply_text(msg, parse_mode='Markdown')
                     msg_to_delete_id = sent_msg.message_id 
             else:
-                # NAYA (v10): Deep link/Channel click ke liye naya message
                     sent_msg = await context.bot.send_message(user_id, msg, parse_mode='Markdown')
                     msg_to_delete_id = sent_msg.message_id
             
@@ -3122,7 +3111,6 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             extra_q = [q for q in available_qualities if q not in sorted_q_list]
             sorted_q_list.extend(extra_q)
             
-            delete_time = config.get("delete_seconds", 300) 
             delete_minutes = max(1, delete_time // 60)
             warning_template = config.get("messages", {}).get("file_warning", "Warning")
             warning_msg = warning_template.replace('{minutes}', str(delete_minutes))
@@ -3172,6 +3160,13 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             
             return 
             
+        # ============================================
+        # ===           NAYA FIX (v24)             ===
+        # ===  Selection Menus ko delete karo      ===
+        # ============================================
+        sent_selection_message = None # Delete karne ke liye message save karo
+        # ============================================
+
         # Case 2: Season click hua hai -> Episode Bhejo
         if season_name:
             episodes = anime_doc.get("seasons", {}).get(season_name, {})
@@ -3190,9 +3185,9 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                 return
             
             sorted_eps = sorted(episode_keys, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
-            buttons = [InlineKeyboardButton(f"Episode {ep}", callback_data=f"dl{anime_id_str}__{season_name}__{ep}") for ep in sorted_eps] # NAYA (v17): Use ID
+            buttons = [InlineKeyboardButton(f"Episode {ep}", callback_data=f"dl{anime_id_str}__{season_name}__{ep}") for ep in sorted_eps] # NAYA (v1V): Use ID
             keyboard = build_grid_keyboard(buttons, 2)
-            keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data=f"dl{anime_id_str}")]) # NAYA (v17): Use ID
+            keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data=f"dl{anime_id_str}")]) # NAYA (v1V): Use ID
             
             msg = config.get("messages", {}).get("user_dl_select_episode", "Select episode")
             msg = msg.replace("{anime_name}", anime_name).replace("{season_name}", season_name)
@@ -3200,13 +3195,10 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             season_poster_id = anime_doc.get("seasons", {}).get(season_name, {}).get("_poster_id")
             poster_to_use = season_poster_id or anime_doc['poster_id'] 
             
-            # ============================================
-            # ===           NAYA FIX (v23)             ===
-            # ===  'DummyMessage' delete bug fix karo  ===
-            # ============================================
+            # (v23 Fix: 'DummyMessage' delete bug)
             if is_deep_link:
                 # Deep link hai -> Hamesha nayi photo DM me bhejo
-                await context.bot.send_photo(
+                sent_selection_message = await context.bot.send_photo(
                     chat_id=user_id, 
                     photo=poster_to_use, 
                     caption=msg,
@@ -3218,7 +3210,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                 try:
                     if not query.message.photo:
                         await query.message.delete() # Ab yeh safe hai, kyunki is_deep_link False hai
-                        await context.bot.send_photo(
+                        sent_selection_message = await context.bot.send_photo(
                             chat_id=user_id,
                             photo=poster_to_use, 
                             caption=msg,
@@ -3230,6 +3222,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                             media=InputMediaPhoto(media=poster_to_use, caption=msg, parse_mode='Markdown'),
                             reply_markup=InlineKeyboardMarkup(keyboard)
                         )
+                        sent_selection_message = query.message # Edit kiye gaye message ko save karo
                 except BadRequest as e:
                     if "Message is not modified" not in str(e):
                         logger.warning(f"DL Handler Case 2: Media edit fail, fallback to caption: {e}")
@@ -3238,16 +3231,28 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                             reply_markup=InlineKeyboardMarkup(keyboard),
                             parse_mode='Markdown'
                         )
+                        sent_selection_message = query.message # Edit kiye gaye message ko save karo
                 except Exception as e:
                     logger.error(f"DL Handler Case 2: Media edit critical fail: {e}")
-                    # Fallback to just editing caption
                     await query.edit_message_caption( 
                         caption=msg,
                         reply_markup=InlineKeyboardMarkup(keyboard),
                         parse_mode='Markdown'
                     )
-            return
+                    sent_selection_message = query.message # Edit kiye gaye message ko save karo
+            
             # ============================================
+            # ===           NAYA FIX (v24)             ===
+            # ============================================
+            if sent_selection_message:
+                asyncio.create_task(delete_message_later(
+                    bot=context.bot,
+                    chat_id=user_id,
+                    message_id=sent_selection_message.message_id, 
+                    seconds=delete_time 
+                ))
+            # ============================================
+            return
             
         # Case 1: Sirf Anime click hua hai -> Season Bhejo
         seasons = anime_doc.get("seasons", {})
@@ -3270,13 +3275,10 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
         msg = config.get("messages", {}).get("user_dl_select_season", "Select season")
         msg = msg.replace("{anime_name}", anime_name)
 
-        # ============================================
-        # ===           NAYA FIX (v23)             ===
-        # ===  'DummyMessage' delete bug fix karo  ===
-        # ============================================
+        # (v23 Fix: 'DummyMessage' delete bug)
         if is_deep_link:
             # Deep link hai -> Hamesha nayi photo DM me bhejo
-            await context.bot.send_photo(
+            sent_selection_message = await context.bot.send_photo(
                 chat_id=user_id, 
                 photo=anime_doc['poster_id'], 
                 caption=msg,
@@ -3287,7 +3289,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             # DM me hai, aur deep link nahi hai (yaani purane message par click kiya)
             if not query.message.photo:
                 await query.message.delete() # Safe hai
-                await context.bot.send_photo(
+                sent_selection_message = await context.bot.send_photo(
                     chat_id=user_id,
                     photo=anime_doc['poster_id'], 
                     caption=msg,
@@ -3300,8 +3302,20 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='Markdown'
                 )
-        return
+                sent_selection_message = query.message # Edit kiye gaye message ko save karo
+
         # ============================================
+        # ===           NAYA FIX (v24)             ===
+        # ============================================
+        if sent_selection_message:
+            asyncio.create_task(delete_message_later(
+                bot=context.bot,
+                chat_id=user_id,
+                message_id=sent_selection_message.message_id, 
+                seconds=delete_time 
+            ))
+        # ============================================
+        return
 
     except Exception as e:
         # Main error handler
