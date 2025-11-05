@@ -1161,12 +1161,7 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         ep_num = context.user_data.get('ep_num') 
         anime_doc = animes_collection.find_one({"name": anime_name})
         
-        # ============================================
-        # ===           NAYA FIX (v13)             ===
-        # ===     _id ko link me use karo          ===
-        # ============================================
         anime_id = str(anime_doc['_id'])
-        # ============================================
         
         if not ep_num and season_name:
             # --- YEH SEASON POST HAI ---
@@ -1207,7 +1202,7 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         season_name_check = context.user_data.get('season_name')
         
         # ============================================
-        # ===           NAYA FIX (v16)             ===
+        # ===           NAYA FIX (v17)             ===
         # ===    Extra underscore ('_') hatao      ===
         # ============================================
         if not ep_num_check and season_name_check: # Season Post
@@ -1757,16 +1752,11 @@ async def generate_link_final_link(update: Update, context: ContextTypes.DEFAULT
     ep_num = query.data.replace("genlink_ep_", "") # Yeh 'S__1' ya '1' ho sakta hai
     anime_name = context.user_data['anime_name']
     
-    # ============================================
-    # ===           NAYA FIX (v13)             ===
-    # ===     _id ko link me use karo          ===
-    # ============================================
     anime_doc = animes_collection.find_one({"name": anime_name})
     if not anime_doc:
         await query.edit_message_text("❌ Error! Anime database me nahi mila. Cancel kar raha hoon.")
         return ConversationHandler.END
     anime_id = str(anime_doc['_id'])
-    # ============================================
     
     bot_username = (await context.bot.get_me()).username
     config = await get_config()
@@ -1776,10 +1766,10 @@ async def generate_link_final_link(update: Update, context: ContextTypes.DEFAULT
         season_name_for_link = ep_num.replace("S__", "")
         # This is a Season Link
         # ============================================
-        # ===           NAYA FIX (v16)             ===
+        # ===           NAYA FIX (v17)             ===
         # ===    Extra underscore ('_') hatao      ===
         # ============================================
-        dl_callback_data = f"dl{anime_id}__{season_name_for_link}" # NAYA (v13): Use ID
+        dl_callback_data = f"dl{anime_id}__{season_name_for_link}" # Use ID
         # ============================================
         caption_template = config.get("messages", {}).get("gen_link_caption_season", "...")
         download_url = f"https://t.me/{bot_username}?start={dl_callback_data}"
@@ -1792,10 +1782,10 @@ async def generate_link_final_link(update: Update, context: ContextTypes.DEFAULT
         # This is an Episode Link
         season_name = context.user_data['season_name']
         # ============================================
-        # ===           NAYA FIX (v16)             ===
+        # ===           NAYA FIX (v17)             ===
         # ===    Extra underscore ('_') hatao      ===
         # ============================================
-        dl_callback_data = f"dl{anime_id}__{season_name}__{ep_num}" # NAYA (v13): Use ID
+        dl_callback_data = f"dl{anime_id}__{season_name}__{ep_num}" # Use ID
         # ============================================
         caption_template = config.get("messages", {}).get("gen_link_caption_ep", "...")
         download_url = f"https://t.me/{bot_username}?start={dl_callback_data}"
@@ -2640,10 +2630,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"User {user_id} ne deep link use kiya: {payload}")
         
         # ============================================
-        # ===           NAYA FIX (v16)             ===
-        # ===  'dl_' ke bajaye 'dl' check karo     ===
+        # ===           NAYA FIX (v17)             ===
+        # ===  'dl_' aur 'dl' dono ko check karo   ===
         # ============================================
-        if payload.startswith("dl"): # NAYA (v10): Download deep link
+        if payload.startswith("dl"): # 'dl' ya 'dl_' dono match honge
             await handle_deep_link_download(user, context, payload)
             return
         elif payload == "donate":
@@ -2885,7 +2875,6 @@ async def placeholder_button_handler(update: Update, context: ContextTypes.DEFAU
         await query.answer(f"Button '{query.data}' jald aa raha hai...", show_alert=True)
         
 # --- User Download Handler (CallbackQuery) ---
-# --- User Download Handler (CallbackQuery) ---
 async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Callback data 'dl' se shuru hone wale sabhi buttons ko handle karega.
@@ -2951,19 +2940,24 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
         parts = query.data.split('__')
         
         # ============================================
-        # ===           NAYA FIX (v16)             ===
-        # ===  'dl_' ke bajaye 'dl' se replace karo ===
+        # ===           NAYA FIX (v17)             ===
+        # ===  'dl_' aur 'dl' dono ko handle karo   ===
         # ============================================
-        anime_key = parts[0].replace("dl", "") # Is this an ID or a Name?
+        anime_key = parts[0]
+        if anime_key.startswith("dl_"):
+            anime_key = anime_key.replace("dl_", "") # Puraana format (dl_...)
+        elif anime_key.startswith("dl"):
+            anime_key = anime_key.replace("dl", "")  # Naya format (dl...)
+            
         season_name = parts[1] if len(parts) > 1 else None
         ep_num = parts[2] if len(parts) > 2 else None
         
         anime_doc = None
         try:
-            # 1. Pehle ObjectId se search karne ki koshish karo
+            # 1. Pehle ObjectId se search karne ki koshish karo (Naya format)
             anime_doc = animes_collection.find_one({"_id": ObjectId(anime_key)})
         except Exception:
-            # 2. Agar woh fail ho (yaani woh ID nahi, naam hai), toh Name se search karo
+            # 2. Agar woh fail ho (yaani woh ID nahi, naam hai), toh Name se search karo (Puraana format)
             logger.warning(f"ObjectId '{anime_key}' nahi mila. Name se search kar raha hoon...")
             anime_doc = animes_collection.find_one({"name": anime_key})
         
@@ -3084,9 +3078,9 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                 return
             
             sorted_eps = sorted(episode_keys, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
-            buttons = [InlineKeyboardButton(f"Episode {ep}", callback_data=f"dl{anime_id_str}__{season_name}__{ep}") for ep in sorted_eps] # NAYA (v14): Use ID
+            buttons = [InlineKeyboardButton(f"Episode {ep}", callback_data=f"dl{anime_id_str}__{season_name}__{ep}") for ep in sorted_eps] # NAYA (v17): Use ID
             keyboard = build_grid_keyboard(buttons, 2)
-            keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data=f"dl{anime_id_str}")]) # NAYA (v14): Use ID
+            keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data=f"dl{anime_id_str}")]) # NAYA (v17): Use ID
             
             msg = config.get("messages", {}).get("user_dl_select_episode", "Select episode")
             msg = msg.replace("{anime_name}", anime_name).replace("{season_name}", season_name)
@@ -3157,7 +3151,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             return
         
         sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
-        buttons = [InlineKeyboardButton(f"Season {s}", callback_data=f"dl{anime_id_str}__{s}") for s in sorted_seasons] # NAYA (v14): Use ID
+        buttons = [InlineKeyboardButton(f"Season {s}", callback_data=f"dl{anime_id_str}__{s}") for s in sorted_seasons] # NAYA (v17): Use ID
         keyboard = build_grid_keyboard(buttons, 1) 
         keyboard.append([InlineKeyboardButton("⬅️ Back to Bot Menu", callback_data="user_back_menu")])
         
