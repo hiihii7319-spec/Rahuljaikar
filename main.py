@@ -2896,17 +2896,19 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
     user_id = user.id
     config = await get_config() 
     
-    # NAYA (v10): Dummy object check
-    is_deep_link = not hasattr(query.message, 'chat')
+    # ============================================
+    # ===           NAYA FIX (v23)             ===
+    # ===  'delete' crash ko fix karne ke liye   ===
+    # ===   is_deep_link check ko theek kiya   ===
+    # ============================================
+    # Ek 'real' message me 'edit_message_caption' hota hai, 'DummyMessage' me nahi.
+    is_deep_link = not hasattr(query.message, 'edit_message_caption')
+    # ============================================
+
     is_in_dm = False # Default
-    
     checking_msg = None # Initialize
     
     try:
-        # ============================================
-        # ===           NAYA FIX (v19)             ===
-        # ============================================
-        
         # Step 1: Click ko acknowledge karo
         if not is_deep_link:
             is_in_dm = query.message.chat.type == 'private'
@@ -2928,7 +2930,6 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                 # Agar bot block hai aur channel me click hua hai, toh alert dikhao
                 await query.answer("❌ Error! Bot ko DM mein /start karke unblock karein.", show_alert=True)
             return # Function rok do
-        # ============================================
 
         # Step 3: Check Subscription
         if not await check_subscription(user_id):
@@ -3122,11 +3123,11 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             poster_to_use = season_poster_id or anime_doc['poster_id'] 
             
             # ============================================
-            # ===           NAYA FIX (v15)             ===
+            # ===           NAYA FIX (v23)             ===
             # ===  'DummyMessage' delete bug fix karo  ===
             # ============================================
-            if is_deep_link or not is_in_dm:
-                # Deep link hai YA channel me click hua -> Hamesha nayi photo DM me bhejo
+            if is_deep_link:
+                # Deep link hai -> Hamesha nayi photo DM me bhejo
                 await context.bot.send_photo(
                     chat_id=user_id, 
                     photo=poster_to_use, 
@@ -3135,7 +3136,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                     parse_mode='Markdown'
                 )
             else: 
-                # DM me hai, aur deep link nahi hai (yaani purane message par click kiya)
+                # Channel ya DM me click hua hai (real message)
                 try:
                     if not query.message.photo:
                         await query.message.delete() # Ab yeh safe hai, kyunki is_deep_link False hai
@@ -3192,11 +3193,11 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
         msg = msg.replace("{anime_name}", anime_name)
 
         # ============================================
-        # ===           NAYA FIX (v15)             ===
+        # ===           NAYA FIX (v23)             ===
         # ===  'DummyMessage' delete bug fix karo  ===
         # ============================================
-        if is_deep_link or not is_in_dm:
-            # Deep link hai YA channel me click hua -> Hamesha nayi photo DM me bhejo
+        if is_deep_link:
+            # Deep link hai -> Hamesha nayi photo DM me bhejo
             await context.bot.send_photo(
                 chat_id=user_id, 
                 photo=anime_doc['poster_id'], 
