@@ -1163,7 +1163,7 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         
         # ============================================
         # ===           NAYA FIX (v13)             ===
-        # ===     _id ko link me use karo        ===
+        # ===     _id ko link me use karo          ===
         # ============================================
         anime_id = str(anime_doc['_id'])
         # ============================================
@@ -1206,18 +1206,22 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         ep_num_check = context.user_data.get('ep_num')
         season_name_check = context.user_data.get('season_name')
         
-        # NAYA FIX (v13): Use anime_id instead of anime_name in callback
+        # ============================================
+        # ===           NAYA FIX (v16)             ===
+        # ===    Extra underscore ('_') hatao      ===
+        # ============================================
         if not ep_num_check and season_name_check: # Season Post
-            dl_callback_data = f"dl_{anime_id}__{season_name_check}"
+            dl_callback_data = f"dl{anime_id}__{season_name_check}"
         else: # Episode Post
-            dl_callback_data = f"dl_{anime_id}__{season_name_check}__{ep_num_check}" 
+            dl_callback_data = f"dl{anime_id}__{season_name_check}__{ep_num_check}" 
+        # ============================================
             
         donate_url = f"https://t.me/{bot_username}?start=donate" 
         subscribe_url = f"https://t.me/{bot_username}?start=subscribe"
         
         backup_url = links.get('backup') or "https://t.me/"
         support_url = links.get('support') or "https://t.me/"
-            
+                
         btn_backup = InlineKeyboardButton("Backup", url=backup_url)
         btn_donate = InlineKeyboardButton("Donate", url=donate_url)
         btn_support = InlineKeyboardButton("Support", url=support_url)
@@ -1755,7 +1759,7 @@ async def generate_link_final_link(update: Update, context: ContextTypes.DEFAULT
     
     # ============================================
     # ===           NAYA FIX (v13)             ===
-    # ===     _id ko link me use karo        ===
+    # ===     _id ko link me use karo          ===
     # ============================================
     anime_doc = animes_collection.find_one({"name": anime_name})
     if not anime_doc:
@@ -1771,7 +1775,12 @@ async def generate_link_final_link(update: Update, context: ContextTypes.DEFAULT
     if ep_num.startswith("S__"):
         season_name_for_link = ep_num.replace("S__", "")
         # This is a Season Link
-        dl_callback_data = f"dl_{anime_id}__{season_name_for_link}" # NAYA (v13): Use ID
+        # ============================================
+        # ===           NAYA FIX (v16)             ===
+        # ===    Extra underscore ('_') hatao      ===
+        # ============================================
+        dl_callback_data = f"dl{anime_id}__{season_name_for_link}" # NAYA (v13): Use ID
+        # ============================================
         caption_template = config.get("messages", {}).get("gen_link_caption_season", "...")
         download_url = f"https://t.me/{bot_username}?start={dl_callback_data}"
         
@@ -1782,7 +1791,12 @@ async def generate_link_final_link(update: Update, context: ContextTypes.DEFAULT
     else:
         # This is an Episode Link
         season_name = context.user_data['season_name']
-        dl_callback_data = f"dl_{anime_id}__{season_name}__{ep_num}" # NAYA (v13): Use ID
+        # ============================================
+        # ===           NAYA FIX (v16)             ===
+        # ===    Extra underscore ('_') hatao      ===
+        # ============================================
+        dl_callback_data = f"dl{anime_id}__{season_name}__{ep_num}" # NAYA (v13): Use ID
+        # ============================================
         caption_template = config.get("messages", {}).get("gen_link_caption_ep", "...")
         download_url = f"https://t.me/{bot_username}?start={dl_callback_data}"
         
@@ -1800,7 +1814,6 @@ async def generate_link_final_link(update: Update, context: ContextTypes.DEFAULT
     
     context.user_data.clear()
     return ConversationHandler.END
-
 
 # --- Conversation: Remove Subscription ---
 async def remove_sub_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
