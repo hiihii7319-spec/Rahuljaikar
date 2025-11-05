@@ -2935,7 +2935,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
         
         # ============================================
         # ===           NAYA FIX (v14)             ===
-        # ===  Payload ko ID se check karo, fir Name se   ===
+        # ===  Payload ko ID se check karo, fir Name se  ===
         # ============================================
         anime_key = parts[0].replace("dl_", "") # Is this an ID or a Name?
         season_name = parts[1] if len(parts) > 1 else None
@@ -3077,7 +3077,12 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             season_poster_id = anime_doc.get("seasons", {}).get(season_name, {}).get("_poster_id")
             poster_to_use = season_poster_id or anime_doc['poster_id'] 
             
-            if not is_in_dm:
+            # ============================================
+            # ===           NAYA FIX (v15)             ===
+            # ===  'DummyMessage' delete bug fix karo  ===
+            # ============================================
+            if is_deep_link or not is_in_dm:
+                # Deep link hai YA channel me click hua -> Hamesha nayi photo DM me bhejo
                 await context.bot.send_photo(
                     chat_id=user_id, 
                     photo=poster_to_use, 
@@ -3085,38 +3090,41 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='Markdown'
                 )
-            else:
-                    try:
-                        if not query.message.photo:
-                                await query.message.delete()
-                                await context.bot.send_photo(
-                                    chat_id=user_id,
-                                    photo=poster_to_use, 
-                                    caption=msg,
-                                    reply_markup=InlineKeyboardMarkup(keyboard),
-                                    parse_mode='Markdown'
-                                )
-                        else:
-                            await query.edit_message_media(
-                                media=InputMediaPhoto(media=poster_to_use, caption=msg, parse_mode='Markdown'),
-                                reply_markup=InlineKeyboardMarkup(keyboard)
-                            )
-                    except BadRequest as e:
-                        if "Message is not modified" not in str(e):
-                                logger.warning(f"DL Handler Case 2: Media edit fail, fallback to caption: {e}")
-                                await query.edit_message_caption( 
-                                    caption=msg,
-                                    reply_markup=InlineKeyboardMarkup(keyboard),
-                                    parse_mode='Markdown'
-                                )
-                    except Exception as e:
-                        logger.error(f"DL Handler Case 2: Media edit critical fail: {e}")
+            else: 
+                # DM me hai, aur deep link nahi hai (yaani purane message par click kiya)
+                try:
+                    if not query.message.photo:
+                        await query.message.delete() # Ab yeh safe hai, kyunki is_deep_link False hai
+                        await context.bot.send_photo(
+                            chat_id=user_id,
+                            photo=poster_to_use, 
+                            caption=msg,
+                            reply_markup=InlineKeyboardMarkup(keyboard),
+                            parse_mode='Markdown'
+                        )
+                    else:
+                        await query.edit_message_media(
+                            media=InputMediaPhoto(media=poster_to_use, caption=msg, parse_mode='Markdown'),
+                            reply_markup=InlineKeyboardMarkup(keyboard)
+                        )
+                except BadRequest as e:
+                    if "Message is not modified" not in str(e):
+                        logger.warning(f"DL Handler Case 2: Media edit fail, fallback to caption: {e}")
                         await query.edit_message_caption( 
                             caption=msg,
                             reply_markup=InlineKeyboardMarkup(keyboard),
                             parse_mode='Markdown'
                         )
+                except Exception as e:
+                    logger.error(f"DL Handler Case 2: Media edit critical fail: {e}")
+                    # Fallback to just editing caption
+                    await query.edit_message_caption( 
+                        caption=msg,
+                        reply_markup=InlineKeyboardMarkup(keyboard),
+                        parse_mode='Markdown'
+                    )
             return
+            # ============================================
             
         # Case 1: Sirf Anime click hua hai -> Season Bhejo
         seasons = anime_doc.get("seasons", {})
@@ -3139,7 +3147,12 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
         msg = config.get("messages", {}).get("user_dl_select_season", "Select season")
         msg = msg.replace("{anime_name}", anime_name)
 
-        if not is_in_dm:
+        # ============================================
+        # ===           NAYA FIX (v15)             ===
+        # ===  'DummyMessage' delete bug fix karo  ===
+        # ============================================
+        if is_deep_link or not is_in_dm:
+            # Deep link hai YA channel me click hua -> Hamesha nayi photo DM me bhejo
             await context.bot.send_photo(
                 chat_id=user_id, 
                 photo=anime_doc['poster_id'], 
@@ -3148,22 +3161,24 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                 parse_mode='Markdown'
             )
         else: 
-                if not query.message.photo:
-                    await query.message.delete()
-                    await context.bot.send_photo(
-                        chat_id=user_id,
-                        photo=anime_doc['poster_id'], 
-                        caption=msg,
-                        reply_markup=InlineKeyboardMarkup(keyboard),
-                        parse_mode='Markdown'
-                    )
-                else:
-                    await query.edit_message_caption(
-                        caption=msg,
-                        reply_markup=InlineKeyboardMarkup(keyboard),
-                        parse_mode='Markdown'
-                    )
+            # DM me hai, aur deep link nahi hai (yaani purane message par click kiya)
+            if not query.message.photo:
+                await query.message.delete() # Safe hai
+                await context.bot.send_photo(
+                    chat_id=user_id,
+                    photo=anime_doc['poster_id'], 
+                    caption=msg,
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='Markdown'
+                )
+            else:
+                await query.edit_message_caption(
+                    caption=msg,
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='Markdown'
+                )
         return
+        # ============================================
 
     except Exception as e:
         logger.error(f"Download button handler me error: {e}", exc_info=True)
