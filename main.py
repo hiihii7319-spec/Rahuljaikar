@@ -1,9 +1,9 @@
 # ============================================
-# ===     COMPLETE FINAL FIX (v11)         ===
+# ===       COMPLETE FINAL FIX (v12)       ===
 # ============================================
-# ===     (BASED ON USER'S V10 FILE)       ===
-# ===     (ADMIN PANEL LAYOUT FIX)       ===
-# ===     (GEN-LINK FLOW & BACK BTN FIX) ===
+# ===   (FIX: Add Episode state handling)  ===
+# ===   (FIX: Update Photo state handling) ===
+# ===   (FIX: Admin layout button order)   ===
 # ============================================
 import os
 import logging
@@ -785,41 +785,50 @@ async def get_episode_number(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return E_GET_480P
 
 async def get_480p_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await _save_episode_file_helper(update, context, "480p")
+    # NAYA FIX (v12): Check return value
+    if not await _save_episode_file_helper(update, context, "480p"):
+        return E_GET_480P # Agar fail hua (e.g., text bheja), toh isi state par raho
     await update.message.reply_text("Ab **720p** quality ki video file bhejein.\nYa /skip type karein.", parse_mode='Markdown')
     return E_GET_720P
 
 async def skip_480p(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ 480p skip kar diya.\n\n"
-                                        "Ab **720p** quality ki video file bhejein.\n"
-                                        "Ya /skip type karein.", parse_mode='Markdown')
+                                    "Ab **720p** quality ki video file bhejein.\n"
+                                    "Ya /skip type karein.", parse_mode='Markdown')
     return E_GET_720P
 
 async def get_720p_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await _save_episode_file_helper(update, context, "720p")
+    # NAYA FIX (v12): Check return value
+    if not await _save_episode_file_helper(update, context, "720p"):
+        return E_GET_720P # Agar fail hua, toh isi state par raho
     await update.message.reply_text("Ab **1080p** quality ki video file bhejein.\nYa /skip type karein.", parse_mode='Markdown')
     return E_GET_1080P
 
 async def skip_720p(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ 720p skip kar diya.\n\n"
-                                        "Ab **1080p** quality ki video file bhejein.\n"
-                                        "Ya /skip type karein.", parse_mode='Markdown')
+                                    "Ab **1080p** quality ki video file bhejein.\n"
+                                    "Ya /skip type karein.", parse_mode='Markdown')
     return E_GET_1080P
 
 async def get_1080p_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await _save_episode_file_helper(update, context, "1080p")
+    # NAYA FIX (v12): Check return value
+    if not await _save_episode_file_helper(update, context, "1080p"):
+        return E_GET_1080P # Agar fail hua, toh isi state par raho
     await update.message.reply_text("Ab **4K** quality ki video file bhejein.\nYa /skip type karein.", parse_mode='Markdown')
     return E_GET_4K
 
 async def skip_1080p(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ 1080p skip kar diya.\n\n"
-                                        "Ab **4K** quality ki video file bhejein.\n"
-                                        "Ya /skip type karein.", parse_mode='Markdown')
+                                    "Ab **4K** quality ki video file bhejein.\n"
+                                    "Ya /skip type karein.", parse_mode='Markdown')
     return E_GET_4K
 
 async def get_4k_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # NAYA FIX (v12): Check return value
     if await _save_episode_file_helper(update, context, "4K"):
         await update.message.reply_text("✅ **Success!** Saari qualities save ho gayi hain.", parse_mode='Markdown')
+    else:
+        return E_GET_4K # Agar fail hua, toh isi state par raho
     
     await add_content_menu(update, context) # NAYA (v10): Go back to menu
     context.user_data.clear()
@@ -827,7 +836,7 @@ async def get_4k_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def skip_4k(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ 4K skip kar diya.\n\n"
-                                        "✅ **Success!** Episode save ho gaya hai.", parse_mode='Markdown')
+                                    "✅ **Success!** Episode save ho gaya hai.", parse_mode='Markdown')
     
     await add_content_menu(update, context) # NAYA (v10): Go back to menu
     context.user_data.clear()
@@ -855,7 +864,7 @@ async def set_price_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     await query.edit_message_text("Subscription ka **Price** bhejo.\n(Example: 50 INR)\n\n/cancel - Cancel.", 
-                                      reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_sub_settings")]]))
+                                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_sub_settings")]]))
     return CP_GET_PRICE
 async def set_price_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     price_text = update.message.text
@@ -1565,6 +1574,11 @@ async def update_photo_get_poster(update: Update, context: ContextTypes.DEFAULT_
     await query.edit_message_text(f"Aapne **{target_name}** select kiya hai.\n\nAb naya **Poster (Photo)** bhejo.\n\n/cancel - Cancel.")
     return UP_GET_POSTER
 
+# NAYA FIX (v12): Galti se text bhejne par handle karo
+async def update_photo_invalid_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Ye photo nahi hai. Please ek photo bhejo ya /cancel karo.")
+    return UP_GET_POSTER # Isi state par raho
+
 async def update_photo_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.photo:
         await update.message.reply_text("Ye photo nahi hai. Please ek photo bhejo.")
@@ -1772,7 +1786,7 @@ async def remove_sub_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     await query.edit_message_text("Aap kis user ka subscription remove karna chahte hain?\n\nUs user ki **Telegram User ID** bhejein.\n\n/cancel - Cancel.",
-                                      reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_sub_settings")]]))
+                                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_sub_settings")]]))
     return RS_GET_ID
 async def remove_sub_get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -1834,7 +1848,7 @@ async def co_admin_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
     await query.edit_message_text("Naye Co-Admin ki **Telegram User ID** bhejein.\n\n/cancel - Cancel.",
-                                      reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_admin_settings")]]))
+                                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_admin_settings")]]))
     return CA_GET_ID
 async def co_admin_add_get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -2731,7 +2745,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
             logger.error(f"Log channel ({LOG_CHANNEL_ID}) fetch nahi kar paya: {e}")
             log_url = "https://t.me/"
 
-        # NAYA (v11) FIX: User ke request ke mutabik naya layout
+        # NAYA (v12) FIX: User ke request ke mutabik naya layout (Admin Settings neeche)
         keyboard = [
             [InlineKeyboardButton("➕ Add Content", callback_data="admin_menu_add_content")],
             [
@@ -2748,11 +2762,11 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
                 InlineKeyboardButton("🖼️ Update Photo", callback_data="admin_update_photo"),
                 InlineKeyboardButton("🔗 Generate Link", callback_data="admin_gen_link")
             ],
-            [InlineKeyboardButton("🛠️ Admin Settings", callback_data="admin_menu_admin_settings")],
             [
                 InlineKeyboardButton("👥 Subscribed Users", callback_data="admin_list_subs"),
                 InlineKeyboardButton("🔔 Subscription Log", url=log_url)
-            ]
+            ],
+            [InlineKeyboardButton("🛠️ Admin Settings", callback_data="admin_menu_admin_settings")] # FIX: Last row
         ]
         admin_menu_text = f"Salaam, Admin Boss! 👑\nAapka control panel taiyyar hai."
     
@@ -3265,6 +3279,7 @@ def main():
                 CallbackQueryHandler(add_episode_show_anime_list, pattern="^addep_page_") 
             ], 
             E_GET_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_episode_number)],
+            # NAYA FIX (v12): filters.ALL ko rakha hai, lekin logic functions (get_480p_file etc.) ab error handle karte hain
             E_GET_480P: [MessageHandler(filters.ALL & ~filters.COMMAND, get_480p_file), CommandHandler("skip", skip_480p)],
             E_GET_720P: [MessageHandler(filters.ALL & ~filters.COMMAND, get_720p_file), CommandHandler("skip", skip_720p)],
             E_GET_1080P: [MessageHandler(filters.ALL & ~filters.COMMAND, get_1080p_file), CommandHandler("skip", skip_1080p)],
@@ -3384,7 +3399,11 @@ def main():
                 # NAYA (v10) BUG FIX: Back button ko state me add karo
                 CallbackQueryHandler(update_photo_show_anime_list, pattern="^upphoto_page_") 
             ],
-            UP_GET_POSTER: [MessageHandler(filters.PHOTO, update_photo_save)]
+            # NAYA FIX (v12): Invalid input ko handle karo
+            UP_GET_POSTER: [
+                MessageHandler(filters.PHOTO, update_photo_save),
+                MessageHandler(filters.ALL & ~filters.COMMAND & ~filters.PHOTO, update_photo_invalid_input)
+            ]
         },
         fallbacks=global_fallbacks + admin_menu_fallback,
         allow_reentry=True
@@ -3402,7 +3421,7 @@ def main():
                 CallbackQueryHandler(generate_link_select_season, pattern="^genlink_anime_")
             ],
             GL_GET_SEASON: [
-                CallbackQueryHandler(generate_link_select_episode, pattern="^genlink_season_"),
+    CallbackQueryHandler(generate_link_select_episode, pattern="^genlink_season_"),
                 CallbackQueryHandler(generate_link_show_anime_list, pattern="^genlink_page_") # Back from Ep list to Anime list
             ],
             GL_GET_EPISODE: [
