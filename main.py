@@ -2618,7 +2618,7 @@ async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TY
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Smart /start command (v22)"""
+    """Smart /start command (v23)"""
     user = update.effective_user
     user_id, first_name = user.id, user.first_name
     logger.info(f"User {user_id} ({first_name}) ne /start dabaya.")
@@ -2652,12 +2652,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     
     # ============================================
-    # ===           NAYA FIX (v22)             ===
-    # === /start hamesha User Menu dikhayega ===
-    # === Admin panel ab /menu par hai       ===
+    # ===           NAYA FIX (v23)             ===
+    # === /start ab sirf welcome karega      ===
     # ============================================
-    logger.info("Koi deep link nahi. User menu dikha raha hoon.")
-    await show_user_menu(update, context) # Admin panel nahi, user menu dikhao
+    logger.info("Koi deep link nahi. Sirf welcome message bhej raha hoon.")
+    # Check karo ki admin hai ya user
+    if await is_co_admin(user_id):
+        await update.message.reply_text(f"Salaam, Admin! Admin panel ke liye /menu use karein.")
+    else:
+        await update.message.reply_text(f"Salaam, {first_name}! Apna user menu dekhne ke liye /subscription use karein.")
     
 async def show_user_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, from_callback: bool = False):
     """User ka main menu (/menu)"""
@@ -3660,7 +3663,7 @@ def main():
     bot_app.add_handler(admin_approve_conv)
 
     # Standard commands
-    # Standard commands (v22 RE-MAPPED)
+   # Standard commands (v22 RE-MAPPED)
     bot_app.add_handler(CommandHandler("start", start_command)) # Start hamesha user menu/deep link
     bot_app.add_handler(CommandHandler("subscription", subscription_command)) # Naya command user menu ke liye
     bot_app.add_handler(CommandHandler("menu", menu_command)) # /menu ab admin panel hai
