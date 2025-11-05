@@ -2639,8 +2639,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         logger.info(f"User {user_id} ne deep link use kiya: {payload}")
         
-        # Check for 'dl_' payload FIRST, kyunki woh spaces include kar sakta hai
-        if payload.startswith("dl_"): # NAYA (v10): Download deep link
+        # ============================================
+        # ===           NAYA FIX (v16)             ===
+        # ===  'dl_' ke bajaye 'dl' check karo     ===
+        # ============================================
+        if payload.startswith("dl"): # NAYA (v10): Download deep link
             await handle_deep_link_download(user, context, payload)
             return
         elif payload == "donate":
@@ -2655,7 +2658,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await admin_command(update, context) 
     else:
         logger.info("User detected. User menu dikha raha hoon.")
-        await menu_command(update, context) 
+        await menu_command(update, context)
 
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from_callback: bool = False):
     """User ka main menu (/menu)"""
@@ -2882,9 +2885,10 @@ async def placeholder_button_handler(update: Update, context: ContextTypes.DEFAU
         await query.answer(f"Button '{query.data}' jald aa raha hai...", show_alert=True)
         
 # --- User Download Handler (CallbackQuery) ---
+# --- User Download Handler (CallbackQuery) ---
 async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Callback data 'dl_' se shuru hone wale sabhi buttons ko handle karega.
+    Callback data 'dl' se shuru hone wale sabhi buttons ko handle karega.
     """
     query = update.callback_query
     user = query.from_user
@@ -2947,10 +2951,10 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
         parts = query.data.split('__')
         
         # ============================================
-        # ===           NAYA FIX (v14)             ===
-        # ===  Payload ko ID se check karo, fir Name se  ===
+        # ===           NAYA FIX (v16)             ===
+        # ===  'dl_' ke bajaye 'dl' se replace karo ===
         # ============================================
-        anime_key = parts[0].replace("dl_", "") # Is this an ID or a Name?
+        anime_key = parts[0].replace("dl", "") # Is this an ID or a Name?
         season_name = parts[1] if len(parts) > 1 else None
         ep_num = parts[2] if len(parts) > 2 else None
         
@@ -3080,9 +3084,9 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                 return
             
             sorted_eps = sorted(episode_keys, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
-            buttons = [InlineKeyboardButton(f"Episode {ep}", callback_data=f"dl_{anime_id_str}__{season_name}__{ep}") for ep in sorted_eps] # NAYA (v14): Use ID
+            buttons = [InlineKeyboardButton(f"Episode {ep}", callback_data=f"dl{anime_id_str}__{season_name}__{ep}") for ep in sorted_eps] # NAYA (v14): Use ID
             keyboard = build_grid_keyboard(buttons, 2)
-            keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data=f"dl_{anime_id_str}")]) # NAYA (v14): Use ID
+            keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data=f"dl{anime_id_str}")]) # NAYA (v14): Use ID
             
             msg = config.get("messages", {}).get("user_dl_select_episode", "Select episode")
             msg = msg.replace("{anime_name}", anime_name).replace("{season_name}", season_name)
@@ -3153,7 +3157,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             return
         
         sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
-        buttons = [InlineKeyboardButton(f"Season {s}", callback_data=f"dl_{anime_id_str}__{s}") for s in sorted_seasons] # NAYA (v14): Use ID
+        buttons = [InlineKeyboardButton(f"Season {s}", callback_data=f"dl{anime_id_str}__{s}") for s in sorted_seasons] # NAYA (v14): Use ID
         keyboard = build_grid_keyboard(buttons, 1) 
         keyboard.append([InlineKeyboardButton("⬅️ Back to Bot Menu", callback_data="user_back_menu")])
         
@@ -3647,7 +3651,7 @@ def main():
     bot_app.add_handler(CallbackQueryHandler(admin_reject_user, pattern="^admin_reject_"))
 
     # User Download Flow (Non-conversation)
-    bot_app.add_handler(CallbackQueryHandler(download_button_handler, pattern="^dl_"))
+    bot_app.add_handler(CallbackQueryHandler(download_button_handler, pattern="^dl"))
 
     # Placeholders
     bot_app.add_handler(CallbackQueryHandler(placeholder_button_handler, pattern="^user_check_sub$"))
