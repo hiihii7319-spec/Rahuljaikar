@@ -410,7 +410,7 @@ async def back_to_user_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_user_menu(update, context, from_callback=True) 
     return ConversationHandler.END
     
-    async def subscription_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def subscription_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """NAYA (v22): /subscription command ko handle karega"""
     logger.info(f"User {update.effective_user.id} ne /subscription dabaya.")
     await show_user_menu(update, context)
