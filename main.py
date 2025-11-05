@@ -1,9 +1,9 @@
 # ============================================
-# ===       COMPLETE FINAL FIX (v13)       ===
+# ===       COMPLETE FINAL FIX (v14)       ===
 # ============================================
+# === (FIX: Dual Link Handling ID & Name)  ===
 # ===   (FIX: Deep link space handling)    ===
 # ===   (FIX: Add Episode state handling)  ===
-# ===   (FIX: Update Photo state handling) ===
 # ============================================
 import os
 import logging
@@ -1163,7 +1163,7 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         
         # ============================================
         # ===           NAYA FIX (v13)             ===
-        # ===      _id ko link me use karo         ===
+        # ===     _id ko link me use karo        ===
         # ============================================
         anime_id = str(anime_doc['_id'])
         # ============================================
@@ -1755,7 +1755,7 @@ async def generate_link_final_link(update: Update, context: ContextTypes.DEFAULT
     
     # ============================================
     # ===           NAYA FIX (v13)             ===
-    # ===      _id ko link me use karo         ===
+    # ===     _id ko link me use karo        ===
     # ============================================
     anime_doc = animes_collection.find_one({"name": anime_name})
     if not anime_doc:
@@ -2818,6 +2818,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
             await query.answer()
     else:
         await update.message.reply_text(admin_menu_text, reply_markup=reply_markup, parse_mode='Markdown')
+
 async def admin_list_subs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer("Fetching user list...")
@@ -2933,26 +2934,31 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
         parts = query.data.split('__')
         
         # ============================================
-        # ===           NAYA FIX (v13)             ===
-        # ===  Payload ko ID se check karo, Name se  ===
-        # ===  nahi.                               ===
+        # ===           NAYA FIX (v14)             ===
+        # ===  Payload ko ID se check karo, fir Name se   ===
         # ============================================
-        anime_id_str = parts[0].replace("dl_", "")
+        anime_key = parts[0].replace("dl_", "") # Is this an ID or a Name?
         season_name = parts[1] if len(parts) > 1 else None
         ep_num = parts[2] if len(parts) > 2 else None
         
+        anime_doc = None
         try:
-            anime_doc = animes_collection.find_one({"_id": ObjectId(anime_id_str)})
-        except Exception as e:
-            logger.error(f"Invalid ObjectId {anime_id_str} deeplink me mila: {e}")
-            anime_doc = None # Taaki neeche not found handle ho
+            # 1. Pehle ObjectId se search karne ki koshish karo
+            anime_doc = animes_collection.find_one({"_id": ObjectId(anime_key)})
+        except Exception:
+            # 2. Agar woh fail ho (yaani woh ID nahi, naam hai), toh Name se search karo
+            logger.warning(f"ObjectId '{anime_key}' nahi mila. Name se search kar raha hoon...")
+            anime_doc = animes_collection.find_one({"name": anime_key})
         
         if not anime_doc:
+            # Dono methods fail ho gaye
+            logger.error(f"Anime '{anime_key}' na ID se mila na Name se.")
             msg = config.get("messages", {}).get("user_dl_anime_not_found", "Error")
             await context.bot.send_message(user_id, msg)
             return
             
-        anime_name = anime_doc['name'] # Ab anime_name ko use karo
+        anime_name = anime_doc['name'] # Get the real name for captions
+        anime_id_str = str(anime_doc['_id']) # Get the real ID for future buttons
         # ============================================
         
         # Case 3: Episode click hua hai -> Saare Files Bhejo
@@ -3061,9 +3067,9 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                 return
             
             sorted_eps = sorted(episode_keys, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
-            buttons = [InlineKeyboardButton(f"Episode {ep}", callback_data=f"dl_{anime_id_str}__{season_name}__{ep}") for ep in sorted_eps] # NAYA (v13): Use ID
+            buttons = [InlineKeyboardButton(f"Episode {ep}", callback_data=f"dl_{anime_id_str}__{season_name}__{ep}") for ep in sorted_eps] # NAYA (v14): Use ID
             keyboard = build_grid_keyboard(buttons, 2)
-            keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data=f"dl_{anime_id_str}")]) # NAYA (v13): Use ID
+            keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data=f"dl_{anime_id_str}")]) # NAYA (v14): Use ID
             
             msg = config.get("messages", {}).get("user_dl_select_episode", "Select episode")
             msg = msg.replace("{anime_name}", anime_name).replace("{season_name}", season_name)
@@ -3126,7 +3132,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             return
         
         sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
-        buttons = [InlineKeyboardButton(f"Season {s}", callback_data=f"dl_{anime_id_str}__{s}") for s in sorted_seasons] # NAYA (v13): Use ID
+        buttons = [InlineKeyboardButton(f"Season {s}", callback_data=f"dl_{anime_id_str}__{s}") for s in sorted_seasons] # NAYA (v14): Use ID
         keyboard = build_grid_keyboard(buttons, 1) 
         keyboard.append([InlineKeyboardButton("⬅️ Back to Bot Menu", callback_data="user_back_menu")])
         
@@ -3413,7 +3419,7 @@ def main():
                 CallbackQueryHandler(delete_episode_show_anime_list, pattern="^delep_page_"),
                 CallbackQueryHandler(delete_episode_select_season, pattern="^del_ep_anime_")
             ],
-            DE_GET_SEASON: [
+           DE_GET_SEASON: [
                 CallbackQueryHandler(delete_episode_select_episode, pattern="^del_ep_season_"),
                 # NAYA (v10) BUG FIX: Back button ko state me add karo
                 CallbackQueryHandler(delete_episode_show_anime_list, pattern="^delep_page_") 
@@ -3438,7 +3444,7 @@ def main():
             ],
             UP_GET_TARGET: [
                 CallbackQueryHandler(update_photo_get_poster, pattern="^upphoto_target_"),
-                # NAYA (v1I) BUG FIX: Back button ko state me add karo
+                # NAYA (v10) BUG FIX: Back button ko state me add karo
                 CallbackQueryHandler(update_photo_show_anime_list, pattern="^upphoto_page_") 
             ],
             # NAYA FIX (v12): Invalid input ko handle karo
@@ -3540,7 +3546,7 @@ def main():
             M_MENU_SUB: [CallbackQueryHandler(set_msg_start, pattern="^msg_edit_")],
             M_MENU_DL: [CallbackQueryHandler(set_msg_start, pattern="^msg_edit_")],
             M_MENU_POSTGEN: [CallbackQueryHandler(set_msg_start, pattern="^msg_edit_")],
-            M_MENU_GENLINK: [CallbackQueryHandler(set_msg_start, pattern="^msg_edit_")], # NAYA (v1Two-in-one shot)
+            M_MENU_GENLINK: [CallbackQueryHandler(set_msg_start, pattern="^msg_edit_")], # NAYA (v10)
             M_MENU_GEN: [CallbackQueryHandler(set_msg_start, pattern="^msg_edit_")],
             M_GET_MSG: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_msg_save)],
         },
@@ -3577,7 +3583,7 @@ def main():
     bot_app.add_handler(del_anime_conv)
     bot_app.add_handler(del_season_conv)
     bot_app.add_handler(del_episode_conv)
-    bot_app.add_handler(update_photo_conv) # NAYA (v1o)
+    bot_app.add_handler(update_photo_conv) # NAYA (v10)
     bot_app.add_handler(generate_link_conv) # NAYA (v11) FIX
     bot_app.add_handler(remove_sub_conv)
     bot_app.add_handler(add_co_admin_conv) 
