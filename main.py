@@ -98,22 +98,14 @@ async def get_config():
     
     # NAYA: Default messages ki poori list
     default_messages = {
-        # Subscription Flow
-        "user_sub_qr_error": "❌ **Error!** Subscription system abhi setup nahi hua hai. Admin se baat karein.",
-        "user_sub_qr_text": "**Subscription Plan**\n\n**Price:** {price}\n**Validity:** {days} days\n\nUpar diye gaye QR code par payment karein aur payment ka **screenshot** neeche 'Upload Screenshot' button dabake bhejein.",
-        "user_sub_ss_prompt": "Kripya apna payment screenshot yahan bhejein.\n\n/cancel - Cancel.",
-        "user_sub_ss_not_photo": "Ye photo nahi hai. Please ek screenshot photo bhejein ya /cancel karein.",
-        "user_sub_ss_error": "❌ **Error!** Admin tak screenshot nahi bhej paya. Kripya /support se contact karein.",
-        "sub_pending": "✅ **Screenshot Bhej Diya Gaya!**\n\nAdmin jald hi aapka payment check karke approve kar denge. Intezaar karein.",
-        "sub_approved": "🎉 **Congratulations!**\n\nAapka subscription approve ho gaya hai.\nAapka plan {days} din mein expire hoga ({expiry_date}).\n\n/menu se anime download karna shuru karein.",
-        "sub_rejected": "❌ **Payment Rejected**\n\nAapka payment screenshot reject kar diya gaya hai. Shayad screenshot galat tha ya clear nahi tha.\n\nKripya /support se contact karein ya dobara try karein.",
-        "user_sub_removed": "ℹ️ Aapka subscription admin ne remove kar diya hai.\n\n/menu se dobara subscribe kar sakte hain.",
+        # ... (Subscription Flow waise hi rahega) ...
         "user_already_subscribed": "✅ Aap pehle se subscribed hain!\n\n/menu dabake anime download karna shuru karein.",
         
         # Download Flow
         "user_dl_unsubscribed_alert": "❌ Access Denied! Subscribe karne ke liye DM check karein.",
         "user_dl_unsubscribed_dm": "**Subscription Plan**\n\n**Price:** {price}\n**Validity:** {days} days\n\nAapko download karne ke liye subscribe karna hoga.\n\nIs QR code par payment karein aur payment ka **screenshot** bhejne ke liye, bot ko DM mein /menu likhein aur 'Subscribe Now' -> 'Upload Screenshot' button dabayein.",
         "user_dl_dm_alert": "✅ Check your DM (private chat) with me!",
+        "user_dl_checking_sub": "⏳ Checking subscription...", # NAYA (v19)
         "user_dl_anime_not_found": "❌ Error: Anime nahi mila.",
         "user_dl_file_error": "❌ Error! {quality} file nahi bhej paya. Please try again.",
         "user_dl_blocked_error": "❌ Error! File nahi bhej paya. Aapne bot ko block kiya hua hai.",
@@ -131,11 +123,21 @@ async def get_config():
         "user_donate_qr_text": "❤️ **Support Us!**\n\nAgar aapko hamara kaam pasand aata hai, toh aap humein support kar sakte hain.",
         "donate_thanks": "❤️ Support karne ke liye shukriya!",
         
-        # NAYA (v10): Post Generator Messages
+        # Post Generator Messages
+        # ============================================
+        # ===           NAYA FIX (v23)             ===
+        # ============================================
+        "post_gen_anime_caption": "✅ **{anime_name}**\n\n**📖 Synopsis:**\n{description}\n\nNeeche [Download] button dabake download karein!", # NAYA
+        # ============================================
         "post_gen_season_caption": "✅ **{anime_name}**\n**[ S{season_name} ]**\n\n**📖 Synopsis:**\n{description}\n\nNeeche [Download] button dabake download karein!",
         "post_gen_episode_caption": "✨ **Episode {ep_num} Added** ✨\n\n🎬 **Anime:** {anime_name}\n➡️ **Season:** {season_name}\n\nNeeche [Download] button dabake download karein!",
         
-        # NAYA (v10): Generate Link Messages
+        # Generate Link Messages
+        # ============================================
+        # ===           NAYA FIX (v23)             ===
+        # ============================================
+        "gen_link_caption_anime": "🔗 **Anime Link Generated** 🔗\n\n**Anime:** {anime_name}\n\nYeh raha aapka **Direct Download Link**:\n`{download_url}`\n\nIs link ko group/channel mein share karein. Sirf **subscribed users** hi isse download kar payenge.", # NAYA
+        # ============================================
         "gen_link_caption_ep": "🔗 **Download Link Generated** 🔗\n\n**Anime:** {anime_name}\n**Season:** {season_name}\n**Episode:** {ep_num}\n\nYeh raha aapka **Direct Download Link**:\n`{download_url}`\n\nIs link ko group/channel mein share karein. Sirf **subscribed users** hi isse download kar payenge.",
         "gen_link_caption_season": "🔗 **Season Link Generated** 🔗\n\n**Anime:** {anime_name}\n**Season:** {season_name}\n\nYeh raha aapka **Direct Download Link**:\n`{download_url}`\n\nIs link ko group/channel mein share karein. Sirf **subscribed users** hi isse download kar payenge."
     }
@@ -1061,6 +1063,11 @@ async def post_gen_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     keyboard = [
+        # ============================================
+        # ===           NAYA FIX (v23)             ===
+        # ============================================
+        [InlineKeyboardButton("✍️ Complete Anime Post", callback_data="post_gen_anime")],
+        # ============================================
         [InlineKeyboardButton("✍️ Season Post", callback_data="post_gen_season")],
         [InlineKeyboardButton("✍️ Episode Post", callback_data="post_gen_episode")],
         [InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]
@@ -1108,6 +1115,18 @@ async def post_gen_select_season(update: Update, context: ContextTypes.DEFAULT_T
     anime_name = query.data.replace("post_anime_", "")
     context.user_data['anime_name'] = anime_name
     anime_doc = animes_collection.find_one({"name": anime_name})
+    
+    # ============================================
+    # ===           NAYA FIX (v23)             ===
+    # ============================================
+    if context.user_data['post_type'] == 'post_gen_anime':
+        # Agar "Complete Anime Post" hai, toh season mat poocho
+        context.user_data['season_name'] = None
+        context.user_data['ep_num'] = None 
+        await generate_post_ask_chat(update, context) 
+        return PG_GET_CHAT
+    # ============================================
+
     seasons = anime_doc.get("seasons", {})
     if not seasons:
         await query.edit_message_text(f"❌ **Error!** '{anime_name}' mein koi season nahi hai.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="admin_menu")]]))
@@ -1174,7 +1193,23 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         
         anime_id = str(anime_doc['_id'])
         
-        if not ep_num and season_name:
+        # ============================================
+        # ===           NAYA FIX (v23)             ===
+        # ============================================
+        post_type = context.user_data.get('post_type')
+        
+        if post_type == 'post_gen_anime':
+            # --- YEH COMPLETE ANIME POST HAI ---
+            context.user_data['is_episode_post'] = False
+            poster_id = anime_doc['poster_id']
+            description = anime_doc.get('description', '')
+            
+            caption_template = config.get("messages", {}).get("post_gen_anime_caption", "...")
+            caption = caption_template.replace("{anime_name}", anime_name) \
+                                        .replace("{description}", description if description else "")
+        # ============================================
+
+        elif not ep_num and season_name:
             # --- YEH SEASON POST HAI ---
             context.user_data['is_episode_post'] = False
             
@@ -1209,14 +1244,16 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         
         links = config.get('links', {})
         
-        ep_num_check = context.user_data.get('ep_num')
-        season_name_check = context.user_data.get('season_name')
-        
-        # (v17 Fix: Extra underscore ('_') hatao)
-        if not ep_num_check and season_name_check: # Season Post
-            dl_callback_data = f"dl{anime_id}__{season_name_check}"
+        # ============================================
+        # ===           NAYA FIX (v23)             ===
+        # ============================================
+        if post_type == 'post_gen_anime':
+            dl_callback_data = f"dl{anime_id}" # Sirf Anime ID
+        elif not ep_num and season_name: # Season Post
+            dl_callback_data = f"dl{anime_id}__{season_name}"
         else: # Episode Post
-            dl_callback_data = f"dl{anime_id}__{season_name_check}__{ep_num_check}" 
+            dl_callback_data = f"dl{anime_id}__{season_name}__{ep_num}" 
+        # ============================================
             
         donate_url = f"https://t.me/{bot_username}?start=donate" 
         subscribe_url = f"https://t.me/{bot_username}?start=subscribe"
@@ -1228,13 +1265,9 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         btn_donate = InlineKeyboardButton("Donate", url=donate_url)
         btn_support = InlineKeyboardButton("Support", url=support_url)
         
-        # ============================================
-        # ===           NAYA FIX (v18)             ===
-        # ===   Callback_data ko URL me badlo      ===
-        # ============================================
+        # (v18 Fix: Callback_data ko URL me badlo)
         download_url = f"https://t.me/{bot_username}?start={dl_callback_data}"
         btn_download = InlineKeyboardButton("Download", url=download_url) 
-        # ============================================
 
         btn_subscribe = InlineKeyboardButton("Subscribe Now", url=subscribe_url)
         
@@ -1242,7 +1275,7 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
             # Episode post: Sirf Subscribe aur Download
             keyboard = [[btn_subscribe, btn_download]]
         else:
-            # Season post: Poora keyboard
+            # Season/Anime post: Poora keyboard
             keyboard = [
                 [btn_subscribe, btn_download], 
                 [btn_backup, btn_donate, btn_support]
@@ -1645,6 +1678,11 @@ async def generate_link_start(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     
     keyboard = [
+        # ============================================
+        # ===           NAYA FIX (v23)             ===
+        # ============================================
+        [InlineKeyboardButton("🔗 Generate Anime Link", callback_data="genlink_type_anime")],
+        # ============================================
         [InlineKeyboardButton("🔗 Generate Episode Link", callback_data="genlink_type_episode")],
         [InlineKeyboardButton("🔗 Generate Season Link", callback_data="genlink_type_season")],
         [InlineKeyboardButton("⬅️ Back", callback_data="admin_menu")]
@@ -1697,6 +1735,34 @@ async def generate_link_select_season(update: Update, context: ContextTypes.DEFA
     anime_name = query.data.replace("genlink_anime_", "")
     context.user_data['anime_name'] = anime_name
     anime_doc = animes_collection.find_one({"name": anime_name})
+    
+    link_type = context.user_data.get('link_type')
+    
+    # ============================================
+    # ===           NAYA FIX (v23)             ===
+    # ============================================
+    if link_type == 'anime':
+        # Agar "Complete Anime Link" hai, toh season mat poocho, direct link banao
+        bot_username = (await context.bot.get_me()).username
+        config = await get_config()
+        anime_id = str(anime_doc['_id'])
+        
+        dl_callback_data = f"dl{anime_id}" # Sirf Anime ID
+        caption_template = config.get("messages", {}).get("gen_link_caption_anime", "...")
+        download_url = f"https://t.me/{bot_username}?start={dl_callback_data}"
+        
+        caption = caption_template.replace("{anime_name}", anime_name) \
+                                    .replace("{download_url}", download_url)
+
+        await query.edit_message_text(
+            caption,
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]])
+        )
+        context.user_data.clear()
+        return ConversationHandler.END
+    # ============================================
+
     seasons = anime_doc.get("seasons", {})
     
     if not seasons:
@@ -1705,8 +1771,6 @@ async def generate_link_select_season(update: Update, context: ContextTypes.DEFA
         
     sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
     buttons = []
-    
-    link_type = context.user_data.get('link_type')
     
     # NAYA (v11) FIX: Back button ko pagination par bhejo
     current_page = context.user_data.get('current_page', 0)
@@ -2887,6 +2951,7 @@ async def placeholder_button_handler(update: Update, context: ContextTypes.DEFAU
         await query.answer(f"Button '{query.data}' jald aa raha hai...", show_alert=True)
 
 # --- User Download Handler (CallbackQuery) ---
+# --- User Download Handler (CallbackQuery) ---
 async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Callback data 'dl' se shuru hone wale sabhi buttons ko handle karega.
@@ -2922,7 +2987,8 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
         
         # Step 2: "Checking..." message bhejo (Sabhi cases me)
         try:
-            checking_msg = await context.bot.send_message(chat_id=user_id, text="⏳ Checking subscription...")
+            checking_text = config.get("messages", {}).get("user_dl_checking_sub", "⏳ Checking subscription...")
+            checking_msg = await context.bot.send_message(chat_id=user_id, text=checking_text)
             await asyncio.sleep(1.5) # 1.5 second ka delay
         except Exception as e:
             logger.error(f"User {user_id} ko 'Checking...' message nahi bhej paya. Shayad bot block hai? Error: {e}")
@@ -3242,6 +3308,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             else:
                     await context.bot.send_message(user_id, msg)
         except Exception: pass
+
         
 
 # --- Error Handler ---
@@ -3431,8 +3498,9 @@ def main():
     post_gen_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(post_gen_menu, pattern="^admin_post_gen$")], 
         states={
-            PG_MENU: [CallbackQueryHandler(post_gen_select_anime, pattern="^post_gen_season$|^post_gen_episode$")], 
+            PG_MENU: [CallbackQueryHandler(post_gen_select_anime, pattern="^post_gen_season$|^post_gen_episode$|^post_gen_anime$")], # v23 FIX
             PG_GET_ANIME: [
+    ...
                 CallbackQueryHandler(post_gen_show_anime_list, pattern="^postgen_page_"),
                 CallbackQueryHandler(post_gen_select_season, pattern="^post_anime_")
             ], 
@@ -3530,9 +3598,10 @@ def main():
         entry_points=[CallbackQueryHandler(generate_link_start, pattern="^admin_gen_link$")],
         states={
             GL_START: [
-                CallbackQueryHandler(generate_link_select_type, pattern="^genlink_type_")
+                CallbackQueryHandler(generate_link_select_type, pattern="^genlink_type_episode$|^genlink_type_season$|^genlink_type_anime$") # v23 FIX
             ],
             GL_GET_ANIME: [
+    ...
                 CallbackQueryHandler(generate_link_show_anime_list, pattern="^genlink_page_"),
                 CallbackQueryHandler(generate_link_select_season, pattern="^genlink_anime_")
             ],
