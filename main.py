@@ -1,9 +1,9 @@
 # ============================================
-# ===       COMPLETE FINAL FIX (v14)       ===
+# ===       COMPLETE FINAL FIX (v23)       ===
 # ============================================
-# === (FIX: Dual Link Handling ID & Name)  ===
-# ===   (FIX: Deep link space handling)    ===
-# ===   (FIX: Add Episode state handling)  ===
+# === (FIX: Crash on Deep Link 'delete')   ===
+# === (FIX: Command Remapping /start)      ===
+# === (FEAT: Add "Complete Anime" Post)    ===
 # ============================================
 import os
 import logging
@@ -98,7 +98,16 @@ async def get_config():
     
     # NAYA: Default messages ki poori list
     default_messages = {
-        # ... (Subscription Flow waise hi rahega) ...
+        # Subscription Flow
+        "user_sub_qr_error": "❌ **Error!** Subscription system abhi setup nahi hua hai. Admin se baat karein.",
+        "user_sub_qr_text": "**Subscription Plan**\n\n**Price:** {price}\n**Validity:** {days} days\n\nUpar diye gaye QR code par payment karein aur payment ka **screenshot** neeche 'Upload Screenshot' button dabake bhejein.",
+        "user_sub_ss_prompt": "Kripya apna payment screenshot yahan bhejein.\n\n/cancel - Cancel.",
+        "user_sub_ss_not_photo": "Ye photo nahi hai. Please ek screenshot photo bhejein ya /cancel karein.",
+        "user_sub_ss_error": "❌ **Error!** Admin tak screenshot nahi bhej paya. Kripya /support se contact karein.",
+        "sub_pending": "✅ **Screenshot Bhej Diya Gaya!**\n\nAdmin jald hi aapka payment check karke approve kar denge. Intezaar karein.",
+        "sub_approved": "🎉 **Congratulations!**\n\nAapka subscription approve ho gaya hai.\nAapka plan {days} din mein expire hoga ({expiry_date}).\n\n/menu se anime download karna shuru karein.",
+        "sub_rejected": "❌ **Payment Rejected**\n\nAapka payment screenshot reject kar diya gaya hai. Shayad screenshot galat tha ya clear nahi tha.\n\nKripya /support se contact karein ya dobara try karein.",
+        "user_sub_removed": "ℹ️ Aapka subscription admin ne remove kar diya hai.\n\n/menu se dobara subscribe kar sakte hain.",
         "user_already_subscribed": "✅ Aap pehle se subscribed hain!\n\n/menu dabake anime download karna shuru karein.",
         
         # Download Flow
@@ -2489,6 +2498,7 @@ async def bot_messages_menu_dl(update: Update, context: ContextTypes.DEFAULT_TYP
         [InlineKeyboardButton("Edit Unsubscribed Alert", callback_data="msg_edit_user_dl_unsubscribed_alert")],
         [InlineKeyboardButton("Edit Unsubscribed DM", callback_data="msg_edit_user_dl_unsubscribed_dm")],
         [InlineKeyboardButton("Edit Check DM Alert", callback_data="msg_edit_user_dl_dm_alert")],
+        [InlineKeyboardButton("Edit Checking Sub...", callback_data="msg_edit_user_dl_checking_sub")], # NAYA (v20)
         [InlineKeyboardButton("Edit Anime Not Found", callback_data="msg_edit_user_dl_anime_not_found")],
         [InlineKeyboardButton("Edit Seasons Not Found", callback_data="msg_edit_user_dl_seasons_not_found")],
         [InlineKeyboardButton("Edit Episodes Not Found", callback_data="msg_edit_user_dl_episodes_not_found")],
@@ -2521,6 +2531,7 @@ async def bot_messages_menu_postgen(update: Update, context: ContextTypes.DEFAUL
     query = update.callback_query
     await query.answer()
     keyboard = [
+        [InlineKeyboardButton("Edit Anime Post Caption", callback_data="msg_edit_post_gen_anime_caption")], # NAYA (v23)
         [InlineKeyboardButton("Edit Season Post Caption", callback_data="msg_edit_post_gen_season_caption")],
         [InlineKeyboardButton("Edit Episode Post Caption", callback_data="msg_edit_post_gen_episode_caption")],
         [InlineKeyboardButton("⬅️ Back", callback_data="admin_menu_messages")]
@@ -2533,6 +2544,7 @@ async def bot_messages_menu_genlink(update: Update, context: ContextTypes.DEFAUL
     query = update.callback_query
     await query.answer()
     keyboard = [
+        [InlineKeyboardButton("Edit Anime Link Caption", callback_data="msg_edit_gen_link_caption_anime")], # NAYA (v23)
         [InlineKeyboardButton("Edit Season Link Caption", callback_data="msg_edit_gen_link_caption_season")],
         [InlineKeyboardButton("Edit Episode Link Caption", callback_data="msg_edit_gen_link_caption_ep")],
         [InlineKeyboardButton("⬅️ Back", callback_data="admin_menu_messages")]
@@ -2632,7 +2644,7 @@ async def handle_deep_link_subscribe(user: User, context: ContextTypes.DEFAULT_T
 
 # NAYA (v10): Deep Link Download Handler
 async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TYPE, payload: str):
-    """Deep link se /start=dl_... ko handle karega"""
+    """Deep link se /start=dl... ko handle karega"""
     logger.info(f"User {user.id} ne Download deep link use kiya: {payload}")
     
     # Ek dummy Update aur CallbackQuery object banayein
@@ -2660,13 +2672,14 @@ async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TY
             # Deep link ke liye answer() kuch nahi karega
             pass
         
-        async def edit_message_text(self, *args, **kwargs):
-            # edit() bhi kuch nahi karega, naya message banega
-            pass
-        
-        async def edit_message_caption(self, *args, **kwargs):
-            # edit() bhi kuch nahi karega, naya message banega
-            pass
+        # ============================================
+        # ===           NAYA FIX (v23)             ===
+        # === 'delete' crash ko fix karne ke liye  ===
+        # ===      Dummy functions ko hatao        ===
+        # ============================================
+        # (Yahan 'edit_message_text' aur 'edit_message_caption' functions
+        #   जानबूझकर nahi diye gaye hain, taaki 'hasattr' check kaam kare)
+        # ============================================
             
     class DummyUpdate:
         def __init__(self, user, data):
@@ -2950,7 +2963,6 @@ async def placeholder_button_handler(update: Update, context: ContextTypes.DEFAU
     else:
         await query.answer(f"Button '{query.data}' jald aa raha hai...", show_alert=True)
 
-# --- User Download Handler (CallbackQuery) ---
 # --- User Download Handler (CallbackQuery) ---
 async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -3308,7 +3320,6 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             else:
                     await context.bot.send_message(user_id, msg)
         except Exception: pass
-
         
 
 # --- Error Handler ---
@@ -3500,7 +3511,6 @@ def main():
         states={
             PG_MENU: [CallbackQueryHandler(post_gen_select_anime, pattern="^post_gen_season$|^post_gen_episode$|^post_gen_anime$")], # v23 FIX
             PG_GET_ANIME: [
-    ...
                 CallbackQueryHandler(post_gen_show_anime_list, pattern="^postgen_page_"),
                 CallbackQueryHandler(post_gen_select_season, pattern="^post_anime_")
             ], 
@@ -3555,7 +3565,7 @@ def main():
                 CallbackQueryHandler(delete_episode_show_anime_list, pattern="^delep_page_"),
                 CallbackQueryHandler(delete_episode_select_season, pattern="^del_ep_anime_")
             ],
-           DE_GET_SEASON: [
+          DE_GET_SEASON: [
                 CallbackQueryHandler(delete_episode_select_episode, pattern="^del_ep_season_"),
                 # NAYA (v10) BUG FIX: Back button ko state me add karo
                 CallbackQueryHandler(delete_episode_show_anime_list, pattern="^delep_page_") 
@@ -3601,7 +3611,6 @@ def main():
                 CallbackQueryHandler(generate_link_select_type, pattern="^genlink_type_episode$|^genlink_type_season$|^genlink_type_anime$") # v23 FIX
             ],
             GL_GET_ANIME: [
-    ...
                 CallbackQueryHandler(generate_link_show_anime_list, pattern="^genlink_page_"),
                 CallbackQueryHandler(generate_link_select_season, pattern="^genlink_anime_")
             ],
