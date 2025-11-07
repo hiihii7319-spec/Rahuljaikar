@@ -175,33 +175,29 @@ async def get_config():
     ]
     # --- NAYA FIX SHURU ---
         keys_to_actually_remove = []
-        if "messages" in config:
-            for key in messages_to_remove:
-                if key in config["messages"]:
-                    keys_to_actually_remove.append(key)
-                    needs_update = True
-        
-        # Pehle Python mein keys delete karo
-        if keys_to_actually_remove:
-            for key in keys_to_actually_remove:
-                del config["messages"][key] 
-        # --- NAYA FIX KHATAM ---
+    if "messages" in config:
+        for key in messages_to_remove:
+            if key in config["messages"]:
+                # We need to set needs_update=True and remove it in the $unset operation
+                needs_update = True
 
-        if needs_update:
-            update_set = {
-                "messages": config["messages"], # Ab yeh object saaf hai
-                "delete_seconds": config.get("delete_seconds", 300),
-                "co_admins": config.get("co_admins", [])
+    if needs_update:
+        update_set = {
+            "messages": config["messages"], 
+            "delete_seconds": config.get("delete_seconds", 300),
+            "co_admins": config.get("co_admins", [])
+        }
+        update_unset = {}
+        for key in messages_to_remove:
+            update_unset[f"messages.{key}"] = ""
+        
+        config_collection.update_one(
+            {"_id": "bot_config"}, 
+            {
+                "$set": update_set,
+                "$unset": update_unset
             }
-            # update_unset ko poori tarah hata diya gaya hai
-            
-            config_collection.update_one(
-                {"_id": "bot_config"}, 
-                {
-                    "$set": update_set
-                    # "$unset" waali line yahan se hata di gayi hai
-                }
-            )
+        )
         
     if "donate" in config.get("links", {}): 
         config_collection.update_one({"_id": "bot_config"}, {"$unset": {"links.donate": ""}})
