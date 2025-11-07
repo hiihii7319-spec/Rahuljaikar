@@ -2679,18 +2679,18 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
     logger.info("Admin/Co-Admin ne /admin command use kiya.")
     
     # NAYA (v10): Co-Admin limited menu
-        if not await is_main_admin(user_id):
-            keyboard = [
-                [InlineKeyboardButton("➕ Add Content", callback_data="admin_menu_add_content")],
-                [InlineKeyboardButton("🗑️ Delete Content", callback_data="admin_menu_manage_content")], # MODIFIED
-                [InlineKeyboardButton("✏️ Edit Content", callback_data="admin_menu_edit_content")], # NAYA (v27)
-                [InlineKeyboardButton("✍️ Post Generator", callback_data="admin_post_gen")],
-                [
-                    InlineKeyboardButton("🖼️ Update Photo", callback_data="admin_update_photo"),
-                    InlineKeyboardButton("🔗 Gen Link", callback_data="admin_gen_link") # <-- NAYA
-                ]
+    if not await is_main_admin(user_id):
+        keyboard = [
+            [InlineKeyboardButton("➕ Add Content", callback_data="admin_menu_add_content")],
+            [InlineKeyboardButton("🗑️ Delete Content", callback_data="admin_menu_manage_content")], # MODIFIED
+            [InlineKeyboardButton("✏️ Edit Content", callback_data="admin_menu_edit_content")], # NAYA (v27)
+            [InlineKeyboardButton("✍️ Post Generator", callback_data="admin_post_gen")],
+            [
+                InlineKeyboardButton("🖼️ Update Photo", callback_data="admin_update_photo"),
+                InlineKeyboardButton("🔗 Gen Link", callback_data="admin_gen_link") # <-- NAYA
             ]
-            admin_menu_text = f"Salaam, Co-Admin! 👑\nAapka content panel taiyyar hai."
+        ]
+        admin_menu_text = f"Salaam, Co-Admin! 👑\nAapka content panel taiyyar hai."
     
     # Main Admin full menu
     else:
@@ -2712,11 +2712,11 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
                 InlineKeyboardButton("❤️ Donation", callback_data="admin_menu_donate_settings"),
                 InlineKeyboardButton("⏱️ Auto-Delete Time", callback_data="admin_set_delete_time") # MODIFIED: Replaced Sub settings
             ],
-            [InlineKeyboardButton("⚙️ Bot Messages", callback_data="admin_menu_messages")],
             [
                 InlineKeyboardButton("🖼️ Update Photo", callback_data="admin_update_photo"), # <-- MODIFIED ROW
                 InlineKeyboardButton("🔗 Gen Link", callback_data="admin_gen_link") # <-- NAYA
             ],
+            [InlineKeyboardButton("⚙️ Bot Messages", callback_data="admin_menu_messages")],
             [InlineKeyboardButton("🛠️ Admin Settings", callback_data="admin_menu_admin_settings")] # FIX: Last row
         ]
         admin_menu_text = f"Salaam, Admin Boss! 👑\nAapka control panel taiyyar hai."
