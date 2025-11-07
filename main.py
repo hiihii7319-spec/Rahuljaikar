@@ -1,6 +1,10 @@
 # ============================================
-# ===       COMPLETE FINAL FIX (v27)       ===
+# ===       COMPLETE FINAL FIX (v28)       ===
 # ============================================
+# === (FEAT: Add "Generate Link" System)   ===
+# === (FIX: "Fetching" Msg Deletion)       ===
+# === (FEAT: 2x2 Admin Button Layout)      ===
+# === (FEAT: Add Edit Content Menus)       ===
 # === (FIX: Crash on Deep Link 'delete')   ===
 # === (FIX: Command Remapping /start)      ===
 # === (FEAT: Add "Complete Anime" Post)    ===
@@ -10,7 +14,6 @@
 # === (FEAT: Add Post Shortener Step)      ===
 # === (FEAT: Instant Ep List Deletion)     ===
 # === (FIX: Deep Link 'dl' Handler)        ===
-# === (FEAT: Add Edit Content Menus)       ===
 # ============================================
 import os
 import logging
@@ -352,10 +355,9 @@ async def delete_message_later(bot, chat_id: int, message_id: int, seconds: int)
 
 # NAYA: Bot Messages States (v10: Gen-Link state)
 (M_MENU_MAIN, M_MENU_DL, M_MENU_GEN, M_MENU_POSTGEN, M_GET_MSG) = range(72, 77) # MODIFIED (Removed sub and genlink)
-(M_MENU_MAIN, M_MENU_DL, M_MENU_GEN, M_MENU_POSTGEN, M_GET_MSG) = range(72, 77) # MODIFIED (Removed sub and genlink)
 
 # --- NAYA: Generate Link States ---
-(GL_MENU, GL_GET_ANIME, GL_GET_SEASON, GL_GET_EPISODE) = range(77, 81)
+(GL_MENU, GL_GET_ANIME, GL_GET_SEASON, GL_GET_EPISODE) = range(77, 81) 
 
 # NAYA (v11): Generate Link States (Re-structured)
 # (GL_START, GL_GET_ANIME, GL_GET_SEASON, GL_GET_EPISODE) = range(67, 71) # REMOVED
@@ -1290,10 +1292,6 @@ async def post_gen_send_to_chat(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text(f"❌ **Error!**\nPost '{chat_id}' par nahi bhej paya. Check karo ki bot uss channel me admin hai ya ID sahi hai.\nError: {e}")
     context.user_data.clear()
     return ConversationHandler.END
-async def post_gen_send_to_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # ... (is function ka poora code) ...
-    context.user_data.clear()
-    return ConversationHandler.END
 
 # --- NAYA: Conversation: Generate Link ---
 async def gen_link_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1313,14 +1311,19 @@ async def gen_link_select_anime(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
     link_type = query.data
     context.user_data['link_type'] = link_type
+    
+    # Paginated list ko call karo
     return await gen_link_show_anime_list(update, context, page=0)
 
 async def gen_link_show_anime_list(update: Update, context: ContextTypes.DEFAULT_TYPE, page: int = 0):
     query = update.callback_query
+    
     if query.data.startswith("genlink_page_"):
         page = int(query.data.split("_")[-1])
         await query.answer()
+
     context.user_data['current_page'] = page
+        
     animes, keyboard = await build_paginated_keyboard(
         collection=animes_collection,
         page=page,
@@ -1328,9 +1331,12 @@ async def gen_link_show_anime_list(update: Update, context: ContextTypes.DEFAULT
         item_callback_prefix="gen_link_anime_",
         back_callback="admin_gen_link" # Back to Gen Link Menu
     )
+    
     text = f"Kaunsa **Anime** select karna hai?\n\n(Page {page + 1})"
+    
     if not animes and page == 0:
         text = "❌ Error: Abhi koi anime add nahi hua hai."
+
     await query.edit_message_text(text, reply_markup=keyboard)
     return GL_GET_ANIME
 
@@ -1341,16 +1347,18 @@ async def gen_link_select_season(update: Update, context: ContextTypes.DEFAULT_T
     context.user_data['anime_name'] = anime_name
     
     if context.user_data['link_type'] == 'gen_link_anime':
+        # Agar "Complete Anime" hai, toh season mat poocho
         context.user_data['season_name'] = None
         context.user_data['ep_num'] = None 
-        return await gen_link_finish(update, context) 
+        return await gen_link_finish(update, context) # Final step par jao
     
+    # Season ya Episode ke liye, season list dikhao
     anime_doc = animes_collection.find_one({"name": anime_name})
     seasons = anime_doc.get("seasons", {})
     if not seasons:
         await query.edit_message_text(f"❌ **Error!** '{anime_name}' mein koi season nahi hai.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="admin_gen_link")]]))
         return ConversationHandler.END
-    
+        
     sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
     buttons = [InlineKeyboardButton(f"Season {s}", callback_data=f"gen_link_season_{s}") for s in sorted_seasons]
     keyboard = build_grid_keyboard(buttons, 1)
@@ -1370,10 +1378,12 @@ async def gen_link_select_episode(update: Update, context: ContextTypes.DEFAULT_
     
     if context.user_data['link_type'] == 'gen_link_season':
         context.user_data['ep_num'] = None 
-        return await gen_link_finish(update, context)
-    
+        return await gen_link_finish(update, context) # Final step par jao
+        
+    # Episode ke liye, episode list dikhao
     anime_doc = animes_collection.find_one({"name": anime_name})
     episodes = anime_doc.get("seasons", {}).get(season_name, {})
+    
     episode_keys = [ep for ep in episodes.keys() if not ep.startswith("_")]
     
     if not episode_keys:
@@ -1393,21 +1403,25 @@ async def gen_link_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
+    # Agar episode se aa rahe hain
     if query.data.startswith("gen_link_ep_"):
         ep_num = query.data.replace("gen_link_ep_", "")
         context.user_data['ep_num'] = ep_num
     
     try:
         bot_username = (await context.bot.get_me()).username
+        
         anime_name = context.user_data['anime_name']
         season_name = context.user_data.get('season_name')
         ep_num = context.user_data.get('ep_num') 
         
         anime_doc = animes_collection.find_one({"name": anime_name})
         anime_id = str(anime_doc['_id'])
+        
         link_type = context.user_data.get('link_type')
         
-        dl_callback_data = f"dl{anime_id}" 
+        # Deep Link banao
+        dl_callback_data = f"dl{anime_id}" # Default (Anime)
         title = anime_name
         
         if link_type == 'gen_link_season' and season_name:
@@ -1434,8 +1448,6 @@ async def gen_link_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     context.user_data.clear()
     return ConversationHandler.END
-
-# --- Conversation: Delete Anime (NAYA v10: Paginated) ---
 
 # --- Conversation: Delete Anime (NAYA v10: Paginated) ---
 async def delete_anime_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1670,7 +1682,6 @@ async def delete_episode_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await asyncio.sleep(3)
     await manage_content_menu(update, context)
     return ConversationHandler.END
-
 # --- NAYA (v10): Conversation: Update Photo (Paginated) ---
 async def update_photo_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -2078,6 +2089,162 @@ async def edit_episode_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await asyncio.sleep(3)
     await edit_content_menu(update, context)
+    return ConversationHandler.END
+
+# --- NAYA: Conversation: Generate Link ---
+async def gen_link_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    keyboard = [
+        [InlineKeyboardButton("🔗 Complete Anime Link", callback_data="gen_link_anime")],
+        [InlineKeyboardButton("🔗 Season Link", callback_data="gen_link_season")],
+        [InlineKeyboardButton("🔗 Episode Link", callback_data="gen_link_episode")],
+        [InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]
+    ]
+    await query.edit_message_text("🔗 **Generate Download Link** 🔗\n\nAap kis cheez ka link generate karna chahte hain?", reply_markup=InlineKeyboardMarkup(keyboard))
+    return GL_MENU
+
+async def gen_link_select_anime(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    link_type = query.data
+    context.user_data['link_type'] = link_type
+    
+    # Paginated list ko call karo
+    return await gen_link_show_anime_list(update, context, page=0)
+
+async def gen_link_show_anime_list(update: Update, context: ContextTypes.DEFAULT_TYPE, page: int = 0):
+    query = update.callback_query
+    
+    if query.data.startswith("genlink_page_"):
+        page = int(query.data.split("_")[-1])
+        await query.answer()
+
+    context.user_data['current_page'] = page
+        
+    animes, keyboard = await build_paginated_keyboard(
+        collection=animes_collection,
+        page=page,
+        page_callback_prefix="genlink_page_",
+        item_callback_prefix="gen_link_anime_",
+        back_callback="admin_gen_link" # Back to Gen Link Menu
+    )
+    
+    text = f"Kaunsa **Anime** select karna hai?\n\n(Page {page + 1})"
+    
+    if not animes and page == 0:
+        text = "❌ Error: Abhi koi anime add nahi hua hai."
+
+    await query.edit_message_text(text, reply_markup=keyboard)
+    return GL_GET_ANIME
+
+async def gen_link_select_season(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    anime_name = query.data.replace("gen_link_anime_", "")
+    context.user_data['anime_name'] = anime_name
+    
+    if context.user_data['link_type'] == 'gen_link_anime':
+        # Agar "Complete Anime" hai, toh season mat poocho
+        context.user_data['season_name'] = None
+        context.user_data['ep_num'] = None 
+        return await gen_link_finish(update, context) # Final step par jao
+    
+    # Season ya Episode ke liye, season list dikhao
+    anime_doc = animes_collection.find_one({"name": anime_name})
+    seasons = anime_doc.get("seasons", {})
+    if not seasons:
+        await query.edit_message_text(f"❌ **Error!** '{anime_name}' mein koi season nahi hai.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="admin_gen_link")]]))
+        return ConversationHandler.END
+        
+    sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+    buttons = [InlineKeyboardButton(f"Season {s}", callback_data=f"gen_link_season_{s}") for s in sorted_seasons]
+    keyboard = build_grid_keyboard(buttons, 1)
+    
+    current_page = context.user_data.get('current_page', 0)
+    keyboard.append([InlineKeyboardButton("⬅️ Back to Animes", callback_data=f"genlink_page_{current_page}")])
+
+    await query.edit_message_text(f"Aapne **{anime_name}** select kiya hai.\n\nAb **Season** select karein:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    return GL_GET_SEASON
+
+async def gen_link_select_episode(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    season_name = query.data.replace("gen_link_season_", "")
+    context.user_data['season_name'] = season_name
+    anime_name = context.user_data['anime_name']
+    
+    if context.user_data['link_type'] == 'gen_link_season':
+        context.user_data['ep_num'] = None 
+        return await gen_link_finish(update, context) # Final step par jao
+        
+    # Episode ke liye, episode list dikhao
+    anime_doc = animes_collection.find_one({"name": anime_name})
+    episodes = anime_doc.get("seasons", {}).get(season_name, {})
+    
+    episode_keys = [ep for ep in episodes.keys() if not ep.startswith("_")]
+    
+    if not episode_keys:
+        await query.edit_message_text(f"❌ **Error!** '{anime_name}' - Season {season_name} mein koi episode nahi hai.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="admin_gen_link")]]))
+        return ConversationHandler.END
+        
+    sorted_eps = sorted(episode_keys, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+    buttons = [InlineKeyboardButton(f"Episode {ep}", callback_data=f"gen_link_ep_{ep}") for ep in sorted_eps]
+    keyboard = build_grid_keyboard(buttons, 2)
+    
+    keyboard.append([InlineKeyboardButton("⬅️ Back to Seasons", callback_data=f"gen_link_anime_{anime_name}")])
+
+    await query.edit_message_text(f"Aapne **Season {season_name}** select kiya hai.\n\nAb **Episode** select karein:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    return GL_GET_EPISODE
+
+async def gen_link_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    # Agar episode se aa rahe hain
+    if query.data.startswith("gen_link_ep_"):
+        ep_num = query.data.replace("gen_link_ep_", "")
+        context.user_data['ep_num'] = ep_num
+    
+    try:
+        bot_username = (await context.bot.get_me()).username
+        
+        anime_name = context.user_data['anime_name']
+        season_name = context.user_data.get('season_name')
+        ep_num = context.user_data.get('ep_num') 
+        
+        anime_doc = animes_collection.find_one({"name": anime_name})
+        anime_id = str(anime_doc['_id'])
+        
+        link_type = context.user_data.get('link_type')
+        
+        # Deep Link banao
+        dl_callback_data = f"dl{anime_id}" # Default (Anime)
+        title = anime_name
+        
+        if link_type == 'gen_link_season' and season_name:
+            dl_callback_data = f"dl{anime_id}__{season_name}"
+            title = f"{anime_name} - S{season_name}"
+        elif link_type == 'gen_link_episode' and season_name and ep_num:
+            dl_callback_data = f"dl{anime_id}__{season_name}__{ep_num}"
+            title = f"{anime_name} - S{season_name} E{ep_num}"
+        
+        final_link = f"https://t.me/{bot_username}?start={dl_callback_data}"
+        
+        await query.edit_message_text(
+            f"✅ **Link Generated!**\n\n"
+            f"**Target:** {title}\n"
+            f"**Link:**\n`{final_link}`\n\n"
+            f"Is link ko copy karke kahin bhi paste karein.",
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]])
+        )
+        
+    except Exception as e:
+        logger.error(f"Link generate karne me error: {e}", exc_info=True)
+        await query.edit_message_text("❌ **Error!** Link generate nahi ho paya. Logs check karein.")
+        
+    context.user_data.clear()
     return ConversationHandler.END
 
 # --- NAYA: Conversation: Co-Admin Add ---
@@ -2759,6 +2926,9 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
     is_deep_link = not hasattr(query.message, 'edit_message_caption')
     is_in_dm = False # Default
     
+    # --- NAYA (v28) FIX: "Fetching" message ke liye ---
+    checking_msg_id = None
+    
     try:
         # Step 1: Click ko acknowledge karo
         if not is_deep_link:
@@ -2775,7 +2945,9 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
         # MODIFIED: No longer checking subscription, but good for user feedback
         try:
             checking_text = "⏳ Fetching files..." # MODIFIED
-            await context.bot.send_message(chat_id=user_id, text=checking_text, read_timeout=10, write_timeout=10)
+            # --- NAYA (v28) FIX: Message ID save karo ---
+            sent_msg = await context.bot.send_message(chat_id=user_id, text=checking_text, read_timeout=10, write_timeout=10)
+            checking_msg_id = sent_msg.message_id
         except Exception as e:
             logger.error(f"User {user_id} ko 'Fetching...' message nahi bhej paya. Shayad bot block hai? Error: {e}")
             if not is_deep_link and not is_in_dm:
@@ -2812,6 +2984,11 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             logger.error(f"Anime '{anime_key}' na ID se mila na Name se.")
             msg = config.get("messages", {}).get("user_dl_anime_not_found", "Error")
             await context.bot.send_message(user_id, msg)
+            
+            # --- NAYA (v28) FIX: Error par "Fetching" delete karo ---
+            if checking_msg_id:
+                try: await context.bot.delete_message(user_id, checking_msg_id)
+                except Exception: pass
             return
             
         anime_name = anime_doc['name'] 
@@ -2826,6 +3003,11 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
 
         # Case 3: Episode click hua hai -> Saare Files Bhejo
         if ep_num:
+            # --- NAYA (v28) FIX: "Fetching" delete karo ---
+            if checking_msg_id:
+                try: await context.bot.delete_message(user_id, checking_msg_id)
+                except Exception: pass
+            
             # ============================================
             # ===     NAYA FIX: Instant List Delete    ===
             # ============================================
@@ -2919,6 +3101,11 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             
             if not episode_keys:
                 msg = config.get("messages", {}).get("user_dl_episodes_not_found", "Error")
+                # --- NAYA (v28) FIX: "Fetching" delete karo ---
+                if checking_msg_id:
+                    try: await context.bot.delete_message(user_id, checking_msg_id)
+                    except Exception: pass
+                
                 if is_in_dm:
                     if query.message.photo:
                         await query.edit_message_caption(msg)
@@ -2938,6 +3125,11 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
 
             season_poster_id = anime_doc.get("seasons", {}).get(season_name, {}).get("_poster_id")
             poster_to_use = season_poster_id or anime_doc['poster_id'] 
+            
+            # --- NAYA (v28) FIX: "Fetching" delete karo ---
+            if checking_msg_id:
+                try: await context.bot.delete_message(user_id, checking_msg_id)
+                except Exception: pass
             
             # (v23 Fix: 'DummyMessage' delete bug)
             if is_deep_link:
@@ -3002,6 +3194,11 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
         seasons = anime_doc.get("seasons", {})
         if not seasons:
             msg = config.get("messages", {}).get("user_dl_seasons_not_found", "Error")
+            # --- NAYA (v28) FIX: "Fetching" delete karo ---
+            if checking_msg_id:
+                try: await context.bot.delete_message(user_id, checking_msg_id)
+                except Exception: pass
+                
             if is_in_dm: 
                 if query.message.photo:
                     await query.edit_message_caption(msg)
@@ -3019,6 +3216,11 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
         msg = config.get("messages", {}).get("user_dl_select_season", "Select season")
         msg = msg.replace("{anime_name}", anime_name)
 
+        # --- NAYA (v28) FIX: "Fetching" delete karo ---
+        if checking_msg_id:
+            try: await context.bot.delete_message(user_id, checking_msg_id)
+            except Exception: pass
+            
         # (v23 Fix: 'DummyMessage' delete bug)
         if is_deep_link:
             # Deep link hai -> Hamesha nayi photo DM me bhejo
@@ -3064,6 +3266,10 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
     except Exception as e:
         # Main error handler
         logger.error(f"Download button handler me error: {e}", exc_info=True)
+        # --- NAYA (v28) FIX: Error par "Fetching" delete karo ---
+        if checking_msg_id:
+            try: await context.bot.delete_message(user_id, checking_msg_id)
+            except Exception: pass
             
         msg = config.get("messages", {}).get("user_dl_general_error", "Error")
         try:
@@ -3176,8 +3382,8 @@ def main():
     messages_fallback = [CallbackQueryHandler(back_to_messages_menu, pattern="^admin_menu_messages$"), global_cancel_handler]
     admin_settings_fallback = [CallbackQueryHandler(back_to_admin_settings_menu, pattern="^back_to_admin_settings$"), global_cancel_handler]
     
-    # NAYA (v11) FIX: 'admin_gen_link' ko gen-link conv ke fallback me add karo
-    # gen_link_fallback = [CallbackQueryHandler(generate_link_start, pattern="^admin_gen_link$"), global_cancel_handler] # REMOVED
+    # NAYA (v28): Gen Link Fallback
+    gen_link_fallback = [CallbackQueryHandler(gen_link_menu, pattern="^admin_gen_link$"), global_cancel_handler]
 
 
     add_anime_conv = ConversationHandler(
@@ -3337,7 +3543,7 @@ def main():
             ],
             UP_GET_TARGET: [
                 CallbackQueryHandler(update_photo_get_poster, pattern="^upphoto_target_"),
-                # NAYA (v10) BUG FIX: Back button ko state me add karo
+                # NAYA (v1a0) BUG FIX: Back button ko state me add karo
                 CallbackQueryHandler(update_photo_show_anime_list, pattern="^upphoto_page_") 
             ],
             # NAYA FIX (v12): Invalid input ko handle karo
@@ -3403,15 +3609,8 @@ def main():
         allow_reentry=True
     )
     # --- Edit Conversations End ---
-    
-    # generate_link_conv = ... # REMOVED
-# ... (edit_episode_conv ka code) ...
-        fallbacks=global_fallbacks + edit_fallback,
-        allow_reentry=True
-    )
-    # --- Edit Conversations End ---
-    
-    # --- NAYA: Generate Link Conv ---
+
+    # --- NAYA (v28): Generate Link Conv ---
     gen_link_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(gen_link_menu, pattern="^admin_gen_link$")],
         states={
@@ -3432,9 +3631,7 @@ def main():
         fallbacks=global_fallbacks + admin_menu_fallback,
         allow_reentry=True
     )
-    # ---
-
-    # generate_link_conv = ... # REMOVED
+    
     # remove_sub_conv = ... # REMOVED
     
     add_co_admin_conv = ConversationHandler(
@@ -3516,10 +3713,11 @@ def main():
     bot_app.add_handler(edit_anime_conv)
     bot_app.add_handler(edit_season_conv)
     bot_app.add_handler(edit_episode_conv)
-    bot_app.add_handler(gen_link_conv) # <-- YEH LINE ADD KARO
     # ---
     
-    # bot_app.add_handler(generate_link_conv) # REMOVED
+    # --- NAYA (v28): Gen Link Handler ---
+    bot_app.add_handler(gen_link_conv)
+    
     # bot_app.add_handler(remove_sub_conv) # REMOVED
     bot_app.add_handler(add_co_admin_conv) 
     bot_app.add_handler(remove_co_admin_conv) 
