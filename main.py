@@ -7,7 +7,7 @@
 # === (FIX: DB Migration Conflict)         ===
 # === (FEAT: Remove Sub/Support System)    ===
 # === (FEAT: Add Admin Download Link)      ===
-# === (REVERT: Removed Shortener Step)     ===
+# === (FEAT: Add Post Shortener Step)      ===
 # === (FEAT: Instant Ep List Deletion)     ===
 # === (FIX: Deep Link 'dl' Handler)        ===
 # ============================================
@@ -215,7 +215,12 @@ async def get_config():
         if "support" in config["links"]:
             config_collection.update_one({"_id": "bot_config"}, {"$unset": {"links.support": ""}})
         if "download" not in config["links"]:
-            config_collection.update_one({"_id": "bot_config"}, {"$set": {"links.download": None}})
+            # Pehle 'download' set karte the, ab 'dl_link' set karte hain.
+            # Dono check kar lete hain safety ke liye.
+            if "dl_link" in config["links"]: # Purana naam
+                 config_collection.update_one({"_id": "bot_config"}, {"$rename": {"links.dl_link": "links.download"}})
+            else:
+                 config_collection.update_one({"_id": "bot_config"}, {"$set": {"links.download": None}})
 
     return config
 
@@ -317,10 +322,10 @@ async def delete_message_later(bot, chat_id: int, message_id: int, seconds: int)
 (CD_GET_QR,) = range(17, 18)
 # (CP_GET_PRICE,) = range(18, 19) # REMOVED
 (CL_GET_LINK,) = range(19, 20) # MODIFIED (Was 19-22)
-(PG_MENU, PG_GET_ANIME, PG_GET_SEASON, PG_GET_EPISODE, PG_GET_CHAT) = range(22, 27) # MODIFIED: Short Link Removed
-(DA_GET_ANIME, DA_CONFIRM) = range(27, 29)
-(DS_GET_ANIME, DS_GET_SEASON, DS_CONFIRM) = range(29, 32)
-(DE_GET_ANIME, DE_GET_SEASON, DE_GET_EPISODE, DE_CONFIRM) = range(32, 36)
+(PG_MENU, PG_GET_ANIME, PG_GET_SEASON, PG_GET_EPISODE, PG_GET_SHORT_LINK, PG_GET_CHAT) = range(22, 28) # NAYA: Short Link
+(DA_GET_ANIME, DA_CONFIRM) = range(28, 30)
+(DS_GET_ANIME, DS_GET_SEASON, DS_CONFIRM) = range(30, 33)
+(DE_GET_ANIME, DE_GET_SEASON, DE_GET_EPISODE, DE_CONFIRM) = range(33, 37)
 # (SUB_GET_SCREENSHOT,) = range(36, 37) # REMOVED
 # (ADMIN_GET_DAYS,) = range(37, 38) # REMOVED
 # (CV_GET_DAYS,) = range(38, 39) # REMOVED
@@ -916,6 +921,348 @@ async def skip_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"{link_type} link skip kiya (None set).")
     await update.message.reply_text(f"✅ **Success!** {link_type} link remove kar diya गया है.")
     await other_links_menu(update, context)
+    context.user_data.clear()
+    return ConversationHandler.END
+
+# --- NAYA: Conversation: Set Custom Messages (PAGINATED) ---
+async def set_msg_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Message select karne ke liye naya function"""
+    query = update.callback_query
+    await query.answer()
+    msg_key = query.data.replace("msg_edit_", "")
+    
+    config = await get_config()
+    current_msg = config.get("messages", {}).get(msg_key, "N/A")
+    
+    context.user_data['msg_key'] = msg_key
+    
+    text = f"**Editing:** `{msg_key}`\n\n"
+    text += f"**Current Message:**\n`{current_msg}`\n\n"
+    text += f"Naya message bhejo.\n\n/cancel - Cancel."
+    
+    # Determine the correct back button
+    # REMOVED: Sub menu
+    if msg_key in ["user_dl_unsubscribed_alert", "user_dl_unsubscribed_dm", "user_dl_dm_alert", "user_dl_anime_not_found", "user_dl_file_error", "user_dl_blocked_error", "user_dl_episodes_not_found", "user_dl_seasons_not_found", "user_dl_general_error", "user_dl_sending_files", "user_dl_select_episode", "user_dl_select_season", "file_warning"]:
+        back_cb = "msg_menu_dl"
+    elif msg_key in ["post_gen_season_caption", "post_gen_episode_caption", "post_gen_anime_caption"]: 
+        back_cb = "msg_menu_postgen" 
+    # REMOVED: Genlink menu
+    else:
+        back_cb = "msg_menu_gen"
+        
+    await query.edit_message_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data=back_cb)]]))
+    return M_GET_MSG
+
+async def set_msg_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Generic function to save edited message"""
+    try:
+        msg_text = update.message.text
+        msg_key = context.user_data['msg_key']
+        
+        config_collection.update_one({"_id": "bot_config"}, {"$set": {f"messages.{msg_key}": msg_text}}, upsert=True)
+        logger.info(f"{msg_key} message update ho gaya: {msg_text}")
+        await update.message.reply_text(f"✅ **Success!** Naya '{msg_key}' message set ho gaya hai.")
+        
+        await bot_messages_menu(update, context) # Go back to main messages menu
+        context.user_data.clear()
+        return ConversationHandler.END
+    except Exception as e:
+        logger.error(f"Message save karne me error: {e}")
+        await update.message.reply_text("❌ Error! Save nahi kar paya.")
+        context.user_data.clear()
+        return ConversationHandler.END
+    
+# --- Conversation: Post Generator (NAYA v10: Paginated) ---
+async def post_gen_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    keyboard = [
+        # ============================================
+        # ===           NAYA FIX (v23)             ===
+        # ============================================
+        [InlineKeyboardButton("✍️ Complete Anime Post", callback_data="post_gen_anime")],
+        # ============================================
+        [InlineKeyboardButton("✍️ Season Post", callback_data="post_gen_season")],
+        [InlineKeyboardButton("✍️ Episode Post", callback_data="post_gen_episode")],
+        [InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]
+    ]
+    await query.edit_message_text("✍️ **Post Generator** ✍️\n\nAap kis tarah ka post generate karna chahte hain?", reply_markup=InlineKeyboardMarkup(keyboard))
+    return PG_MENU
+
+async def post_gen_select_anime(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    post_type = query.data
+    context.user_data['post_type'] = post_type
+    
+    # NAYA (v10): Paginated list ko call karo
+    return await post_gen_show_anime_list(update, context, page=0)
+
+async def post_gen_show_anime_list(update: Update, context: ContextTypes.DEFAULT_TYPE, page: int = 0):
+    query = update.callback_query
+    
+    if query.data.startswith("postgen_page_"):
+        page = int(query.data.split("_")[-1])
+        await query.answer()
+
+    context.user_data['current_page'] = page # NAYA (v10)
+        
+    animes, keyboard = await build_paginated_keyboard(
+        collection=animes_collection,
+        page=page,
+        page_callback_prefix="postgen_page_",
+        item_callback_prefix="post_anime_",
+        back_callback="admin_post_gen" # Back to Post Gen Menu
+    )
+    
+    text = f"Kaunsa **Anime** select karna hai?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
+    
+    if not animes and page == 0:
+        text = "❌ Error: Abhi koi anime add nahi hua hai."
+
+    await query.edit_message_text(text, reply_markup=keyboard)
+    return PG_GET_ANIME
+
+async def post_gen_select_season(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    anime_name = query.data.replace("post_anime_", "")
+    context.user_data['anime_name'] = anime_name
+    anime_doc = animes_collection.find_one({"name": anime_name})
+    
+    # ============================================
+    # ===           NAYA FIX (v23)             ===
+    # ============================================
+    if context.user_data['post_type'] == 'post_gen_anime':
+        # Agar "Complete Anime Post" hai, toh season mat poocho
+        context.user_data['season_name'] = None
+        context.user_data['ep_num'] = None 
+        await generate_post_ask_chat(update, context) 
+        return PG_GET_SHORT_LINK # MODIFIED: Go to short link state
+    # ============================================
+
+    seasons = anime_doc.get("seasons", {})
+    if not seasons:
+        await query.edit_message_text(f"❌ **Error!** '{anime_name}' mein koi season nahi hai.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="admin_menu")]]))
+        return ConversationHandler.END
+    sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+    buttons = [InlineKeyboardButton(f"Season {s}", callback_data=f"post_season_{s}") for s in sorted_seasons]
+    keyboard = build_grid_keyboard(buttons, 1)
+    
+    # NAYA (v10) FIX: Back button ko pagination par bhejo
+    current_page = context.user_data.get('current_page', 0)
+    keyboard.append([InlineKeyboardButton("⬅️ Back to Animes", callback_data=f"postgen_page_{current_page}")])
+
+    await query.edit_message_text(f"Aapne **{anime_name}** select kiya hai.\n\nAb **Season** select karein:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    return PG_GET_SEASON
+async def post_gen_select_episode(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    season_name = query.data.replace("post_season_", "")
+    context.user_data['season_name'] = season_name
+    anime_name = context.user_data['anime_name']
+    
+    if context.user_data['post_type'] == 'post_gen_season':
+        context.user_data['ep_num'] = None 
+        await generate_post_ask_chat(update, context) 
+        return PG_GET_SHORT_LINK # MODIFIED: Go to short link state
+        
+    anime_doc = animes_collection.find_one({"name": anime_name})
+    episodes = anime_doc.get("seasons", {}).get(season_name, {})
+    
+    # Filter out _poster_id, _description
+    episode_keys = [ep for ep in episodes.keys() if not ep.startswith("_")]
+    
+    if not episode_keys:
+        await query.edit_message_text(f"❌ **Error!** '{anime_name}' - Season {season_name} mein koi episode nahi hai.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="admin_menu")]]))
+        return ConversationHandler.END
+    sorted_eps = sorted(episode_keys, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+    buttons = [InlineKeyboardButton(f"Episode {ep}", callback_data=f"post_ep_{ep}") for ep in sorted_eps]
+    keyboard = build_grid_keyboard(buttons, 2)
+    
+    # NAYA (v10) FIX: Back button ko season list par bhejo
+    keyboard.append([InlineKeyboardButton("⬅️ Back to Seasons", callback_data=f"post_anime_{anime_name}")])
+
+    await query.edit_message_text(f"Aapne **Season {season_name}** select kiya hai.\n\nAb **Episode** select karein:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    return PG_GET_EPISODE
+async def post_gen_final_episode(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    ep_num = query.data.replace("post_ep_", "")
+    context.user_data['ep_num'] = ep_num
+    
+    await generate_post_ask_chat(update, context) 
+    return PG_GET_SHORT_LINK # MODIFIED: Go to short link state
+
+async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    try:
+        bot_username = (await context.bot.get_me()).username
+        
+        config = await get_config()
+        anime_name = context.user_data['anime_name']
+        season_name = context.user_data.get('season_name')
+        ep_num = context.user_data.get('ep_num') 
+        anime_doc = animes_collection.find_one({"name": anime_name})
+        
+        anime_id = str(anime_doc['_id'])
+        
+        post_type = context.user_data.get('post_type')
+        
+        # --- NAYA LOGIC SHURU: Deep Link Banane Ke Liye ---
+        dl_callback_data = f"dl{anime_id}" # Default (Anime Post)
+        # --- NAYA LOGIC KHATAM ---
+        
+        if post_type == 'post_gen_anime':
+            # --- YEH COMPLETE ANIME POST HAI ---
+            context.user_data['is_episode_post'] = False
+            poster_id = anime_doc['poster_id']
+            description = anime_doc.get('description', '')
+            
+            caption_template = config.get("messages", {}).get("post_gen_anime_caption", "...")
+            caption = caption_template.replace("{anime_name}", anime_name) \
+                                        .replace("{description}", description if description else "")
+            # dl_callback_data (dl{anime_id}) pehle se sahi hai
+
+        elif not ep_num and season_name:
+            # --- YEH SEASON POST HAI ---
+            context.user_data['is_episode_post'] = False
+            dl_callback_data = f"dl{anime_id}__{season_name}" # NAYA: Season Link
+            
+            season_data = anime_doc.get("seasons", {}).get(season_name, {})
+            
+            # Season poster check karo, nahi toh anime poster lo
+            poster_id = season_data.get("_poster_id") or anime_doc['poster_id']
+            
+            # NAYA (v10): Season description check karo, nahi toh anime description lo
+            description = season_data.get("_description") or anime_doc.get('description', '')
+            
+            caption_template = config.get("messages", {}).get("post_gen_season_caption", "...")
+            caption = caption_template.replace("{anime_name}", anime_name) \
+                                        .replace("{season_name}", season_name) \
+                                        .replace("{description}", description if description else "")
+    
+        elif ep_num:
+                # --- YEH EPISODE POST HAI ---
+            context.user_data['is_episode_post'] = True
+            dl_callback_data = f"dl{anime_id}__{season_name}__{ep_num}" # NAYA: Episode Link
+            
+            caption_template = config.get("messages", {}).get("post_gen_episode_caption", "...")
+            caption = caption_template.replace("{anime_name}", anime_name) \
+                                        .replace("{season_name}", season_name) \
+                                        .replace("{ep_num}", ep_num)
+            
+            poster_id = None # Episode post ke liye koi poster nahi
+        
+        else:
+            logger.warning("Post generator me invalid state")
+            await query.edit_message_text("❌ Error! Invalid state. Please start over.")
+            return ConversationHandler.END
+        
+        links = config.get('links', {})
+        
+        # ============================================
+        # ===     MODIFIED: Shortener Flow Start   ===
+        # ============================================
+        
+        # Get URLs
+        backup_url = links.get('backup') or "https://t.me/"
+        donate_url = f"https://t.me/{bot_username}?start=donate"
+        
+        # --- YEH RAHA AAPKA FIX ---
+        # Ab link config se nahi, automatic generate hoga
+        original_download_url = f"https://t.me/{bot_username}?start={dl_callback_data}"
+        # --- FIX KHATAM ---
+        
+        # Sirf Backup aur Donate button banao
+        btn_backup = InlineKeyboardButton("Backup", url=backup_url)
+        btn_donate = InlineKeyboardButton("Donate", url=donate_url)
+
+        # Partial data ko save karo
+        context.user_data['post_caption'] = caption
+        context.user_data['post_poster_id'] = poster_id 
+        context.user_data['btn_backup'] = btn_backup
+        context.user_data['btn_donate'] = btn_donate
+        
+        # Ab Channel ID ke bajaye Short Link maango
+        await query.edit_message_text(
+            "✅ **Post Ready!**\n\n"
+            "Aapka original download link hai:\n"
+            f"`{original_download_url}`\n\n"  # Ab yahaan sahi link aayega
+            "Please iska **shortened link** reply mein bhejein.\n"
+            "(Agar link change nahi karna hai, toh upar waala link hi copy karke bhej dein.)\n\n"
+            "/cancel - Cancel.",
+            parse_mode='Markdown'
+        )
+        
+        return PG_GET_SHORT_LINK # Naye state par bhejo
+        # ============================================
+        
+    except Exception as e:
+        logger.error(f"Post generate karne me error: {e}", exc_info=True)
+        await query.answer("Error! Post generate nahi kar paya.", show_alert=True)
+        await query.edit_message_text("❌ **Error!** Post generate nahi ho paya. Logs check karein.")
+        context.user_data.clear()
+        return ConversationHandler.END
+        
+# --- NAYA FUNCTION: Short Link Lene Ke Liye ---
+async def post_gen_get_short_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # 1. Admin ka bheja hua short link lo
+    short_link_url = update.message.text
+    
+    # 2. Pehle se save kiya hua data wapas nikalo
+    caption = context.user_data['post_caption']
+    poster_id = context.user_data['post_poster_id']
+    btn_backup = context.user_data['btn_backup']
+    btn_donate = context.user_data['btn_donate']
+    
+    # 3. Naye link se final download button banao
+    btn_download = InlineKeyboardButton("Download", url=short_link_url)
+    
+    # 4. Final keyboard layout banao
+    keyboard = [
+        [btn_backup, btn_donate],  # Row 1
+        [btn_download]             # Row 2
+    ]
+    
+    # 5. Final keyboard ko save karo taaki agla function use kar sake
+    context.user_data['post_keyboard'] = InlineKeyboardMarkup(keyboard)
+    
+    # 6. Ab Channel ID maango (jo pehle waala function kar raha tha)
+    await update.message.reply_text(
+        "✅ **Short Link Saved!**\n\n"
+        "Ab uss **Channel ka @username** ya **Group/Channel ki Chat ID** bhejo jahaan ye post karna hai.\n"
+        "(Example: @MyAnimeChannel ya -100123456789)\n\n/cancel - Cancel."
+    )
+    
+    # 7. Agle state (PG_GET_CHAT) par jao
+    return PG_GET_CHAT
+
+async def post_gen_send_to_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.message.text
+    is_episode_post = context.user_data.get('is_episode_post', False) 
+    
+    try:
+        if is_episode_post:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=context.user_data['post_caption'],
+                parse_mode='Markdown',
+                reply_markup=context.user_data['post_keyboard']
+            )
+        else:
+            await context.bot.send_photo(
+                chat_id=chat_id,
+                photo=context.user_data['post_poster_id'],
+                caption=context.user_data['post_caption'],
+                parse_mode='Markdown',
+                reply_markup=context.user_data['post_keyboard']
+            )
+
+        await update.message.reply_text(f"✅ **Success!**\nPost ko '{chat_id}' par bhej diya gaya hai.")
+    except Exception as e:
+        logger.error(f"Post channel me bhejme me error: {e}")
+        await update.message.reply_text(f"❌ **Error!**\nPost '{chat_id}' par nahi bhej paya. Check karo ki bot uss channel me admin hai ya ID sahi hai.\nError: {e}")
     context.user_data.clear()
     return ConversationHandler.END
 # --- Conversation: Delete Anime (NAYA v10: Paginated) ---
@@ -2295,7 +2642,7 @@ def run_async_bot_tasks(loop, app):
         webhook_path_url = f"{WEBHOOK_URL}/{BOT_TOKEN}"
         logger.info(f"Webhook ko {webhook_path_url} par set kar raha hai...")
         # Normal (sync) httpx request ka istemaal karo
-        httpx.get(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_path_url}")
+        httpx.get(f"https.api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_path_url}")
         logger.info("Webhook successfully set!")
 
         # Bot ko start karo
