@@ -1930,6 +1930,196 @@ async def edit_episode_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await edit_content_menu(update, context)
     return ConversationHandler.END
 
+# --- NAYA: Conversation: Co-Admin Add ---
+async def co_admin_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("Naye Co-Admin ki **Telegram User ID** bhejein.\n\n/cancel - Cancel.",
+                                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_admin_settings")]]))
+    return CA_GET_ID
+async def co_admin_add_get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        user_id = int(update.message.text)
+    except ValueError:
+        await update.message.reply_text("Yeh valid User ID nahi hai. Please sirf number bhejein.\n\n/cancel - Cancel.")
+        return CA_GET_ID
+
+    if user_id == ADMIN_ID:
+        await update.message.reply_text("Aap Main Admin hain, khud ko add nahi kar sakte.\n\n/cancel - Cancel.")
+        return CA_GET_ID
+
+    config = await get_config()
+    if user_id in config.get("co_admins", []):
+        await update.message.reply_text(f"User `{user_id}` pehle se Co-Admin hai.\n\n/cancel - Cancel.", parse_mode='Markdown')
+        return CA_GET_ID
+
+    context.user_data['co_admin_to_add'] = user_id
+    keyboard = [[InlineKeyboardButton(f"✅ Haan, {user_id} ko Co-Admin Banao", callback_data="co_admin_add_yes")], [InlineKeyboardButton("⬅️ Back", callback_data="back_to_admin_settings")]]
+    await update.message.reply_text(f"Aap user ID `{user_id}` ko **Co-Admin** banane wale hain.\n\nWoh content add, remove, aur post generate kar payenge.\n\n**Are you sure?**", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    return CA_CONFIRM
+async def co_admin_add_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer("Adding...")
+    user_id = context.user_data['co_admin_to_add']
+    try:
+        config_collection.update_one(
+            {"_id": "bot_config"},
+            {"$push": {"co_admins": user_id}}
+        )
+        logger.info(f"Main Admin {query.from_user.id} ne {user_id} ko Co-Admin banaya.")
+        await query.edit_message_text(f"✅ **Success!**\nUser ID `{user_id}` ab Co-Admin hai.")
+    except Exception as e:
+        logger.error(f"Co-Admin add karne me error: {e}")
+        await query.edit_message_text("❌ **Error!** Co-Admin add nahi ho paya.")
+
+    context.user_data.clear()
+    await asyncio.sleep(3)
+    await admin_settings_menu(update, context)
+    return ConversationHandler.END
+
+# --- NAYA: Conversation: Co-Admin Remove ---
+async def co_admin_remove_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    config = await get_config()
+    co_admins = config.get("co_admins", [])
+
+    if not co_admins:
+        await query.edit_message_text("Abhi koi Co-Admin nahi hai.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_admin_settings")]]))
+        return ConversationHandler.END
+
+    buttons = [InlineKeyboardButton(f"Remove {admin_id}", callback_data=f"co_admin_rem_{admin_id}") for admin_id in co_admins]
+    keyboard = build_grid_keyboard(buttons, 1) # List me dikhao
+    keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="back_to_admin_settings")])
+    await query.edit_message_text("Kis Co-Admin ko remove karna hai?", reply_markup=InlineKeyboardMarkup(keyboard))
+    return CR_GET_ID
+async def co_admin_remove_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = int(query.data.replace("co_admin_rem_", ""))
+    context.user_data['co_admin_to_remove'] = user_id
+
+    keyboard = [[InlineKeyboardButton(f"✅ Haan, {user_id} ko Remove Karo", callback_data="co_admin_rem_yes")], [InlineKeyboardButton("⬅️ Back", callback_data="back_to_admin_settings")]]
+    await query.edit_message_text(f"Aap Co-Admin ID `{user_id}` ko remove karne wale hain.\n\n**Are you sure?**", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    return CR_CONFIRM
+async def co_admin_remove_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer("Removing...")
+    user_id = context.user_data['co_admin_to_remove']
+    try:
+        config_collection.update_one(
+            {"_id": "bot_config"},
+            {"$pull": {"co_admins": user_id}}
+        )
+        logger.info(f"Main Admin {query.from_user.id} ne {user_id} ko Co-Admin se hataya.")
+        await query.edit_message_text(f"✅ **Success!**\nCo-Admin ID `{user_id}` remove ho gaya hai.")
+    except Exception as e:
+        logger.error(f"Co-Admin remove karne me error: {e}")
+        await query.edit_message_text("❌ **Error!** Co-Admin remove nahi ho paya.")
+
+    context.user_data.clear()
+    await asyncio.sleep(3)
+    await admin_settings_menu(update, context)
+    return ConversationHandler.END
+async def co_admin_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    config = await get_config()
+    co_admins = config.get("co_admins", [])
+    if not co_admins:
+        text = "Abhi koi Co-Admin nahi hai."
+    else:
+        text = "List of Co-Admins:\n"
+        for admin_id in co_admins:
+            text += f"- `{admin_id}`\n"
+
+    await query.edit_message_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_admin_settings")]]))
+    return ConversationHandler.END
+
+
+# --- NAYA: Conversation: Custom Post ---
+async def custom_post_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(
+        "**🚀 Custom Post Generator**\n\n"
+        "Ab uss **Channel ka @username** ya **Group/Channel ki Chat ID** bhejo jahaan ye post karna hai.\n"
+        "(Example: @MyAnimeChannel ya -100123456789)\n\n/cancel - Cancel.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_admin_settings")]]))
+    return CPOST_GET_CHAT
+async def custom_post_get_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['chat_id'] = update.message.text
+    await update.message.reply_text("Chat ID set! Ab post ka **Poster (Photo)** bhejo.\n\n/cancel - Cancel.")
+    return CPOST_GET_POSTER
+async def custom_post_get_poster(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message.photo:
+        await update.message.reply_text("Ye photo nahi hai. Please ek photo bhejo.")
+        return CPOST_GET_POSTER
+    context.user_data['poster_id'] = update.message.photo[-1].file_id
+    await update.message.reply_text("Poster set! Ab post ka **Caption** (text) bhejo.\n\n/cancel - Cancel.")
+    return CPOST_GET_CAPTION
+async def custom_post_get_caption(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['caption'] = update.message.text
+    await update.message.reply_text("Caption set! Ab custom button ka **Text** bhejo.\n(Example: 'Join Now')\n\n/cancel - Cancel.")
+    return CPOST_GET_BTN_TEXT
+async def custom_post_get_btn_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['btn_text'] = update.message.text
+    await update.message.reply_text("Button text set! Ab button ka **URL (Link)** bhejo.\n(Example: 'https://t.me/mychannel')\n\n/cancel - Cancel.")
+    return CPOST_GET_BTN_URL
+async def custom_post_get_btn_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['btn_url'] = update.message.text
+
+    # Confirmation dikhao
+    chat_id = context.user_data['chat_id']
+    poster_id = context.user_data['poster_id']
+    caption = context.user_data['caption']
+    btn_text = context.user_data['btn_text']
+    btn_url = context.user_data['btn_url']
+
+    keyboard = [
+        [InlineKeyboardButton(btn_text, url=btn_url)],
+        [InlineKeyboardButton("✅ Post Karo", callback_data="cpost_send")],
+        [InlineKeyboardButton("⬅️ Back", callback_data="back_to_admin_settings")]
+    ]
+
+    await update.message.reply_photo(
+        photo=poster_id,
+        caption=f"**--- PREVIEW ---**\n\n{caption}\n\n**Target:** `{chat_id}`",
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return CPOST_CONFIRM
+async def custom_post_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer("Sending...")
+
+    chat_id = context.user_data['chat_id']
+    poster_id = context.user_data['poster_id']
+    caption = context.user_data['caption']
+    btn_text = context.user_data['btn_text']
+    btn_url = context.user_data['btn_url']
+
+    keyboard = [[InlineKeyboardButton(btn_text, url=btn_url)]]
+
+    try:
+        await context.bot.send_photo(
+            chat_id=chat_id,
+            photo=poster_id,
+            caption=caption,
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        await query.message.reply_text(f"✅ **Success!**\nPost ko '{chat_id}' par bhej diya gaya hai.")
+    except Exception as e:
+        logger.error(f"Custom post bhejme me error: {e}")
+        await query.message.reply_text(f"❌ **Error!**\nPost '{chat_id}' par nahi bhej paya.\nError: {e}")
+
+    await query.message.delete() # Preview delete karo
+    context.user_data.clear()
+    await admin_settings_menu(update, context)
+    return ConversationHandler.END
+
 
 # --- Conversation: User Subscription (REMOVED) ---
 # --- Conversation: Admin Approval (REMOVED) ---
