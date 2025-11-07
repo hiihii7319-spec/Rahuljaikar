@@ -1183,6 +1183,7 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         context.user_data['post_poster_id'] = poster_id 
         context.user_data['btn_backup'] = btn_backup
         context.user_data['btn_donate'] = btn_donate
+        context.user_data['is_episode_post'] = context.user_data.get('is_episode_post', False) # NAYA: Isko bhi save karo
         
         # Ab Channel ID ke bajaye Short Link maango
         await query.edit_message_text(
@@ -1215,15 +1216,21 @@ async def post_gen_get_short_link(update: Update, context: ContextTypes.DEFAULT_
     poster_id = context.user_data['post_poster_id']
     btn_backup = context.user_data['btn_backup']
     btn_donate = context.user_data['btn_donate']
+    is_episode_post = context.user_data.get('is_episode_post', False)
     
     # 3. Naye link se final download button banao
     btn_download = InlineKeyboardButton("Download", url=short_link_url)
     
-    # 4. Final keyboard layout banao
-    keyboard = [
-        [btn_backup, btn_donate],  # Row 1
-        [btn_download]             # Row 2
-    ]
+    # 4. Final keyboard layout banao (NAYA LAYOUT LOGIC)
+    if is_episode_post:
+        # Episode Post: Donate aur Download
+        keyboard = [[btn_donate, btn_download]]
+    else:
+        # Anime/Season Post: Backup, Donate, Download
+        keyboard = [
+            [btn_backup, btn_donate],  # Row 1
+            [btn_download]             # Row 2
+        ]
     
     # 5. Final keyboard ko save karo taaki agla function use kar sake
     context.user_data['post_keyboard'] = InlineKeyboardMarkup(keyboard)
@@ -2642,7 +2649,7 @@ def run_async_bot_tasks(loop, app):
         webhook_path_url = f"{WEBHOOK_URL}/{BOT_TOKEN}"
         logger.info(f"Webhook ko {webhook_path_url} par set kar raha hai...")
         # Normal (sync) httpx request ka istemaal karo
-        httpx.get(f"https.api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_path_url}")
+        httpx.get(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_path_url}")
         logger.info("Webhook successfully set!")
 
         # Bot ko start karo
