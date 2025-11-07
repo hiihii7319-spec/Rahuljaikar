@@ -313,10 +313,10 @@ async def delete_message_later(bot, chat_id: int, message_id: int, seconds: int)
 (CD_GET_QR,) = range(17, 18)
 # (CP_GET_PRICE,) = range(18, 19) # REMOVED
 (CL_GET_LINK,) = range(19, 20) # MODIFIED (Was 19-22)
-(PG_MENU, PG_GET_ANIME, PG_GET_SEASON, PG_GET_EPISODE, PG_GET_CHAT) = range(22, 27)
-(DA_GET_ANIME, DA_CONFIRM) = range(27, 29)
-(DS_GET_ANIME, DS_GET_SEASON, DS_CONFIRM) = range(29, 32)
-(DE_GET_ANIME, DE_GET_SEASON, DE_GET_EPISODE, DE_CONFIRM) = range(32, 36)
+(PG_MENU, PG_GET_ANIME, PG_GET_SEASON, PG_GET_EPISODE, PG_GET_SHORT_LINK, PG_GET_CHAT) = range(22, 28)
+(DA_GET_ANIME, DA_CONFIRM) = range(28, 30)
+(DS_GET_ANIME, DS_GET_SEASON, DS_CONFIRM) = range(30, 33)
+(DE_GET_ANIME, DE_GET_SEASON, DE_GET_EPISODE, DE_CONFIRM) = range(33, 37)
 # (SUB_GET_SCREENSHOT,) = range(36, 37) # REMOVED
 # (ADMIN_GET_DAYS,) = range(37, 38) # REMOVED
 # (CV_GET_DAYS,) = range(38, 39) # REMOVED
@@ -1150,35 +1150,38 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         links = config.get('links', {})
         
         # ============================================
-        # ===     MODIFIED per user request      ===
+        # ===     MODIFIED: Shortener Flow Start   ===
         # ============================================
         
         # Get URLs
         backup_url = links.get('backup') or "https://t.me/"
         donate_url = f"https://t.me/{bot_username}?start=donate"
-        download_url = links.get('download') or "https://t.me/" # NEW
+        # Original link ko get karo
+        original_download_url = links.get('download') or "https://t.me/" # NEW
         
-        # Create Buttons
+        # Sirf Backup aur Donate button banao
         btn_backup = InlineKeyboardButton("Backup", url=backup_url)
         btn_donate = InlineKeyboardButton("Donate", url=donate_url)
-        btn_download = InlineKeyboardButton("Download", url=download_url) # NEW
 
-        # Create new layout (2x1)
-        keyboard = [
-            [btn_backup, btn_donate],  # Row 1: 2 buttons
-            [btn_download]             # Row 2: 1 button
-        ]
-        
-        # ============================================
-        
+        # Partial data ko save karo
         context.user_data['post_caption'] = caption
         context.user_data['post_poster_id'] = poster_id 
-        context.user_data['post_keyboard'] = InlineKeyboardMarkup(keyboard)
+        context.user_data['btn_backup'] = btn_backup
+        context.user_data['btn_donate'] = btn_donate
         
+        # Ab Channel ID ke bajaye Short Link maango
         await query.edit_message_text(
-            "✅ **Post Ready!**\n\nAb uss **Channel ka @username** ya **Group/Channel ki Chat ID** bhejo jahaan ye post karna hai.\n"
-            "(Example: @MyAnimeChannel ya -100123456789)\n\n/cancel - Cancel."
+            "✅ **Post Ready!**\n\n"
+            "Aapka original download link hai:\n"
+            f"`{original_download_url}`\n\n"
+            "Please iska **shortened link** reply mein bhejein.\n"
+            "(Agar link change nahi karna hai, toh upar waala link hi copy karke bhej dein.)\n\n"
+            "/cancel - Cancel.",
+            parse_mode='Markdown'
         )
+        
+        return PG_GET_SHORT_LINK # Naye state par bhejo
+        # ============================================
         
     except Exception as e:
         logger.error(f"Post generate karne me error: {e}", exc_info=True)
@@ -1186,6 +1189,39 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         await query.edit_message_text("❌ **Error!** Post generate nahi ho paya. Logs check karein.")
         context.user_data.clear()
         return ConversationHandler.END
+        
+# --- NAYA FUNCTION: Short Link Lene Ke Liye ---
+async def post_gen_get_short_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # 1. Admin ka bheja hua short link lo
+    short_link_url = update.message.text
+    
+    # 2. Pehle se save kiya hua data wapas nikalo
+    caption = context.user_data['post_caption']
+    poster_id = context.user_data['post_poster_id']
+    btn_backup = context.user_data['btn_backup']
+    btn_donate = context.user_data['btn_donate']
+    
+    # 3. Naye link se final download button banao
+    btn_download = InlineKeyboardButton("Download", url=short_link_url)
+    
+    # 4. Final keyboard layout banao
+    keyboard = [
+        [btn_backup, btn_donate],  # Row 1
+        [btn_download]             # Row 2
+    ]
+    
+    # 5. Final keyboard ko save karo taaki agla function use kar sake
+    context.user_data['post_keyboard'] = InlineKeyboardMarkup(keyboard)
+    
+    # 6. Ab Channel ID maango (jo pehle waala function kar raha tha)
+    await update.message.reply_text(
+        "✅ **Short Link Saved!**\n\n"
+        "Ab uss **Channel ka @username** ya **Group/Channel ki Chat ID** bhejo jahaan ye post karna hai.\n"
+        "(Example: @MyAnimeChannel ya -100123456789)\n\n/cancel - Cancel."
+    )
+    
+    # 7. Agle state (PG_GET_CHAT) par jao
+    return PG_GET_CHAT
 
 async def post_gen_send_to_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.text
@@ -2684,21 +2720,12 @@ def main():
                 # NAYA (v10) BUG FIX: Back button ko state me add karo
                 CallbackQueryHandler(post_gen_select_season, pattern="^post_anime_") 
             ], 
+            # --- YEH NAYI LINE ADD KARO ---
+            PG_GET_SHORT_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, post_gen_get_short_link)],
+            # ---
             PG_GET_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, post_gen_send_to_chat)]
         }, 
         fallbacks=global_fallbacks + admin_menu_fallback,
-        allow_reentry=True 
-    )
-    del_anime_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(delete_anime_start, pattern="^admin_del_anime$")], 
-        states={
-            DA_GET_ANIME: [
-                CallbackQueryHandler(delete_anime_show_anime_list, pattern="^delanime_page_"),
-                CallbackQueryHandler(delete_anime_confirm, pattern="^del_anime_")
-            ], 
-            DA_CONFIRM: [CallbackQueryHandler(delete_anime_do, pattern="^del_anime_confirm_yes$")]
-        }, 
-        fallbacks=global_fallbacks + manage_fallback,
         allow_reentry=True 
     )
     del_season_conv = ConversationHandler(
