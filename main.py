@@ -1,12 +1,14 @@
 # ============================================
-# ===       COMPLETE FINAL FIX (v23)       ===
+# ===       COMPLETE FINAL FIX (v24)       ===
 # ============================================
 # === (FIX: Crash on Deep Link 'delete')   ===
 # === (FIX: Command Remapping /start)      ===
 # === (FEAT: Add "Complete Anime" Post)    ===
-# ============================================
-# === (USER MOD: Removed Subscription & Support) ===
-# === (USER MOD: Added Admin-set Download Link)  ===
+# === (FIX: DB Migration Conflict)         ===
+# === (FEAT: Remove Sub/Support System)    ===
+# === (FEAT: Add Admin Download Link)      ===
+# === (FEAT: Add Post Shortener Step)      ===
+# === (FEAT: Instant Ep List Deletion)     ===
 # ============================================
 import os
 import logging
@@ -173,37 +175,36 @@ async def get_config():
         "user_already_subscribed", "user_dl_unsubscribed_alert", "user_dl_unsubscribed_dm",
         "user_dl_checking_sub", "gen_link_caption_anime", "gen_link_caption_ep", "gen_link_caption_season"
     ]
-    # --- NAYA FIX SHURU ---
-        keys_to_actually_remove = []
-# --- NAYA FIX SHURU ---
-        keys_to_actually_remove = []
-        if "messages" in config:
-            for key in messages_to_remove:
-                if key in config["messages"]:
-                    keys_to_actually_remove.append(key)
-                    needs_update = True
-        
-        # Pehle Python mein keys delete karo
-        if keys_to_actually_remove:
-            for key in keys_to_actually_remove:
-                del config["messages"][key] 
-        # --- NAYA FIX KHATAM ---
 
-        if needs_update:
-            update_set = {
-                "messages": config["messages"], # Ab yeh object saaf hai
-                "delete_seconds": config.get("delete_seconds", 300),
-                "co_admins": config.get("co_admins", [])
+    # --- NAYA FIX SHURU (Conflict aur IndentationError ke liye) ---
+    keys_to_actually_remove = []
+    if "messages" in config:
+        for key in messages_to_remove:
+            if key in config["messages"]:
+                keys_to_actually_remove.append(key)
+                needs_update = True
+    
+    # Pehle Python mein keys delete karo
+    if keys_to_actually_remove:
+        for key in keys_to_actually_remove:
+            del config["messages"][key] 
+    # --- NAYA FIX KHATAM ---
+
+    if needs_update:
+        update_set = {
+            "messages": config["messages"], # Ab yeh object saaf hai
+            "delete_seconds": config.get("delete_seconds", 300),
+            "co_admins": config.get("co_admins", [])
+        }
+        # update_unset ko poori tarah hata diya gaya hai
+        
+        config_collection.update_one(
+            {"_id": "bot_config"}, 
+            {
+                "$set": update_set
+                # "$unset" waali line yahan se hata di gayi hai
             }
-            # update_unset ko poori tarah hata diya gaya hai
-            
-            config_collection.update_one(
-                {"_id": "bot_config"}, 
-                {
-                    "$set": update_set
-                    # "$unset" waali line yahan se hata di gayi hai
-                }
-            )
+        )
         
     if "donate" in config.get("links", {}): 
         config_collection.update_one({"_id": "bot_config"}, {"$unset": {"links.donate": ""}})
@@ -315,7 +316,7 @@ async def delete_message_later(bot, chat_id: int, message_id: int, seconds: int)
 (CD_GET_QR,) = range(17, 18)
 # (CP_GET_PRICE,) = range(18, 19) # REMOVED
 (CL_GET_LINK,) = range(19, 20) # MODIFIED (Was 19-22)
-(PG_MENU, PG_GET_ANIME, PG_GET_SEASON, PG_GET_EPISODE, PG_GET_SHORT_LINK, PG_GET_CHAT) = range(22, 28)
+(PG_MENU, PG_GET_ANIME, PG_GET_SEASON, PG_GET_EPISODE, PG_GET_SHORT_LINK, PG_GET_CHAT) = range(22, 28) # NAYA: Short Link
 (DA_GET_ANIME, DA_CONFIRM) = range(28, 30)
 (DS_GET_ANIME, DS_GET_SEASON, DS_CONFIRM) = range(30, 33)
 (DE_GET_ANIME, DE_GET_SEASON, DE_GET_EPISODE, DE_CONFIRM) = range(33, 37)
@@ -1031,7 +1032,7 @@ async def post_gen_select_season(update: Update, context: ContextTypes.DEFAULT_T
         context.user_data['season_name'] = None
         context.user_data['ep_num'] = None 
         await generate_post_ask_chat(update, context) 
-        return PG_GET_CHAT
+        return PG_GET_SHORT_LINK # MODIFIED: Go to short link state
     # ============================================
 
     seasons = anime_doc.get("seasons", {})
@@ -1058,7 +1059,7 @@ async def post_gen_select_episode(update: Update, context: ContextTypes.DEFAULT_
     if context.user_data['post_type'] == 'post_gen_season':
         context.user_data['ep_num'] = None 
         await generate_post_ask_chat(update, context) 
-        return PG_GET_CHAT 
+        return PG_GET_SHORT_LINK # MODIFIED: Go to short link state
         
     anime_doc = animes_collection.find_one({"name": anime_name})
     episodes = anime_doc.get("seasons", {}).get(season_name, {})
@@ -1085,7 +1086,7 @@ async def post_gen_final_episode(update: Update, context: ContextTypes.DEFAULT_T
     context.user_data['ep_num'] = ep_num
     
     await generate_post_ask_chat(update, context) 
-    return PG_GET_CHAT 
+    return PG_GET_SHORT_LINK # MODIFIED: Go to short link state
 
 async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1252,7 +1253,6 @@ async def post_gen_send_to_chat(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text(f"❌ **Error!**\nPost '{chat_id}' par nahi bhej paya. Check karo ki bot uss channel me admin hai ya ID sahi hai.\nError: {e}")
     context.user_data.clear()
     return ConversationHandler.END
-
 # --- Conversation: Delete Anime (NAYA v10: Paginated) ---
 async def delete_anime_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -2275,34 +2275,28 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
 
         # Case 3: Episode click hua hai -> Saare Files Bhejo
         if ep_num:
+            # ============================================
+            # ===     NAYA FIX: Instant List Delete    ===
+            # ============================================
+            try:
+                if is_in_dm and query.message.photo: # Sirf DM mein aur agar photo message hai (yaani season/ep list hai)
+                    await query.message.delete()
+                    logger.info(f"User {user_id} ke liye episode list delete kar di.")
+            except Exception as e:
+                logger.warning(f"Episode list delete nahi kar paya: {e}")
+            # ============================================
+
             qualities_dict = anime_doc.get("seasons", {}).get(season_name, {}).get(ep_num, {})
             if not qualities_dict:
                 msg = config.get("messages", {}).get("user_dl_episodes_not_found", "Error")
-                
-                if is_in_dm:
-                    if query.message.photo:
-                        await query.edit_message_caption(msg)
-                    else:
-                        await query.message.reply_text(msg) 
-                else:
-                    await context.bot.send_message(user_id, msg)
+                await context.bot.send_message(user_id, msg)
                 return
             
             msg = config.get("messages", {}).get("user_dl_sending_files", "Sending...")
             msg = msg.replace("{anime_name}", anime_name).replace("{season_name}", season_name).replace("{ep_num}", ep_num)
             
-            msg_to_delete_id = None 
-
-            if is_in_dm:
-                if query.message.photo:
-                        await query.edit_message_caption(caption=msg, parse_mode='Markdown')
-                        msg_to_delete_id = query.message.message_id 
-                else:
-                    sent_msg = await query.message.reply_text(msg, parse_mode='Markdown')
-                    msg_to_delete_id = sent_msg.message_id 
-            else:
-                    sent_msg = await context.bot.send_message(user_id, msg, parse_mode='Markdown')
-                    msg_to_delete_id = sent_msg.message_id
+            sent_msg = await context.bot.send_message(user_id, msg, parse_mode='Markdown')
+            msg_to_delete_id = sent_msg.message_id
             
             QUALITY_ORDER = ['480p', '720p', '1080p', '4K']
             available_qualities = qualities_dict.keys()
@@ -2730,6 +2724,18 @@ def main():
         fallbacks=global_fallbacks + admin_menu_fallback,
         allow_reentry=True 
     )
+    del_anime_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(delete_anime_start, pattern="^admin_del_anime$")], 
+        states={
+            DA_GET_ANIME: [
+                CallbackQueryHandler(delete_anime_show_anime_list, pattern="^delanime_page_"),
+                CallbackQueryHandler(delete_anime_confirm, pattern="^del_anime_")
+            ], 
+            DA_CONFIRM: [CallbackQueryHandler(delete_anime_do, pattern="^del_anime_confirm_yes$")]
+        }, 
+        fallbacks=global_fallbacks + manage_fallback,
+        allow_reentry=True 
+    )
     del_season_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(delete_season_start, pattern="^admin_del_season$")], 
         states={
@@ -2779,7 +2785,7 @@ def main():
             ],
             UP_GET_TARGET: [
                 CallbackQueryHandler(update_photo_get_poster, pattern="^upphoto_target_"),
-                # NAYA (v1to 0) BUG FIX: Back button ko state me add karo
+                # NAYA (v10) BUG FIX: Back button ko state me add karo
                 CallbackQueryHandler(update_photo_show_anime_list, pattern="^upphoto_page_") 
             ],
             # NAYA FIX (v12): Invalid input ko handle karo
