@@ -1101,10 +1101,11 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         
         anime_id = str(anime_doc['_id'])
         
-        # ============================================
-        # ===           NAYA FIX (v23)             ===
-        # ============================================
         post_type = context.user_data.get('post_type')
+        
+        # --- NAYA LOGIC SHURU: Deep Link Banane Ke Liye ---
+        dl_callback_data = f"dl{anime_id}" # Default (Anime Post)
+        # --- NAYA LOGIC KHATAM ---
         
         if post_type == 'post_gen_anime':
             # --- YEH COMPLETE ANIME POST HAI ---
@@ -1115,11 +1116,12 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
             caption_template = config.get("messages", {}).get("post_gen_anime_caption", "...")
             caption = caption_template.replace("{anime_name}", anime_name) \
                                         .replace("{description}", description if description else "")
-        # ============================================
+            # dl_callback_data (dl{anime_id}) pehle se sahi hai
 
         elif not ep_num and season_name:
             # --- YEH SEASON POST HAI ---
             context.user_data['is_episode_post'] = False
+            dl_callback_data = f"dl{anime_id}__{season_name}" # NAYA: Season Link
             
             season_data = anime_doc.get("seasons", {}).get(season_name, {})
             
@@ -1137,6 +1139,7 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         elif ep_num:
                 # --- YEH EPISODE POST HAI ---
             context.user_data['is_episode_post'] = True
+            dl_callback_data = f"dl{anime_id}__{season_name}__{ep_num}" # NAYA: Episode Link
             
             caption_template = config.get("messages", {}).get("post_gen_episode_caption", "...")
             caption = caption_template.replace("{anime_name}", anime_name) \
@@ -1159,8 +1162,11 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         # Get URLs
         backup_url = links.get('backup') or "https://t.me/"
         donate_url = f"https://t.me/{bot_username}?start=donate"
-        # Original link ko get karo
-        original_download_url = links.get('download') or "https://t.me/" # NEW
+        
+        # --- YEH RAHA AAPKA FIX ---
+        # Ab link config se nahi, automatic generate hoga
+        original_download_url = f"https://t.me/{bot_username}?start={dl_callback_data}"
+        # --- FIX KHATAM ---
         
         # Sirf Backup aur Donate button banao
         btn_backup = InlineKeyboardButton("Backup", url=backup_url)
@@ -1176,7 +1182,7 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         await query.edit_message_text(
             "✅ **Post Ready!**\n\n"
             "Aapka original download link hai:\n"
-            f"`{original_download_url}`\n\n"
+            f"`{original_download_url}`\n\n"  # Ab yahaan sahi link aayega
             "Please iska **shortened link** reply mein bhejein.\n"
             "(Agar link change nahi karna hai, toh upar waala link hi copy karke bhej dein.)\n\n"
             "/cancel - Cancel.",
