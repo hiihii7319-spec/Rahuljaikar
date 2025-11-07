@@ -1,5 +1,5 @@
 # ============================================
-# ===       COMPLETE FINAL FIX (v26)       ===
+# ===       COMPLETE FINAL FIX (v27)       ===
 # ============================================
 # === (FIX: Crash on Deep Link 'delete')   ===
 # === (FIX: Command Remapping /start)      ===
@@ -10,6 +10,7 @@
 # === (FEAT: Add Post Shortener Step)      ===
 # === (FEAT: Instant Ep List Deletion)     ===
 # === (FIX: Deep Link 'dl' Handler)        ===
+# === (FEAT: Add Edit Content Menus)       ===
 # ============================================
 import os
 import logging
@@ -343,8 +344,14 @@ async def delete_message_later(bot, chat_id: int, message_id: int, seconds: int)
 # NAYA: Custom Post States
 (CPOST_GET_CHAT, CPOST_GET_POSTER, CPOST_GET_CAPTION, CPOST_GET_BTN_TEXT, CPOST_GET_BTN_URL, CPOST_CONFIRM) = range(54, 60)
 
+# --- NAYA (v27): Edit States ---
+(EA_GET_ANIME, EA_GET_NEW_NAME, EA_CONFIRM) = range(60, 63)
+(ES_GET_ANIME, ES_GET_SEASON, ES_GET_NEW_NAME, ES_CONFIRM) = range(63, 67)
+(EE_GET_ANIME, EE_GET_SEASON, EE_GET_EPISODE, EE_GET_NEW_NUM, EE_CONFIRM) = range(67, 72)
+# ---
+
 # NAYA: Bot Messages States (v10: Gen-Link state)
-(M_MENU_MAIN, M_MENU_DL, M_MENU_GEN, M_MENU_POSTGEN, M_GET_MSG) = range(60, 65) # MODIFIED (Removed sub and genlink)
+(M_MENU_MAIN, M_MENU_DL, M_MENU_GEN, M_MENU_POSTGEN, M_GET_MSG) = range(72, 77) # MODIFIED (Removed sub and genlink)
 
 # NAYA (v11): Generate Link States (Re-structured)
 # (GL_START, GL_GET_ANIME, GL_GET_SEASON, GL_GET_EPISODE) = range(67, 71) # REMOVED
@@ -401,6 +408,13 @@ async def back_to_manage_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = update.callback_query
     await query.answer()
     await manage_content_menu(update, context)
+    return ConversationHandler.END
+
+# NAYA (v27): Edit Menu Fallback
+async def back_to_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await edit_content_menu(update, context)
     return ConversationHandler.END
 
 async def back_to_sub_settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -921,355 +935,6 @@ async def skip_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"{link_type} link skip kiya (None set).")
     await update.message.reply_text(f"✅ **Success!** {link_type} link remove kar diya गया है.")
     await other_links_menu(update, context)
-    context.user_data.clear()
-    return ConversationHandler.END
-
-# --- NAYA: Conversation: Set Custom Messages (PAGINATED) ---
-async def set_msg_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Message select karne ke liye naya function"""
-    query = update.callback_query
-    await query.answer()
-    msg_key = query.data.replace("msg_edit_", "")
-    
-    config = await get_config()
-    current_msg = config.get("messages", {}).get(msg_key, "N/A")
-    
-    context.user_data['msg_key'] = msg_key
-    
-    text = f"**Editing:** `{msg_key}`\n\n"
-    text += f"**Current Message:**\n`{current_msg}`\n\n"
-    text += f"Naya message bhejo.\n\n/cancel - Cancel."
-    
-    # Determine the correct back button
-    # REMOVED: Sub menu
-    if msg_key in ["user_dl_unsubscribed_alert", "user_dl_unsubscribed_dm", "user_dl_dm_alert", "user_dl_anime_not_found", "user_dl_file_error", "user_dl_blocked_error", "user_dl_episodes_not_found", "user_dl_seasons_not_found", "user_dl_general_error", "user_dl_sending_files", "user_dl_select_episode", "user_dl_select_season", "file_warning"]:
-        back_cb = "msg_menu_dl"
-    elif msg_key in ["post_gen_season_caption", "post_gen_episode_caption", "post_gen_anime_caption"]: 
-        back_cb = "msg_menu_postgen" 
-    # REMOVED: Genlink menu
-    else:
-        back_cb = "msg_menu_gen"
-        
-    await query.edit_message_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data=back_cb)]]))
-    return M_GET_MSG
-
-async def set_msg_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Generic function to save edited message"""
-    try:
-        msg_text = update.message.text
-        msg_key = context.user_data['msg_key']
-        
-        config_collection.update_one({"_id": "bot_config"}, {"$set": {f"messages.{msg_key}": msg_text}}, upsert=True)
-        logger.info(f"{msg_key} message update ho gaya: {msg_text}")
-        await update.message.reply_text(f"✅ **Success!** Naya '{msg_key}' message set ho gaya hai.")
-        
-        await bot_messages_menu(update, context) # Go back to main messages menu
-        context.user_data.clear()
-        return ConversationHandler.END
-    except Exception as e:
-        logger.error(f"Message save karne me error: {e}")
-        await update.message.reply_text("❌ Error! Save nahi kar paya.")
-        context.user_data.clear()
-        return ConversationHandler.END
-    
-# --- Conversation: Post Generator (NAYA v10: Paginated) ---
-async def post_gen_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    keyboard = [
-        # ============================================
-        # ===           NAYA FIX (v23)             ===
-        # ============================================
-        [InlineKeyboardButton("✍️ Complete Anime Post", callback_data="post_gen_anime")],
-        # ============================================
-        [InlineKeyboardButton("✍️ Season Post", callback_data="post_gen_season")],
-        [InlineKeyboardButton("✍️ Episode Post", callback_data="post_gen_episode")],
-        [InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]
-    ]
-    await query.edit_message_text("✍️ **Post Generator** ✍️\n\nAap kis tarah ka post generate karna chahte hain?", reply_markup=InlineKeyboardMarkup(keyboard))
-    return PG_MENU
-
-async def post_gen_select_anime(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    post_type = query.data
-    context.user_data['post_type'] = post_type
-    
-    # NAYA (v10): Paginated list ko call karo
-    return await post_gen_show_anime_list(update, context, page=0)
-
-async def post_gen_show_anime_list(update: Update, context: ContextTypes.DEFAULT_TYPE, page: int = 0):
-    query = update.callback_query
-    
-    if query.data.startswith("postgen_page_"):
-        page = int(query.data.split("_")[-1])
-        await query.answer()
-
-    context.user_data['current_page'] = page # NAYA (v10)
-        
-    animes, keyboard = await build_paginated_keyboard(
-        collection=animes_collection,
-        page=page,
-        page_callback_prefix="postgen_page_",
-        item_callback_prefix="post_anime_",
-        back_callback="admin_post_gen" # Back to Post Gen Menu
-    )
-    
-    text = f"Kaunsa **Anime** select karna hai?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
-    
-    if not animes and page == 0:
-        text = "❌ Error: Abhi koi anime add nahi hua hai."
-
-    await query.edit_message_text(text, reply_markup=keyboard)
-    return PG_GET_ANIME
-
-async def post_gen_select_season(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    anime_name = query.data.replace("post_anime_", "")
-    context.user_data['anime_name'] = anime_name
-    anime_doc = animes_collection.find_one({"name": anime_name})
-    
-    # ============================================
-    # ===           NAYA FIX (v23)             ===
-    # ============================================
-    if context.user_data['post_type'] == 'post_gen_anime':
-        # Agar "Complete Anime Post" hai, toh season mat poocho
-        context.user_data['season_name'] = None
-        context.user_data['ep_num'] = None 
-        await generate_post_ask_chat(update, context) 
-        return PG_GET_SHORT_LINK # MODIFIED: Go to short link state
-    # ============================================
-
-    seasons = anime_doc.get("seasons", {})
-    if not seasons:
-        await query.edit_message_text(f"❌ **Error!** '{anime_name}' mein koi season nahi hai.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="admin_menu")]]))
-        return ConversationHandler.END
-    sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
-    buttons = [InlineKeyboardButton(f"Season {s}", callback_data=f"post_season_{s}") for s in sorted_seasons]
-    keyboard = build_grid_keyboard(buttons, 1)
-    
-    # NAYA (v10) FIX: Back button ko pagination par bhejo
-    current_page = context.user_data.get('current_page', 0)
-    keyboard.append([InlineKeyboardButton("⬅️ Back to Animes", callback_data=f"postgen_page_{current_page}")])
-
-    await query.edit_message_text(f"Aapne **{anime_name}** select kiya hai.\n\nAb **Season** select karein:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
-    return PG_GET_SEASON
-async def post_gen_select_episode(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    season_name = query.data.replace("post_season_", "")
-    context.user_data['season_name'] = season_name
-    anime_name = context.user_data['anime_name']
-    
-    if context.user_data['post_type'] == 'post_gen_season':
-        context.user_data['ep_num'] = None 
-        await generate_post_ask_chat(update, context) 
-        return PG_GET_SHORT_LINK # MODIFIED: Go to short link state
-        
-    anime_doc = animes_collection.find_one({"name": anime_name})
-    episodes = anime_doc.get("seasons", {}).get(season_name, {})
-    
-    # Filter out _poster_id, _description
-    episode_keys = [ep for ep in episodes.keys() if not ep.startswith("_")]
-    
-    if not episode_keys:
-        await query.edit_message_text(f"❌ **Error!** '{anime_name}' - Season {season_name} mein koi episode nahi hai.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="admin_menu")]]))
-        return ConversationHandler.END
-    sorted_eps = sorted(episode_keys, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
-    buttons = [InlineKeyboardButton(f"Episode {ep}", callback_data=f"post_ep_{ep}") for ep in sorted_eps]
-    keyboard = build_grid_keyboard(buttons, 2)
-    
-    # NAYA (v10) FIX: Back button ko season list par bhejo
-    keyboard.append([InlineKeyboardButton("⬅️ Back to Seasons", callback_data=f"post_anime_{anime_name}")])
-
-    await query.edit_message_text(f"Aapne **Season {season_name}** select kiya hai.\n\nAb **Episode** select karein:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
-    return PG_GET_EPISODE
-async def post_gen_final_episode(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    ep_num = query.data.replace("post_ep_", "")
-    context.user_data['ep_num'] = ep_num
-    
-    await generate_post_ask_chat(update, context) 
-    return PG_GET_SHORT_LINK # MODIFIED: Go to short link state
-
-async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    try:
-        bot_username = (await context.bot.get_me()).username
-        
-        config = await get_config()
-        anime_name = context.user_data['anime_name']
-        season_name = context.user_data.get('season_name')
-        ep_num = context.user_data.get('ep_num') 
-        anime_doc = animes_collection.find_one({"name": anime_name})
-        
-        anime_id = str(anime_doc['_id'])
-        
-        post_type = context.user_data.get('post_type')
-        
-        # --- NAYA LOGIC SHURU: Deep Link Banane Ke Liye ---
-        dl_callback_data = f"dl{anime_id}" # Default (Anime Post)
-        # --- NAYA LOGIC KHATAM ---
-        
-        if post_type == 'post_gen_anime':
-            # --- YEH COMPLETE ANIME POST HAI ---
-            context.user_data['is_episode_post'] = False
-            poster_id = anime_doc['poster_id']
-            description = anime_doc.get('description', '')
-            
-            caption_template = config.get("messages", {}).get("post_gen_anime_caption", "...")
-            caption = caption_template.replace("{anime_name}", anime_name) \
-                                        .replace("{description}", description if description else "")
-            # dl_callback_data (dl{anime_id}) pehle se sahi hai
-
-        elif not ep_num and season_name:
-            # --- YEH SEASON POST HAI ---
-            context.user_data['is_episode_post'] = False
-            dl_callback_data = f"dl{anime_id}__{season_name}" # NAYA: Season Link
-            
-            season_data = anime_doc.get("seasons", {}).get(season_name, {})
-            
-            # Season poster check karo, nahi toh anime poster lo
-            poster_id = season_data.get("_poster_id") or anime_doc['poster_id']
-            
-            # NAYA (v10): Season description check karo, nahi toh anime description lo
-            description = season_data.get("_description") or anime_doc.get('description', '')
-            
-            caption_template = config.get("messages", {}).get("post_gen_season_caption", "...")
-            caption = caption_template.replace("{anime_name}", anime_name) \
-                                        .replace("{season_name}", season_name) \
-                                        .replace("{description}", description if description else "")
-    
-        elif ep_num:
-                # --- YEH EPISODE POST HAI ---
-            context.user_data['is_episode_post'] = True
-            dl_callback_data = f"dl{anime_id}__{season_name}__{ep_num}" # NAYA: Episode Link
-            
-            caption_template = config.get("messages", {}).get("post_gen_episode_caption", "...")
-            caption = caption_template.replace("{anime_name}", anime_name) \
-                                        .replace("{season_name}", season_name) \
-                                        .replace("{ep_num}", ep_num)
-            
-            poster_id = None # Episode post ke liye koi poster nahi
-        
-        else:
-            logger.warning("Post generator me invalid state")
-            await query.edit_message_text("❌ Error! Invalid state. Please start over.")
-            return ConversationHandler.END
-        
-        links = config.get('links', {})
-        
-        # ============================================
-        # ===     MODIFIED: Shortener Flow Start   ===
-        # ============================================
-        
-        # Get URLs
-        backup_url = links.get('backup') or "https://t.me/"
-        donate_url = f"https://t.me/{bot_username}?start=donate"
-        
-        # --- YEH RAHA AAPKA FIX ---
-        # Ab link config se nahi, automatic generate hoga
-        original_download_url = f"https://t.me/{bot_username}?start={dl_callback_data}"
-        # --- FIX KHATAM ---
-        
-        # Sirf Backup aur Donate button banao
-        btn_backup = InlineKeyboardButton("Backup", url=backup_url)
-        btn_donate = InlineKeyboardButton("Donate", url=donate_url)
-
-        # Partial data ko save karo
-        context.user_data['post_caption'] = caption
-        context.user_data['post_poster_id'] = poster_id 
-        context.user_data['btn_backup'] = btn_backup
-        context.user_data['btn_donate'] = btn_donate
-        context.user_data['is_episode_post'] = context.user_data.get('is_episode_post', False) # NAYA: Isko bhi save karo
-        
-        # Ab Channel ID ke bajaye Short Link maango
-        await query.edit_message_text(
-            "✅ **Post Ready!**\n\n"
-            "Aapka original download link hai:\n"
-            f"`{original_download_url}`\n\n"  # Ab yahaan sahi link aayega
-            "Please iska **shortened link** reply mein bhejein.\n"
-            "(Agar link change nahi karna hai, toh upar waala link hi copy karke bhej dein.)\n\n"
-            "/cancel - Cancel.",
-            parse_mode='Markdown'
-        )
-        
-        return PG_GET_SHORT_LINK # Naye state par bhejo
-        # ============================================
-        
-    except Exception as e:
-        logger.error(f"Post generate karne me error: {e}", exc_info=True)
-        await query.answer("Error! Post generate nahi kar paya.", show_alert=True)
-        await query.edit_message_text("❌ **Error!** Post generate nahi ho paya. Logs check karein.")
-        context.user_data.clear()
-        return ConversationHandler.END
-        
-# --- NAYA FUNCTION: Short Link Lene Ke Liye ---
-async def post_gen_get_short_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # 1. Admin ka bheja hua short link lo
-    short_link_url = update.message.text
-    
-    # 2. Pehle se save kiya hua data wapas nikalo
-    caption = context.user_data['post_caption']
-    poster_id = context.user_data['post_poster_id']
-    btn_backup = context.user_data['btn_backup']
-    btn_donate = context.user_data['btn_donate']
-    is_episode_post = context.user_data.get('is_episode_post', False)
-    
-    # 3. Naye link se final download button banao
-    btn_download = InlineKeyboardButton("Download", url=short_link_url)
-    
-    # 4. Final keyboard layout banao (NAYA LAYOUT LOGIC)
-    if is_episode_post:
-        # Episode Post: Donate aur Download
-        keyboard = [[btn_donate, btn_download]]
-    else:
-        # Anime/Season Post: Backup, Donate, Download
-        keyboard = [
-            [btn_backup, btn_donate],  # Row 1
-            [btn_download]             # Row 2
-        ]
-    
-    # 5. Final keyboard ko save karo taaki agla function use kar sake
-    context.user_data['post_keyboard'] = InlineKeyboardMarkup(keyboard)
-    
-    # 6. Ab Channel ID maango (jo pehle waala function kar raha tha)
-    await update.message.reply_text(
-        "✅ **Short Link Saved!**\n\n"
-        "Ab uss **Channel ka @username** ya **Group/Channel ki Chat ID** bhejo jahaan ye post karna hai.\n"
-        "(Example: @MyAnimeChannel ya -100123456789)\n\n/cancel - Cancel."
-    )
-    
-    # 7. Agle state (PG_GET_CHAT) par jao
-    return PG_GET_CHAT
-
-async def post_gen_send_to_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.message.text
-    is_episode_post = context.user_data.get('is_episode_post', False) 
-    
-    try:
-        if is_episode_post:
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=context.user_data['post_caption'],
-                parse_mode='Markdown',
-                reply_markup=context.user_data['post_keyboard']
-            )
-        else:
-            await context.bot.send_photo(
-                chat_id=chat_id,
-                photo=context.user_data['post_poster_id'],
-                caption=context.user_data['post_caption'],
-                parse_mode='Markdown',
-                reply_markup=context.user_data['post_keyboard']
-            )
-
-        await update.message.reply_text(f"✅ **Success!**\nPost ko '{chat_id}' par bhej diya gaya hai.")
-    except Exception as e:
-        logger.error(f"Post channel me bhejme me error: {e}")
-        await update.message.reply_text(f"❌ **Error!**\nPost '{chat_id}' par nahi bhej paya. Check karo ki bot uss channel me admin hai ya ID sahi hai.\nError: {e}")
     context.user_data.clear()
     return ConversationHandler.END
 # --- Conversation: Delete Anime (NAYA v10: Paginated) ---
@@ -1813,7 +1478,305 @@ async def custom_post_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await admin_settings_menu(update, context)
     return ConversationHandler.END
+
+
+# --- NAYA (v27): Conversation: Edit Anime Name ---
+async def edit_anime_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    return await edit_anime_show_anime_list(update, context, page=0)
+
+async def edit_anime_show_anime_list(update: Update, context: ContextTypes.DEFAULT_TYPE, page: int = 0):
+    query = update.callback_query
     
+    if query.data.startswith("editanime_page_"):
+        page = int(query.data.split("_")[-1])
+        await query.answer()
+        
+    context.user_data['current_page'] = page 
+
+    animes, keyboard = await build_paginated_keyboard(
+        collection=animes_collection,
+        page=page,
+        page_callback_prefix="editanime_page_",
+        item_callback_prefix="edit_anime_",
+        back_callback="back_to_edit_menu"
+    )
+    
+    text = f"Kaunsa **Anime** ka naam edit karna hai?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
+    
+    if not animes and page == 0:
+        text = "❌ Error: Abhi koi anime add nahi hua hai."
+
+    await query.edit_message_text(text, reply_markup=keyboard)
+    return EA_GET_ANIME
+
+async def edit_anime_get_new_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    anime_name = query.data.replace("edit_anime_", "")
+    context.user_data['old_anime_name'] = anime_name
+    await query.edit_message_text(f"Aapne **{anime_name}** select kiya hai.\n\nAb iska **Naya Naam** bhejo.\n\n/cancel - Cancel.")
+    return EA_GET_NEW_NAME
+
+async def edit_anime_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    new_name = update.message.text
+    old_name = context.user_data['old_anime_name']
+    
+    if animes_collection.find_one({"name": new_name}):
+        await update.message.reply_text(f"⚠️ **Error!** Naya naam '{new_name}' pehle se maujood hai. Koi doosra naam dein.\n\n/cancel - Cancel.")
+        return EA_GET_NEW_NAME
+    
+    context.user_data['new_anime_name'] = new_name
+    
+    keyboard = [[InlineKeyboardButton(f"✅ Haan, '{old_name}' ko '{new_name}' Karo", callback_data="edit_anime_confirm_yes")], [InlineKeyboardButton("⬅️ Back", callback_data="back_to_edit_menu")]]
+    await update.message.reply_text(f"**Confirm Karo:**\n\nPurana Naam: `{old_name}`\nNaya Naam: `{new_name}`\n\n**Are you sure?**", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    return EA_CONFIRM
+
+async def edit_anime_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer("Updating...")
+    old_name = context.user_data['old_anime_name']
+    new_name = context.user_data['new_anime_name']
+    try:
+        animes_collection.update_one({"name": old_name}, {"$set": {"name": new_name}})
+        logger.info(f"Anime naam update ho gaya: {old_name} -> {new_name}")
+        await query.edit_message_text(f"✅ **Success!**\nAnime '{old_name}' ka naam badal kar '{new_name}' ho gaya hai.")
+    except Exception as e:
+        logger.error(f"Anime naam update karne me error: {e}")
+        await query.edit_message_text("❌ **Error!** Anime naam update nahi ho paya.")
+    
+    context.user_data.clear()
+    await asyncio.sleep(3)
+    await edit_content_menu(update, context)
+    return ConversationHandler.END
+
+# --- NAYA (v27): Conversation: Edit Season Name ---
+async def edit_season_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    return await edit_season_show_anime_list(update, context, page=0)
+
+async def edit_season_show_anime_list(update: Update, context: ContextTypes.DEFAULT_TYPE, page: int = 0):
+    query = update.callback_query
+    
+    if query.data.startswith("editseason_page_"):
+        page = int(query.data.split("_")[-1])
+        await query.answer()
+        
+    context.user_data['current_page'] = page
+
+    animes, keyboard = await build_paginated_keyboard(
+        collection=animes_collection,
+        page=page,
+        page_callback_prefix="editseason_page_",
+        item_callback_prefix="edit_season_anime_",
+        back_callback="back_to_edit_menu"
+    )
+    
+    text = f"Kaunse **Anime** ka season edit karna hai?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
+    
+    if not animes and page == 0:
+        text = "❌ Error: Abhi koi anime add nahi hua hai."
+
+    await query.edit_message_text(text, reply_markup=keyboard)
+    return ES_GET_ANIME
+
+async def edit_season_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    anime_name = query.data.replace("edit_season_anime_", "")
+    context.user_data['anime_name'] = anime_name
+    anime_doc = animes_collection.find_one({"name": anime_name})
+    seasons = anime_doc.get("seasons", {})
+    if not seasons:
+        await query.edit_message_text(f"❌ **Error!** '{anime_name}' mein koi season nahi hai.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_edit_menu")]]))
+        return ConversationHandler.END
+        
+    sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+    buttons = [InlineKeyboardButton(f"Season {s}", callback_data=f"edit_season_{s}") for s in sorted_seasons]
+    keyboard = build_grid_keyboard(buttons, 1)
+    
+    current_page = context.user_data.get('current_page', 0)
+    keyboard.append([InlineKeyboardButton("⬅️ Back to Animes", callback_data=f"editseason_page_{current_page}")])
+
+    await query.edit_message_text(f"Aapne **{anime_name}** select kiya hai.\n\nKaunsa **Season** ka naam edit karna hai?", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    return ES_GET_SEASON
+
+async def edit_season_get_new_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    season_name = query.data.replace("edit_season_", "")
+    context.user_data['old_season_name'] = season_name
+    anime_name = context.user_data['anime_name']
+    await query.edit_message_text(f"Aapne **{anime_name}** -> **Season {season_name}** select kiya hai.\n\nAb iska **Naya Naam/Number** bhejo.\n\n/cancel - Cancel.", parse_mode='Markdown')
+    return ES_GET_NEW_NAME
+
+async def edit_season_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    new_name = update.message.text
+    old_name = context.user_data['old_season_name']
+    anime_name = context.user_data['anime_name']
+    
+    anime_doc = animes_collection.find_one({"name": anime_name})
+    if new_name in anime_doc.get("seasons", {}):
+        await update.message.reply_text(f"⚠️ **Error!** Naya naam '{new_name}' is anime mein pehle se maujood hai. Koi doosra naam dein.\n\n/cancel - Cancel.")
+        return ES_GET_NEW_NAME
+        
+    context.user_data['new_season_name'] = new_name
+    
+    keyboard = [[InlineKeyboardButton(f"✅ Haan, '{old_name}' ko '{new_name}' Karo", callback_data="edit_season_confirm_yes")], [InlineKeyboardButton("⬅️ Back", callback_data="back_to_edit_menu")]]
+    await update.message.reply_text(f"**Confirm Karo:**\n\nAnime: `{anime_name}`\nPurana Season: `{old_name}`\nNaya Season: `{new_name}`\n\n**Are you sure?**", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    return ES_CONFIRM
+
+async def edit_season_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer("Updating...")
+    old_name = context.user_data['old_season_name']
+    new_name = context.user_data['new_season_name']
+    anime_name = context.user_data['anime_name']
+    try:
+        # MongoDB $rename operator ka istemaal
+        animes_collection.update_one(
+            {"name": anime_name},
+            {"$rename": {f"seasons.{old_name}": f"seasons.{new_name}"}}
+        )
+        logger.info(f"Season naam update ho gaya: {anime_name} - {old_name} -> {new_name}")
+        await query.edit_message_text(f"✅ **Success!**\nSeason '{old_name}' ka naam badal kar '{new_name}' ho gaya hai.")
+    except Exception as e:
+        logger.error(f"Season naam update karne me error: {e}")
+        await query.edit_message_text("❌ **Error!** Season naam update nahi ho paya.")
+    
+    context.user_data.clear()
+    await asyncio.sleep(3)
+    await edit_content_menu(update, context)
+    return ConversationHandler.END
+
+# --- NAYA (v27): Conversation: Edit Episode Number ---
+async def edit_episode_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    return await edit_episode_show_anime_list(update, context, page=0)
+
+async def edit_episode_show_anime_list(update: Update, context: ContextTypes.DEFAULT_TYPE, page: int = 0):
+    query = update.callback_query
+    
+    if query.data.startswith("editep_page_"):
+        page = int(query.data.split("_")[-1])
+        await query.answer()
+
+    context.user_data['current_page'] = page
+        
+    animes, keyboard = await build_paginated_keyboard(
+        collection=animes_collection,
+        page=page,
+        page_callback_prefix="editep_page_",
+        item_callback_prefix="edit_ep_anime_",
+        back_callback="back_to_edit_menu"
+    )
+    
+    text = f"Kaunse **Anime** ka episode edit karna hai?\n\n**Newest First** (Sabse naya pehle):\n(Page {page + 1})"
+    
+    if not animes and page == 0:
+        text = "❌ Error: Abhi koi anime add nahi hua hai."
+
+    await query.edit_message_text(text, reply_markup=keyboard)
+    return EE_GET_ANIME
+
+async def edit_episode_select_season(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    anime_name = query.data.replace("edit_ep_anime_", "")
+    context.user_data['anime_name'] = anime_name
+    anime_doc = animes_collection.find_one({"name": anime_name})
+    seasons = anime_doc.get("seasons", {})
+    if not seasons:
+        await query.edit_message_text(f"❌ **Error!** '{anime_name}' mein koi season nahi hai.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_edit_menu")]]))
+        return ConversationHandler.END
+    sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+    buttons = [InlineKeyboardButton(f"Season {s}", callback_data=f"edit_ep_season_{s}") for s in sorted_seasons]
+    keyboard = build_grid_keyboard(buttons, 1)
+    
+    current_page = context.user_data.get('current_page', 0)
+    keyboard.append([InlineKeyboardButton("⬅️ Back to Animes", callback_data=f"editep_page_{current_page}")])
+
+    await query.edit_message_text(f"Aapne **{anime_name}** select kiya hai.\n\nKaunsa **Season** select karna hai?", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    return EE_GET_SEASON
+async def edit_episode_select_episode(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    season_name = query.data.replace("edit_ep_season_", "")
+    context.user_data['season_name'] = season_name
+    anime_name = context.user_data['anime_name']
+    anime_doc = animes_collection.find_one({"name": anime_name})
+    episodes = anime_doc.get("seasons", {}).get(season_name, {})
+    
+    # Filter out _poster_id, _description
+    episode_keys = [ep for ep in episodes.keys() if not ep.startswith("_")]
+    
+    if not episode_keys:
+        await query.edit_message_text(f"❌ **Error!** '{anime_name}' - Season {season_name} mein koi episode nahi hai.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_edit_menu")]]))
+        return ConversationHandler.END
+    sorted_eps = sorted(episode_keys, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+    buttons = [InlineKeyboardButton(f"Episode {ep}", callback_data=f"edit_ep_num_{ep}") for ep in sorted_eps]
+    keyboard = build_grid_keyboard(buttons, 2)
+    
+    keyboard.append([InlineKeyboardButton("⬅️ Back to Seasons", callback_data=f"edit_ep_anime_{anime_name}")])
+
+    await query.edit_message_text(f"Aapne **Season {season_name}** select kiya hai.\n\nKaunsa **Episode** ka number edit karna hai?", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    return EE_GET_EPISODE
+    
+async def edit_episode_get_new_num(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    ep_num = query.data.replace("edit_ep_num_", "")
+    context.user_data['old_ep_num'] = ep_num
+    anime_name = context.user_data['anime_name']
+    season_name = context.user_data['season_name']
+    
+    await query.edit_message_text(f"Aapne **{anime_name}** -> **S{season_name}** -> **Ep {ep_num}** select kiya hai.\n\nAb iska **Naya Number** bhejo.\n\n/cancel - Cancel.", parse_mode='Markdown')
+    return EE_GET_NEW_NUM
+
+async def edit_episode_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    new_num = update.message.text
+    old_num = context.user_data['old_ep_num']
+    anime_name = context.user_data['anime_name']
+    season_name = context.user_data['season_name']
+    
+    anime_doc = animes_collection.find_one({"name": anime_name})
+    if new_num in anime_doc.get("seasons", {}).get(season_name, {}):
+        await update.message.reply_text(f"⚠️ **Error!** Naya number '{new_num}' is season mein pehle se maujood hai. Koi doosra number dein.\n\n/cancel - Cancel.")
+        return EE_GET_NEW_NUM
+        
+    context.user_data['new_ep_num'] = new_num
+    
+    keyboard = [[InlineKeyboardButton(f"✅ Haan, '{old_num}' ko '{new_num}' Karo", callback_data="edit_ep_confirm_yes")], [InlineKeyboardButton("⬅️ Back", callback_data="back_to_edit_menu")]]
+    await update.message.reply_text(f"**Confirm Karo:**\n\nAnime: `{anime_name}`\nSeason: `{season_name}`\nPurana Episode: `{old_num}`\nNaya Episode: `{new_num}`\n\n**Are you sure?**", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    return EE_CONFIRM
+
+async def edit_episode_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer("Updating...")
+    old_num = context.user_data['old_ep_num']
+    new_num = context.user_data['new_ep_num']
+    anime_name = context.user_data['anime_name']
+    season_name = context.user_data['season_name']
+    try:
+        # MongoDB $rename operator ka istemaal
+        animes_collection.update_one(
+            {"name": anime_name},
+            {"$rename": {f"seasons.{season_name}.{old_num}": f"seasons.{season_name}.{new_num}"}}
+        )
+        logger.info(f"Episode number update ho gaya: {anime_name} S{season_name} - {old_num} -> {new_num}")
+        await query.edit_message_text(f"✅ **Success!**\nEpisode '{old_num}' ka number badal kar '{new_num}' ho gaya hai.")
+    except Exception as e:
+        logger.error(f"Episode number update karne me error: {e}")
+        await query.edit_message_text("❌ **Error!** Episode number update nahi ho paya.")
+    
+    context.user_data.clear()
+    await asyncio.sleep(3)
+    await edit_content_menu(update, context)
+    return ConversationHandler.END
+
 
 # --- Conversation: User Subscription (REMOVED) ---
 # --- Conversation: Admin Approval (REMOVED) ---
@@ -1841,12 +1804,31 @@ async def manage_content_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
         [InlineKeyboardButton("🗑️ Delete Episode", callback_data="admin_del_episode")], 
         [InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]
     ]
-    text = "✏️ **Manage Content** ✏️\n\nAap kya manage karna chahte hain?"
+    text = "🗑️ **Delete Content** 🗑️\n\nAap kya delete karna chahte hain?"
     
     if from_message: # Helper for change_poster_save
         await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     elif query:
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+# --- NAYA (v27): Edit Content Menu ---
+async def edit_content_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, from_message: bool = False):
+    query = update.callback_query
+    if query: await query.answer()
+    
+    keyboard = [
+        [InlineKeyboardButton("✏️ Edit Anime Name", callback_data="admin_edit_anime")],
+        [InlineKeyboardButton("✏️ Edit Season Name", callback_data="admin_edit_season")],
+        [InlineKeyboardButton("✏️ Edit Episode Number", callback_data="admin_edit_episode")], 
+        [InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]
+    ]
+    text = "✏️ **Edit Content** ✏️\n\nAap kya edit karna chahte hain?"
+    
+    if from_message:
+        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+    elif query:
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+
 
 # --- sub_settings_menu (REMOVED) ---
 
@@ -2207,7 +2189,8 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
     if not await is_main_admin(user_id):
         keyboard = [
             [InlineKeyboardButton("➕ Add Content", callback_data="admin_menu_add_content")],
-            [InlineKeyboardButton("✏️ Manage Content", callback_data="admin_menu_manage_content")],
+            [InlineKeyboardButton("🗑️ Delete Content", callback_data="admin_menu_manage_content")], # MODIFIED
+            [InlineKeyboardButton("✏️ Edit Content", callback_data="admin_menu_edit_content")], # NAYA (v27)
             [InlineKeyboardButton("✍️ Post Generator", callback_data="admin_post_gen")],
             [InlineKeyboardButton("🖼️ Update Photo", callback_data="admin_update_photo")]
             # REMOVED: Generate Link
@@ -2223,10 +2206,13 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
         keyboard = [
             [InlineKeyboardButton("➕ Add Content", callback_data="admin_menu_add_content")],
             [
-                InlineKeyboardButton("✏️ Manage Content", callback_data="admin_menu_manage_content"),
-                InlineKeyboardButton("🔗 Other Links", callback_data="admin_menu_other_links")
+                InlineKeyboardButton("🗑️ Delete Content", callback_data="admin_menu_manage_content"), # MODIFIED
+                InlineKeyboardButton("✏️ Edit Content", callback_data="admin_menu_edit_content") # NAYA (v27)
             ],
-            [InlineKeyboardButton("✍️ Post Generator", callback_data="admin_post_gen")],
+            [
+                InlineKeyboardButton("🔗 Other Links", callback_data="admin_menu_other_links"),
+                InlineKeyboardButton("✍️ Post Generator", callback_data="admin_post_gen")
+            ],
             [
                 InlineKeyboardButton("❤️ Donation", callback_data="admin_menu_donate_settings"),
                 InlineKeyboardButton("⏱️ Auto-Delete Time", callback_data="admin_set_delete_time") # MODIFIED: Replaced Sub settings
@@ -2686,6 +2672,7 @@ def main():
     admin_menu_fallback = [CallbackQueryHandler(back_to_admin_menu, pattern="^admin_menu$"), global_cancel_handler]
     add_content_fallback = [CallbackQueryHandler(back_to_add_content_menu, pattern="^back_to_add_content$"), global_cancel_handler]
     manage_fallback = [CallbackQueryHandler(back_to_manage_menu, pattern="^back_to_manage$"), global_cancel_handler]
+    edit_fallback = [CallbackQueryHandler(back_to_edit_menu, pattern="^back_to_edit_menu$"), global_cancel_handler] # NAYA (v27)
     sub_settings_fallback = [CallbackQueryHandler(back_to_sub_settings_menu, pattern="^back_to_sub_settings$"), global_cancel_handler]
     donate_settings_fallback = [CallbackQueryHandler(back_to_donate_settings_menu, pattern="^back_to_donate_settings$"), global_cancel_handler]
     links_fallback = [CallbackQueryHandler(back_to_links_menu, pattern="^back_to_links$"), global_cancel_handler]
@@ -2867,6 +2854,60 @@ def main():
         allow_reentry=True
     )
     
+    # --- NAYA (v27): Edit Conversations ---
+    edit_anime_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(edit_anime_start, pattern="^admin_edit_anime$")],
+        states={
+            EA_GET_ANIME: [
+                CallbackQueryHandler(edit_anime_show_anime_list, pattern="^editanime_page_"),
+                CallbackQueryHandler(edit_anime_get_new_name, pattern="^edit_anime_")
+            ],
+            EA_GET_NEW_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_anime_save)],
+            EA_CONFIRM: [CallbackQueryHandler(edit_anime_do, pattern="^edit_anime_confirm_yes$")]
+        },
+        fallbacks=global_fallbacks + edit_fallback,
+        allow_reentry=True
+    )
+    edit_season_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(edit_season_start, pattern="^admin_edit_season$")],
+        states={
+            ES_GET_ANIME: [
+                CallbackQueryHandler(edit_season_show_anime_list, pattern="^editseason_page_"),
+                CallbackQueryHandler(edit_season_select, pattern="^edit_season_anime_")
+            ],
+            ES_GET_SEASON: [
+                CallbackQueryHandler(edit_season_get_new_name, pattern="^edit_season_"),
+                CallbackQueryHandler(edit_season_show_anime_list, pattern="^editseason_page_") # Back
+            ],
+            ES_GET_NEW_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_season_save)],
+            ES_CONFIRM: [CallbackQueryHandler(edit_season_do, pattern="^edit_season_confirm_yes$")]
+        },
+        fallbacks=global_fallbacks + edit_fallback,
+        allow_reentry=True
+    )
+    edit_episode_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(edit_episode_start, pattern="^admin_edit_episode$")],
+        states={
+            EE_GET_ANIME: [
+                CallbackQueryHandler(edit_episode_show_anime_list, pattern="^editep_page_"),
+                CallbackQueryHandler(edit_episode_select_season, pattern="^edit_ep_anime_")
+            ],
+            EE_GET_SEASON: [
+                CallbackQueryHandler(edit_episode_select_episode, pattern="^edit_ep_season_"),
+                CallbackQueryHandler(edit_episode_show_anime_list, pattern="^editep_page_") # Back
+            ],
+            EE_GET_EPISODE: [
+                CallbackQueryHandler(edit_episode_get_new_num, pattern="^edit_ep_num_"),
+                CallbackQueryHandler(edit_episode_select_season, pattern="^edit_ep_anime_") # Back
+            ],
+            EE_GET_NEW_NUM: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_episode_save)],
+            EE_CONFIRM: [CallbackQueryHandler(edit_episode_do, pattern="^edit_ep_confirm_yes$")]
+        },
+        fallbacks=global_fallbacks + edit_fallback,
+        allow_reentry=True
+    )
+    # --- Edit Conversations End ---
+    
     # generate_link_conv = ... # REMOVED
     # remove_sub_conv = ... # REMOVED
     
@@ -2944,6 +2985,13 @@ def main():
     bot_app.add_handler(del_season_conv)
     bot_app.add_handler(del_episode_conv)
     bot_app.add_handler(update_photo_conv) # NAYA (v10)
+    
+    # --- NAYA (v27): Edit Handlers ---
+    bot_app.add_handler(edit_anime_conv)
+    bot_app.add_handler(edit_season_conv)
+    bot_app.add_handler(edit_episode_conv)
+    # ---
+    
     # bot_app.add_handler(generate_link_conv) # REMOVED
     # bot_app.add_handler(remove_sub_conv) # REMOVED
     bot_app.add_handler(add_co_admin_conv) 
@@ -2965,6 +3013,7 @@ def main():
     # Admin menu navigation (non-conversation)
     bot_app.add_handler(CallbackQueryHandler(add_content_menu, pattern="^admin_menu_add_content$"))
     bot_app.add_handler(CallbackQueryHandler(manage_content_menu, pattern="^admin_menu_manage_content$"))
+    bot_app.add_handler(CallbackQueryHandler(edit_content_menu, pattern="^admin_menu_edit_content$")) # NAYA (v27)
     # bot_app.add_handler(CallbackQueryHandler(sub_settings_menu, pattern="^admin_menu_sub_settings$")) # REMOVED
     bot_app.add_handler(CallbackQueryHandler(donate_settings_menu, pattern="^admin_menu_donate_settings$"))
     bot_app.add_handler(CallbackQueryHandler(other_links_menu, pattern="^admin_menu_other_links$"))
