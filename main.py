@@ -1,12 +1,10 @@
 # ============================================
-# ===     COMPLETE FINAL FIX (v31)         ===
+# ===       COMPLETE FINAL FIX (v32)       ===
 # ============================================
-# === (FEAT: Add 5 New Fonts)              ===
-# === (FEAT: Add Quote Toggle System)      ===
-# === (FEAT: Update Admin Layout)          ===
-# === (FEAT: Add Sort A-Z to all lists)    ===
-# === (FIX: Remove 'Update DL Link' feat)  ===
-# === (FIX: Typo in main() _app)           ===
+# === (FEAT: Add 2 New 'SF' Fonts)         ===
+# === (FEAT: 'sf_regular' uses Capitalize) ===
+# === (FIX: Remove 'rj_small_caps' font)   ===
+# === (FIX: Remove DB Indexes)             ===
 # ============================================
 import os
 import logging
@@ -69,9 +67,9 @@ try:
     animes_collection = db['animes'] 
     config_collection = db['config'] 
     
-    # Index add karo (Search ke liye name, Naye ke liye created_at)
-    animes_collection.create_index([("name", ASCENDING)])
-    animes_collection.create_index([("created_at", DESCENDING)])
+    # NAYA (v32): User ke request par Indexes hata diye gaye
+    # animes_collection.create_index([("name", ASCENDING)])
+    # animes_collection.create_index([("created_at", DESCENDING)])
     
     client.admin.command('ping') # Check connection
     logger.info("MongoDB se successfully connect ho gaya!")
@@ -95,17 +93,35 @@ async def is_co_admin(user_id: int) -> bool:
     return user_id in config.get("co_admins", [])
 
 
-# --- NAYA (v30): Font Conversion Helpers ---
-def to_small_caps(text: str) -> str:
-    # Custom 'rj' font: ᴀʙᴄ (with Q)
+# --- NAYA (v30/v32): Font Conversion Helpers ---
+
+# REMOVED (v32): User ke request par 'rj_small_caps' (ᴀʙᴄ) font hata diya
+# def to_small_caps(text: str) -> str:
+#     ...
+
+def to_sans_serif_bold(text: str) -> str:
+    # NAYA (v32): 𝗦𝗮𝗻𝘀-𝗦𝗲𝗿𝗶𝗳 𝗕𝗼𝗹𝗱 (Apple Font jaisa)
     mapping = {
-        'a': 'ᴀ', 'b': 'ʙ', 'c': 'ᴄ', 'd': 'ᴅ', 'e': 'ᴇ', 'f': 'ꜰ', 'g': 'ɢ', 'h': 'ʜ', 'i': 'ɪ', 'j': 'ᴊ',
-        'k': 'ᴋ', 'l': 'ʟ', 'm': 'ᴍ', 'n': 'ɴ', 'o': 'ᴏ', 'p': 'ᴘ', 'q': 'Q', 'r': 'ʀ', 's': 'ꜱ', 't': 'ᴛ',
-        'u': 'ᴜ', 'v': 'ᴠ', 'w': 'ᴡ', 'x': 'x', 'y': 'ʏ', 'z': 'ᴢ',
-        'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D', 'E': 'E', 'F': 'F', 'G': 'G', 'H': 'H', 'I': 'I', 'J': 'J',
-        'K': 'K', 'L': 'L', 'M': 'M', 'N': 'N', 'O': 'O', 'P': 'P', 'Q': 'Q', 'R': 'R', 'S': 'S', 'T': 'T',
-        'U': 'U', 'V': 'V', 'W': 'W', 'X': 'X', 'Y': 'Y', 'Z': 'Z',
-        '1': '1', '2': '2', '3': '3', '4': '4', '5': '5', '6': '6', '7': '7', '8': '8', '9': '9', '0': '0'
+        'a': '𝗮', 'b': '𝗯', 'c': '𝗰', 'd': '𝗱', 'e': '𝗲', 'f': '𝗳', 'g': '𝗴', 'h': '𝗵', 'i': '𝗶', 'j': '𝗷',
+        'k': '𝗸', 'l': '𝗹', 'm': '𝗺', 'n': '𝗻', 'o': '𝗼', 'p': '𝗽', 'q': '𝗾', 'r': '𝗿', 's': '𝘀', 't': '𝘁',
+        'u': '𝘂', 'v': '𝘃', 'w': '𝘄', 'x': '𝘅', 'y': '𝘆', 'z': '𝘇',
+        'A': '𝗔', 'B': '𝗕', 'C': '𝗖', 'D': '𝗗', 'E': '𝗘', 'F': '𝗙', 'G': '𝗚', 'H': '𝗛', 'I': '𝗜', 'J': '𝗝',
+        'K': '𝗞', 'L': '𝗟', 'M': '𝗠', 'N': '𝗡', 'O': '𝗢', 'P': '𝗣', 'Q': '𝗤', 'R': '𝗥', 'S': '𝗦', 'T': '𝗧',
+        'U': '𝗨', 'V': '𝗩', 'W': '𝗪', 'X': '𝗫', 'Y': '𝗬', 'Z': '𝗭',
+        '1': '𝟭', '2': '𝟮', '3': '𝟯', '4': '𝟰', '5': '𝟱', '6': '𝟲', '7': '𝟳', '8': '𝟴', '9': '𝟵', '0': '𝟬'
+    }
+    return "".join(mapping.get(c, c) for c in text)
+
+def to_sans_serif_regular(text: str) -> str:
+    # NAYA (v32): 𝗦𝗮𝗻𝘀-𝗦𝗲𝗿𝗶𝗳 𝗥𝗲𝗴𝘂𝗹𝗮𝗿 (Apple Font jaisa)
+    mapping = {
+        'a': '𝖺', 'b': '𝖻', 'c': '𝖼', 'd': '𝖽', 'e': '𝖾', 'f': '𝖿', 'g': '𝗀', 'h': '𝗁', 'i': '𝗂', 'j': '𝗃',
+        'k': '𝗄', 'l': '𝗅', 'm': '𝗆', 'n': '𝗇', 'o': '𝗈', 'p': '𝗉', 'q': '𝗊', 'r': '𝗋', 's': '𝗌', 't': '𝗍',
+        'u': '𝗎', 'v': '𝗏', 'w': '𝗐', 'x': '𝗑', 'y': '𝗒', 'z': '𝗓',
+        'A': '𝖠', 'B': '𝖡', 'C': '𝖢', 'D': '𝖣', 'E': '𝖤', 'F': '𝖥', 'G': '𝖦', 'H': '𝖧', 'I': '𝖨', 'J': '𝖩',
+        'K': '𝖪', 'L': '𝖫', 'M': '𝖬', 'N': '𝖭', 'O': '𝖮', 'P': '𝖯', 'Q': '𝖰', 'R': '𝖱', 'S': '𝖲', 'T': '𝖳',
+        'U': '𝖴', 'V': '𝖵', 'W': '𝖶', 'X': '𝖷', 'Y': '𝖸', 'Z': '𝖹',
+        '1': '𝟣', '2': '𝟤', '3': '𝟥', '4': '𝟦', '5': '𝟧', '6': '𝟨', '7': '𝟩', '8': '𝟪', '9': '𝟫', '0': '𝟢'
     }
     return "".join(mapping.get(c, c) for c in text)
 
@@ -117,8 +133,8 @@ def to_bold_italic(text: str) -> str:
         'u': '𝒖', 'v': '𝒗', 'w': '𝒘', 'x': '𝒙', 'y': '𝒚', 'z': '𝒛',
         'A': '𝑨', 'B': '𝑩', 'C': '𝑪', 'D': '𝑫', 'E': '𝑬', 'F': '𝑭', 'G': '𝑮', 'H': '𝑯', 'I': '𝑰', 'J': '𝑱',
         'K': '𝑲', 'L': '𝑳', 'M': '𝑴', 'N': '𝑵', 'O': '𝑶', 'P': '𝑷', 'Q': '𝑸', 'R': '𝑹', 'S': '𝑺', 'T': '𝑻',
-        'U': '𝑼', 'V': '𝑽', 'W': '𝒘', 'X': '𝑿', 'Y': '𝒀', 'Z': '𝒁',
-        '1': '𝟏', '2': '𝟐', '3': '𝟑', '4': '𝟒', '5': '𝟓', '6': '𝟔', '7': '𝟕', '8': '𝟖', '9': '𝟗', '0': '𝟎'
+        'U': '𝑼', 'V': '𝑽', 'W': '𝒘', 'X': '𝑿', 'Y': '𝗬', 'Z': '𝒁',
+        '1': '𝟏', '2': '𝟮', '3': '𝟯', '4': '𝟰', '5': '𝟱', '6': '𝟲', '7': '𝟳', '8': '𝟴', '9': '𝟵', '0': '𝟬'
     }
     return "".join(mapping.get(c, c) for c in text)
 
@@ -136,7 +152,7 @@ def to_cursive(text: str) -> str:
     return "".join(mapping.get(c, c) for c in text)
 
 
-# --- NAYA (v30): Message Formatting Helper ---
+# --- NAYA (v30/v32): Message Formatting Helper ---
 async def format_message(full_name: str, text: str):
     """Bot ke saare replies ko format karega."""
     config = await get_config()
@@ -171,7 +187,7 @@ async def format_message(full_name: str, text: str):
 
     # Baaki sab MarkdownV2
     
-    # Pehle text ko escape karo, fir style apply karo
+    # Pehle text ko escape karo
     escaped_text = escape_markdown(text, version=2)
     upper_text = escaped_text.upper() # Style apply karne se pehle
     
@@ -184,16 +200,23 @@ async def format_message(full_name: str, text: str):
     elif style == "normal":
         styled_text = upper_text
         
-    # NAYA (v30): New Unicode Fonts
-    elif style == "rj_small_caps":
+    # NAYA (v30): Unicode Fonts
+    elif style == "bold_italic":
         # Unicode fonts ko markdown escape ki zaroorat nahi hoti
         # Lekin humein original (non-escaped) text chahiye
-        styled_text = escape_markdown(to_small_caps(text.upper()), version=2)
-    elif style == "bold_italic":
         styled_text = escape_markdown(to_bold_italic(text.upper()), version=2)
     elif style == "cursive":
         styled_text = escape_markdown(to_cursive(text.upper()), version=2)
+    
+    # NAYA (v32): Apple/San Francisco Fonts
+    elif style == "sf_bold":
+        styled_text = escape_markdown(to_sans_serif_bold(text.upper()), version=2)
+    elif style == "sf_regular":
+        # Special case: User ne "first capital then small" maanga
+        styled_text = escape_markdown(to_sans_serif_regular(text.capitalize()), version=2)
         
+    # REMOVED (v32): rj_small_caps
+    
     else: # Fallback (Normal)
         styled_text = upper_text
 
@@ -1278,7 +1301,7 @@ async def generate_post_ask_short_link(update: Update, context: ContextTypes.DEF
             description = anime_doc.get('description', '')
             caption_template = config.get("messages", {}).get("post_gen_anime_caption", "...")
             caption = caption_template.replace("{anime_name}", anime_name) \
-                                        .replace("{description}", description if description else "")
+                                      .replace("{description}", description if description else "")
         elif not ep_num and season_name:
             context.user_data['is_episode_post'] = False
             dl_callback_data = f"dl{anime_id}__{season_name}"
@@ -1287,15 +1310,15 @@ async def generate_post_ask_short_link(update: Update, context: ContextTypes.DEF
             description = season_data.get("_description") or anime_doc.get('description', '')
             caption_template = config.get("messages", {}).get("post_gen_season_caption", "...")
             caption = caption_template.replace("{anime_name}", anime_name) \
-                                        .replace("{season_name}", season_name) \
-                                        .replace("{description}", description if description else "")
+                                      .replace("{season_name}", season_name) \
+                                      .replace("{description}", description if description else "")
         elif ep_num:
             context.user_data['is_episode_post'] = True
             dl_callback_data = f"dl{anime_id}__{season_name}__{ep_num}"
             caption_template = config.get("messages", {}).get("post_gen_episode_caption", "...")
             caption = caption_template.replace("{anime_name}", anime_name) \
-                                        .replace("{season_name}", season_name) \
-                                        .replace("{ep_num}", ep_num)
+                                      .replace("{season_name}", season_name) \
+                                      .replace("{ep_num}", ep_num)
             poster_id = None
         else:
             logger.warning("Post generator me invalid state")
@@ -1576,7 +1599,6 @@ async def gen_link_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     context.user_data.clear()
     return ConversationHandler.END
-
 # --- Conversation: Delete Anime (NAYA v31: Sortable) ---
 async def delete_anime_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -2369,7 +2391,7 @@ async def edit_episode_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await edit_content_menu(update, context)
     return ConversationHandler.END
 
-# --- NAYA (v29): Conversation: Change Font ---
+# --- NAYA (v29/v32): Conversation: Change Font ---
 async def change_font_start(update: Update, context: ContextTypes.DEFAULT_TYPE, from_callback: bool = False):
     query = update.callback_query
     await query.answer() # Hamesha answer karo
@@ -2383,27 +2405,30 @@ async def change_font_start(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     mono_chk = "✅" if current_style == "monospace" else ""
     normal_chk = "✅" if current_style == "normal" else ""
     # NAYA (v30)
-    rj_chk = "✅" if current_style == "rj_small_caps" else ""
     bi_chk = "✅" if current_style == "bold_italic" else ""
     c_chk = "✅" if current_style == "cursive" else ""
+    # NAYA (v32)
+    sf_bold_chk = "✅" if current_style == "sf_bold" else ""
+    sf_reg_chk = "✅" if current_style == "sf_regular" else ""
+    # REMOVED (v32): rj_chk
 
 
     keyboard = [
         [
-            InlineKeyboardButton(f"Bold {bold_chk}", callback_data="font_style_bold_html"),
+            InlineKeyboardButton(f"Bold (HTML) {bold_chk}", callback_data="font_style_bold_html"),
             InlineKeyboardButton(f"Italic {italic_chk}", callback_data="font_style_italic")
         ],
         [
             InlineKeyboardButton(f"Monospace {mono_chk}", callback_data="font_style_monospace"),
             InlineKeyboardButton(f"Normal {normal_chk}", callback_data="font_style_normal")
         ],
-        # NAYA (v30)
         [
-            InlineKeyboardButton(f"Small Caps {rj_chk}", callback_data="font_style_rj_small_caps"),
-            InlineKeyboardButton(f"Bold Italic {bi_chk}", callback_data="font_style_bold_italic")
+            InlineKeyboardButton(f"Bold Italic {bi_chk}", callback_data="font_style_bold_italic"),
+            InlineKeyboardButton(f"Cursive {c_chk}", callback_data="font_style_cursive")
         ],
         [
-            InlineKeyboardButton(f"Cursive {c_chk}", callback_data="font_style_cursive")
+            InlineKeyboardButton(f"SF Bold (All Caps) {sf_bold_chk}", callback_data="font_style_sf_bold"),
+            InlineKeyboardButton(f"SF Regular (Capital) {sf_reg_chk}", callback_data="font_style_sf_regular")
         ],
         [InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]
     ]
@@ -2436,14 +2461,16 @@ async def change_font_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
         italic_chk = "✅" if new_style == "italic" else ""
         mono_chk = "✅" if new_style == "monospace" else ""
         normal_chk = "✅" if new_style == "normal" else ""
-        # NAYA (v30)
-        rj_chk = "✅" if new_style == "rj_small_caps" else ""
         bi_chk = "✅" if new_style == "bold_italic" else ""
         c_chk = "✅" if new_style == "cursive" else ""
+        # NAYA (v32)
+        sf_bold_chk = "✅" if new_style == "sf_bold" else ""
+        sf_reg_chk = "✅" if new_style == "sf_regular" else ""
+        # REMOVED (v32): rj_chk
 
         keyboard = [
             [
-                InlineKeyboardButton(f"Bold {bold_chk}", callback_data="font_style_bold_html"),
+                InlineKeyboardButton(f"Bold (HTML) {bold_chk}", callback_data="font_style_bold_html"),
                 InlineKeyboardButton(f"Italic {italic_chk}", callback_data="font_style_italic")
             ],
             [
@@ -2451,11 +2478,12 @@ async def change_font_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton(f"Normal {normal_chk}", callback_data="font_style_normal")
             ],
             [
-                InlineKeyboardButton(f"Small Caps {rj_chk}", callback_data="font_style_rj_small_caps"),
-                InlineKeyboardButton(f"Bold Italic {bi_chk}", callback_data="font_style_bold_italic")
+                InlineKeyboardButton(f"Bold Italic {bi_chk}", callback_data="font_style_bold_italic"),
+                InlineKeyboardButton(f"Cursive {c_chk}", callback_data="font_style_cursive")
             ],
             [
-                InlineKeyboardButton(f"Cursive {c_chk}", callback_data="font_style_cursive")
+                InlineKeyboardButton(f"SF Bold (All Caps) {sf_bold_chk}", callback_data="font_style_sf_bold"),
+                InlineKeyboardButton(f"SF Regular (Capital) {sf_reg_chk}", callback_data="font_style_sf_regular")
             ],
             [InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]
         ]
@@ -2531,7 +2559,7 @@ async def co_admin_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
     await query.edit_message_text("Naye Co-Admin ki **Telegram User ID** bhejein.\n\n/cancel - Cancel.",
-                                  reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_admin_settings")]]))
+                                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_admin_settings")]]))
     return CA_GET_ID
 async def co_admin_add_get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -3546,6 +3574,35 @@ def main():
         entry_points=[CallbackQueryHandler(add_season_start, pattern="^admin_add_season$")], 
         states={
             S_GET_ANIME: [
+                CallbackQueryHandler(add_season_show_anime_list, pattern="^addseason_page_"),
+                CallbackQueryHandler(add_season_show_anime_list, pattern="^addseason_sort_"), # NAYA (v31)
+                CallbackQueryHandler(get_anime_for_season, pattern="^season_anime_")
+            ], 
+            S_GET_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_season_number)], 
+            S_GET_POSTER: [MessageHandler(filters.PHOTO, get_season_poster), CommandHandler("skip", skip_season_poster)],
+            S_GET_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_season_desc), CommandHandler("skip", skip_season_desc)],
+            S_CONFIRM: [CallbackQueryHandler(save_season, pattern="^save_season$")]
+        }, 
+        fallbacks=global_fallbacks + add_content_fallback, allow_reentry=True 
+    )
+    add_episode_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(add_episode_start, pattern="^admin_add_episode$")], 
+        states={
+            E_GET_ANIME: [
+                CallbackQueryHandler(add_episode_show_anime_list, pattern="^addep_page_"), 
+                CallbackQueryHandler(add_episode_show_anime_list, pattern="^addep_sort_"), # NAYA (v31)
+                CallbackQueryHandler(get_anime_for_episode, pattern="^ep_anime_")
+            ], 
+            E_GET_SEASON: [
+                CallbackQueryHandler(get_season_for_episode, pattern="^ep_season_"),
+                CallbackQueryHandler(add_episode_show_anime_list, pattern="^addep_page_"), # NAYA (v31)
+                CallbackQueryHandler(add_episode_show_anime_list, pattern="^addep_sort_az$") # NAYA (v31)
+            ], 
+            E_GET_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_episode_number)],
+            E_GET_480P: [MessageHandler(filters.ALL & ~filters.COMMAND, get_480p_file), CommandHandler("skip", skip_480p)],
+            E_GET_720P: [MessageHandler(filters.ALL & ~filters.COMMAND, get_720p_file), CommandHandler("skip", skip_720p)],
+            E_GET_1080P: [MessageHandler(filters.ALL & ~filters.COMMAND, get_1080p_file), CommandHandler("skip", skip_1080p)],
+S_GET_ANIME: [
                 CallbackQueryHandler(add_season_show_anime_list, pattern="^addseason_page_"),
                 CallbackQueryHandler(add_season_show_anime_list, pattern="^addseason_sort_"), # NAYA (v31)
                 CallbackQueryHandler(get_anime_for_season, pattern="^season_anime_")
