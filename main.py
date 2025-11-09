@@ -2025,6 +2025,46 @@ async def change_font_start(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             logger.warning(f"Change font menu edit nahi kar paya: {e}")
             
     return CF_MENU # Isi state mein raho taaki user aur changes kar sake
+async def change_font_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    new_style = query.data.replace("font_style_", "")
+    
+    try:
+        config_collection.update_one(
+            {"_id": "bot_config"},
+            {"$set": {"font_style": new_style}}
+        )
+        logger.info(f"Admin {query.from_user.id} ne font style change kiya: {new_style}")
+        
+        # Keyboard ko naye checkmarks ke saath update karo
+        bold_chk = "✅" if new_style == "bold_html" else ""
+        italic_chk = "✅" if new_style == "italic" else ""
+        mono_chk = "✅" if new_style == "monospace" else ""
+        normal_chk = "✅" if new_style == "normal" else ""
+
+        keyboard = [
+            [
+                InlineKeyboardButton(f"Bold {bold_chk}", callback_data="font_style_bold_html"),
+                InlineKeyboardButton(f"Italic {italic_chk}", callback_data="font_style_italic")
+            ],
+            [
+                InlineKeyboardButton(f"Monospace {mono_chk}", callback_data="font_style_monospace"),
+                InlineKeyboardButton(f"Normal {normal_chk}", callback_data="font_style_normal")
+            ],
+            [InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]
+        ]
+        
+        text = f"🎨 **Change Bot Font Style** 🎨\n\n✅ Style successfully **{new_style}** par set ho gaya hai!\n\nCurrent Style: **{new_style}**"
+        
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+
+    except Exception as e:
+        logger.error(f"Font style change karne me error: {e}")
+        await query.answer("❌ Error! Style change nahi kar paya.", show_alert=True)
+        
+    return CF_MENU # Isi state mein raho taaki user aur changes kar sake
 
 # --- NAYA: Conversation: Co-Admin Add ---
 async def co_admin_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
