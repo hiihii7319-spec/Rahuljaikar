@@ -122,10 +122,10 @@ def apply_font_style(text: str, style: str) -> str:
     return text.translate(translator)
 
 # --- NAYA (v30) FIX: Font Helper (Links/Commands/Placeholders ko skip karega) ---
-# --- (v32) UPDATE: Markdown AND Blockquotes ko bhi skip karega ---
+# --- (v37) UPDATE: Fix DOTALL flag for multiline code blocks ---
 async def format_text(text: str) -> str:
     """Config fetch karega aur global font style apply karega.
-    Links, commands, placeholders, markdown, aur blockquotes ko skip kar dega."""
+    Links, commands, placeholders, markdown, aur code boxes ko skip kar dega."""
     if not text or not isinstance(text, str):
         return text
     try:
@@ -137,16 +137,16 @@ async def format_text(text: str) -> str:
 
         translator = FONT_STYLES.get(style, FONT_STYLES['default'])
 
-        # NAYA (v32) FIX: Blockquotes (`> `), Markdown, links, etc. ko skip karo
+        # NAYA (v37) FIX: Sabhi special characters ko skip karo (with re.DOTALL)
         pattern = re.compile(
             r'(\*\*.*?\*\*|__.*?__|'  # **bold** or __bold__
             r'|\*.*?\*|_.*?_|'         # *italic* or _italic*
-            r'|`.*?`|```.*?```|'       # `code` or ```code``` (YAHAN FIX HAI)
+            r'|`.*?`|```.*?```|'       # `code` or ```code block``` (YAHAN FIX HAI)
             r'|https?://[^\s]+|t\.me/[^\s]+|www\.[^\s]+|'  # Links
             r'|/[a-zA-Z0-9_]+|'        # Commands
             r'|\{[a-zA-Z0-9_]+\}|'      # Placeholders
             r'(^> |\n> ))'             # Blockquote markers (> )
-        , re.MULTILINE)
+        , re.MULTILINE | re.DOTALL) # NAYA: re.DOTALL add kiya hai
         
         parts = pattern.split(text)
         styled_parts = []
