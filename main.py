@@ -1,11 +1,10 @@
 # ============================================
-# ===    COMPLETE FINAL FIX (v38)          ===
+# ===    COMPLETE FINAL FIX (v39)          ===
 # ============================================
+# === (FIX: Font/Prefix on File Captions)    ===
 # === (FEAT: Re-add Global Prefix System)    ===
-# === (FIX: Font Styler on File Captions)    ===
-# ============================================
-# === (FEAT: Remove Global Quote System)     ===
 # === (FIX: Font Styler Breaking Links/Cmds) ===
+# ============================================
 # === (FEAT: Add Font/Style Changer)         ===
 # === (FEAT: Add "Generate Link" System)     ===
 # === (FIX: "Fetching" Msg Deletion)         ===
@@ -108,7 +107,7 @@ FONT_STYLES = {
     ),
     'italic_sans': str.maketrans(
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
-        "𝘈𝘉𝐶𝘋𝘌𝘍𝘎𝘏𝘐𝘑𝘒𝘓𝘔𝘕𝘖𝘗Q𝘙𝘚𝘛𝘜𝘝𝘞𝘟Y𝘡𝘢𝘣𝘤𝘥𝘦𝘧𝘨𝘩𝘪𝘫𝘬𝘭𝘮𝘯𝘰𝘱𝘲𝘳𝘴𝘵𝘶𝘷𝘸x𝘺𝘻"
+        "𝘈𝘉𝐶𝘋E𝘍𝘎𝘏𝘐𝘑𝘒𝘓𝘔𝘕𝘖𝘗Q𝘙𝘚𝘛𝘜𝘝𝘞𝘟Y𝘡𝘢𝘣𝘤𝘥𝘦𝘧𝘨𝘩𝘪𝘫𝘬𝘭𝘮𝘯𝘰𝘱𝘲𝘳𝘴𝘵𝘶𝘷𝘸x𝘺𝘻"
     ),
     'monospace': str.maketrans(
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",
@@ -2377,7 +2376,7 @@ async def co_admin_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await query.answer()
     # NAYA (v29): Style apply karo
     await query.edit_message_text(text=await format_text("Naye Co-Admin ki **Telegram User ID** bhejein.\n\n/cancel - Cancel."),
-                                             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_admin_settings")]]))
+                                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_admin_settings")]]))
     return CA_GET_ID
 async def co_admin_add_get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -3233,8 +3232,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
 async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Callback data 'dl' se shuru hone wale sabhi buttons ko handle karega.
-    (v33/v35) FIX: Removed format_text from caption to allow Markdown boxes.
-    (v38) FIX: Apply font style to file_warning
+    (v39) FIX: Font/Prefix ko file captions par apply karne ka logic theek kiya.
     """
     query: CallbackQuery = update.callback_query
     user = query.from_user
@@ -3344,10 +3342,8 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
             
             delete_minutes = max(1, delete_time // 60)
             warning_template = config.get("messages", {}).get("file_warning", "Warning")
-            # NAYA (v38) FIX: {minutes} ko replace karo, LEKIN format_text ab apply KARO.
+            # NAYA (v39) FIX: {minutes} ko replace karo
             warning_msg_template = warning_template.replace('{minutes}', str(delete_minutes))
-            # Ab format_text call karo
-            formatted_warning = await format_text(warning_msg_template)
             
             for quality in sorted_q_list:
                 file_id = qualities_dict.get(quality)
@@ -3355,141 +3351,203 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                 
                 sent_message = None 
                 try:
-                    # NAYA (v38) FIX: Yahan 'formatted_warning' use hoga
-                    # (v38) FIX: Caption text ko manually format karo (prefix ke bina)
-                    styled_caption_main = await format_text(f"🎬 **{anime_name}**\nS{season_name} - E{ep_num} ({quality})\n\n")
+                    # NAYA (v39) FIX: Caption ko pehle banao, fir format_text() call karo
                     
-                    # Prefix ko caption se hatao aur warning mein rakho
-                    global_prefix = (await get_config()).get("global_prefix", "")
-                    prefix_to_remove = f"{global_prefix}\n" if global_prefix else ""
+                    # 1. File details
+                    file_details = f"🎬 **{anime_name}**\nS{season_name} - E{ep_num} ({quality})\n\n"
+                    # 2. File details + warning message
+                    raw_caption = file_details + warning_msg_template
                     
-                    if styled_caption_main.startswith(prefix_to_remove):
-                         styled_caption_main = styled_caption_main[len(prefix_to_remove):]
+                    # 3. Poore caption par font/prefix apply karo
+                    caption_template = await format_text(raw_caption)
                     
-                    # Final caption = (prefix + warning) + styled_caption
-                    caption_template = f"{formatted_warning}\n{styled_caption_main}"
-
                     sent_message = await context.bot.send_video(
-                        chat_id=user_id, 
-                        video=file_id, 
-                        caption=caption_template, # Bhejo formatted text + markdown
-                        parse_mode='Markdown' # Telegram isse handle karega
-                    )
-                except Exception as e:
-                    logger.error(f"User {user_id} ko file bhejte waqt error: {e}")
-                    error_msg_key = "user_dl_blocked_error" if "blocked" in str(e) else "user_dl_file_error"
-                    msg_template = config.get("messages", {}).get(error_msg_key, "Error")
-                    msg_template = msg_template.replace("{quality}", quality)
-                    # NAYA (v33): Yahan font style chalega
-                    await context.bot.send_message(user_id, text=await format_text(msg_template)) 
+                            chat_id=user_id, 
+                            video=file_id, 
+                            caption=caption_template, # Bhejo formatted text + markdown
+                            parse_mode='Markdown' # Telegram isse handle karega
+                        )
+                    except Exception as e:
+                        logger.error(f"User {user_id} ko file bhejte waqt error: {e}")
+                        error_msg_key = "user_dl_blocked_error" if "blocked" in str(e) else "user_dl_file_error"
+                        msg_template = config.get("messages", {}).get(error_msg_key, "Error")
+                        msg_template = msg_template.replace("{quality}", quality)
+                        # NAYA (v33): Yahan font style chalega
+                        await context.bot.send_message(user_id, text=await format_text(msg_template)) 
+                    
+                    if sent_message:
+                        try:
+                            asyncio.create_task(delete_message_later(
+                                bot=context.bot, 
+                                chat_id=user_id, 
+                                message_id=sent_message.message_id, 
+                                seconds=delete_time
+                            ))
+                        except Exception as e:
+                            logger.error(f"asyncio.create_task schedule failed for user {user_id}: {e}")
                 
-                if sent_message:
+                if msg_to_delete_id:
                     try:
                         asyncio.create_task(delete_message_later(
-                            bot=context.bot, 
-                            chat_id=user_id, 
-                            message_id=sent_message.message_id, 
-                            seconds=delete_time
+                            bot=context.bot,
+                            chat_id=user_id,
+                            message_id=msg_to_delete_id, 
+                            seconds=delete_time 
                         ))
                     except Exception as e:
-                        logger.error(f"asyncio.create_task schedule failed for user {user_id}: {e}")
-            
-            if msg_to_delete_id:
-                try:
-                    asyncio.create_task(delete_message_later(
-                        bot=context.bot,
-                        chat_id=user_id,
-                        message_id=msg_to_delete_id, 
-                        seconds=delete_time 
-                    ))
-                except Exception as e:
-                    logger.error(f"Async 'Sending files...' message delete schedule failed: {e}")
-            
-            return 
-            
-        sent_selection_message = None 
+                        logger.error(f"Async 'Sending files...' message delete schedule failed: {e}")
+                
+                return 
+                
+            sent_selection_message = None 
 
-        # Case 2: Season click hua hai -> Episode Bhejo
-        if season_name:
-            episodes = anime_doc.get("seasons", {}).get(season_name, {})
-            
-            episode_keys = [ep for ep in episodes.keys() if not ep.startswith("_")]
-            
-            if not episode_keys:
-                msg_template = config.get("messages", {}).get("user_dl_episodes_not_found", "Error")
+            # Case 2: Season click hua hai -> Episode Bhejo
+            if season_name:
+                episodes = anime_doc.get("seasons", {}).get(season_name, {})
+                
+                episode_keys = [ep for ep in episodes.keys() if not ep.startswith("_")]
+                
+                if not episode_keys:
+                    msg_template = config.get("messages", {}).get("user_dl_episodes_not_found", "Error")
+                    msg = await format_text(msg_template) # Yahan style chalega
+                    if checking_msg_id:
+                        try: await context.bot.delete_message(user_id, checking_msg_id)
+                        except Exception: pass
+                    
+                    if is_in_dm:
+                        if query.message.photo:
+                            await query.edit_message_caption(msg)
+                        else:
+                            await query.message.reply_text(msg)
+                    else:
+                        await context.bot.send_message(user_id, msg)
+                    return
+                
+                sorted_eps = sorted(episode_keys, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+                buttons = [InlineKeyboardButton(await format_text(f"Episode {ep}"), callback_data=f"dl{anime_id_str}__{season_name}__{ep}") for ep in sorted_eps]
+                keyboard = build_grid_keyboard(buttons, 2)
+                keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data=f"dl{anime_id_str}")])
+                
+                msg_template = config.get("messages", {}).get("user_dl_select_episode", "Select episode")
+                msg_template = msg_template.replace("{anime_name}", anime_name).replace("{season_name}", season_name)
                 msg = await format_text(msg_template) # Yahan style chalega
+
+                season_poster_id = anime_doc.get("seasons", {}).get(season_name, {}).get("_poster_id")
+                poster_to_use = season_poster_id or anime_doc['poster_id'] 
+                
                 if checking_msg_id:
                     try: await context.bot.delete_message(user_id, checking_msg_id)
                     except Exception: pass
                 
-                if is_in_dm:
-                    if query.message.photo:
-                        await query.edit_message_caption(msg)
-                    else:
-                        await query.message.reply_text(msg)
-                else:
-                    await context.bot.send_message(user_id, msg)
-                return
-            
-            sorted_eps = sorted(episode_keys, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
-            buttons = [InlineKeyboardButton(await format_text(f"Episode {ep}"), callback_data=f"dl{anime_id_str}__{season_name}__{ep}") for ep in sorted_eps]
-            keyboard = build_grid_keyboard(buttons, 2)
-            keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data=f"dl{anime_id_str}")])
-            
-            msg_template = config.get("messages", {}).get("user_dl_select_episode", "Select episode")
-            msg_template = msg_template.replace("{anime_name}", anime_name).replace("{season_name}", season_name)
-            msg = await format_text(msg_template) # Yahan style chalega
-
-            season_poster_id = anime_doc.get("seasons", {}).get(season_name, {}).get("_poster_id")
-            poster_to_use = season_poster_id or anime_doc['poster_id'] 
-            
-            if checking_msg_id:
-                try: await context.bot.delete_message(user_id, checking_msg_id)
-                except Exception: pass
-            
-            if is_deep_link:
-                sent_selection_message = await context.bot.send_photo(
-                    chat_id=user_id, 
-                    photo=poster_to_use, 
-                    caption=msg,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='Markdown'
-                )
-            else: 
-                try:
-                    if not query.message.photo:
-                        await query.message.delete()
-                        sent_selection_message = await context.bot.send_photo(
-                            chat_id=user_id,
-                            photo=poster_to_use, 
-                            caption=msg,
-                            reply_markup=InlineKeyboardMarkup(keyboard),
-                            parse_mode='Markdown'
-                        )
-                    else:
-                        await query.edit_message_media(
-                            media=InputMediaPhoto(media=poster_to_use, caption=msg, parse_mode='Markdown'),
-                            reply_markup=InlineKeyboardMarkup(keyboard)
-                        )
-                        sent_selection_message = query.message
-                except BadRequest as e:
-                    if "Message is not modified" not in str(e):
-                        logger.warning(f"DL Handler Case 2: Media edit fail, fallback to caption: {e}")
+                if is_deep_link:
+                    sent_selection_message = await context.bot.send_photo(
+                        chat_id=user_id, 
+                        photo=poster_to_use, 
+                        caption=msg,
+                        reply_markup=InlineKeyboardMarkup(keyboard),
+                        parse_mode='Markdown'
+                    )
+                else: 
+                    try:
+                        if not query.message.photo:
+                            await query.message.delete()
+                            sent_selection_message = await context.bot.send_photo(
+                                chat_id=user_id,
+                                photo=poster_to_use, 
+                                caption=msg,
+                                reply_markup=InlineKeyboardMarkup(keyboard),
+                                parse_mode='Markdown'
+                            )
+                        else:
+                            await query.edit_message_media(
+                                media=InputMediaPhoto(media=poster_to_use, caption=msg, parse_mode='Markdown'),
+                                reply_markup=InlineKeyboardMarkup(keyboard)
+                            )
+                            sent_selection_message = query.message
+                    except BadRequest as e:
+                        if "Message is not modified" not in str(e):
+                            logger.warning(f"DL Handler Case 2: Media edit fail, fallback to caption: {e}")
+                            await query.edit_message_caption( 
+                                caption=msg,
+                                reply_markup=InlineKeyboardMarkup(keyboard),
+                                parse_mode='Markdown'
+                            )
+                            sent_selection_message = query.message
+                    except Exception as e:
+                        logger.error(f"DL Handler Case 2: Media edit critical fail: {e}")
                         await query.edit_message_caption( 
                             caption=msg,
                             reply_markup=InlineKeyboardMarkup(keyboard),
                             parse_mode='Markdown'
                         )
                         sent_selection_message = query.message
-                except Exception as e:
-                    logger.error(f"DL Handler Case 2: Media edit critical fail: {e}")
-                    await query.edit_message_caption( 
+                
+                if sent_selection_message:
+                    asyncio.create_task(delete_message_later(
+                        bot=context.bot,
+                        chat_id=user_id,
+                        message_id=sent_selection_message.message_id, 
+                        seconds=delete_time 
+                    ))
+                return
+                
+            # Case 1: Sirf Anime click hua hai -> Season Bhejo
+            seasons = anime_doc.get("seasons", {})
+            if not seasons:
+                msg_template = config.get("messages", {}).get("user_dl_seasons_not_found", "Error")
+                msg = await format_text(msg_template) # Yahan style chalega
+                if checking_msg_id:
+                    try: await context.bot.delete_message(user_id, checking_msg_id)
+                    except Exception: pass
+                    
+                if is_in_dm: 
+                    if query.message.photo:
+                        await query.edit_message_caption(msg)
+                    else:
+                        await query.edit_message_text(msg)
+                else: 
+                    await context.bot.send_message(user_id, msg)
+                return
+            
+            sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+            buttons = [InlineKeyboardButton(await format_text(f"Season {s}"), callback_data=f"dl{anime_id_str}__{s}") for s in sorted_seasons]
+            keyboard = build_grid_keyboard(buttons, 1) 
+            keyboard.append([InlineKeyboardButton("⬅️ Back to Bot Menu", callback_data="user_back_menu")])
+            
+            msg_template = config.get("messages", {}).get("user_dl_select_season", "Select season")
+            msg_template = msg_template.replace("{anime_name}", anime_name)
+            msg = await format_text(msg_template) # Yahan style chalega
+
+            if checking_msg_id:
+                try: await context.bot.delete_message(user_id, checking_msg_id)
+                except Exception: pass
+                
+            if is_deep_link:
+                sent_selection_message = await context.bot.send_photo(
+                    chat_id=user_id, 
+                    photo=anime_doc['poster_id'], 
+                    caption=msg,
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='Markdown'
+                )
+            else: 
+                if not query.message.photo:
+                    await query.message.delete()
+                    sent_selection_message = await context.bot.send_photo(
+                        chat_id=user_id,
+                        photo=anime_doc['poster_id'], 
+                        caption=msg,
+                        reply_markup=InlineKeyboardMarkup(keyboard),
+                        parse_mode='Markdown'
+                    )
+                else:
+                    await query.edit_message_caption(
                         caption=msg,
                         reply_markup=InlineKeyboardMarkup(keyboard),
                         parse_mode='Markdown'
                     )
                     sent_selection_message = query.message
-            
+
             if sent_selection_message:
                 asyncio.create_task(delete_message_later(
                     bot=context.bot,
@@ -3498,72 +3556,6 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                     seconds=delete_time 
                 ))
             return
-            
-        # Case 1: Sirf Anime click hua hai -> Season Bhejo
-        seasons = anime_doc.get("seasons", {})
-        if not seasons:
-            msg_template = config.get("messages", {}).get("user_dl_seasons_not_found", "Error")
-            msg = await format_text(msg_template) # Yahan style chalega
-            if checking_msg_id:
-                try: await context.bot.delete_message(user_id, checking_msg_id)
-                except Exception: pass
-                
-            if is_in_dm: 
-                if query.message.photo:
-                    await query.edit_message_caption(msg)
-                else:
-                    await query.edit_message_text(msg)
-            else: 
-                await context.bot.send_message(user_id, msg)
-            return
-        
-        sorted_seasons = sorted(seasons.keys(), key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
-        buttons = [InlineKeyboardButton(await format_text(f"Season {s}"), callback_data=f"dl{anime_id_str}__{s}") for s in sorted_seasons]
-        keyboard = build_grid_keyboard(buttons, 1) 
-        keyboard.append([InlineKeyboardButton("⬅️ Back to Bot Menu", callback_data="user_back_menu")])
-        
-        msg_template = config.get("messages", {}).get("user_dl_select_season", "Select season")
-        msg_template = msg_template.replace("{anime_name}", anime_name)
-        msg = await format_text(msg_template) # Yahan style chalega
-
-        if checking_msg_id:
-            try: await context.bot.delete_message(user_id, checking_msg_id)
-            except Exception: pass
-            
-        if is_deep_link:
-            sent_selection_message = await context.bot.send_photo(
-                chat_id=user_id, 
-                photo=anime_doc['poster_id'], 
-                caption=msg,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='Markdown'
-            )
-        else: 
-            if not query.message.photo:
-                await query.message.delete()
-                sent_selection_message = await context.bot.send_photo(
-                    chat_id=user_id,
-                    photo=anime_doc['poster_id'], 
-                    caption=msg,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='Markdown'
-                )
-            else:
-                await query.edit_message_caption(
-                    caption=msg,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='Markdown'
-                )
-                sent_selection_message = query.message
-
-        if sent_selection_message:
-            asyncio.create_task(delete_message_later(
-                bot=context.bot,
-                chat_id=user_id,
-                message_id=sent_selection_message.message_id, 
-                seconds=delete_time 
-            ))
-        return
 
     except Exception as e:
         # Main error handler
@@ -4091,7 +4083,7 @@ def main():
     # Error handler
     bot_app.add_error_handler(error_handler)
     
-  # --- NAYA: Threading setup ---
+   # --- NAYA: Threading setup ---
     # 1. Bot ke liye naya event loop banayein
     bot_event_loop = asyncio.new_event_loop()
     
