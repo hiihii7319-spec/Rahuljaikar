@@ -3369,25 +3369,17 @@ def main():
         fallbacks=global_fallbacks + edit_fallback, allow_reentry=True
     )
     gen_link_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(gen_link_menu, pattern="^admin_gen_link$")],
-        states={
-            GL_MENU: [CallbackQueryHandler(gen_link_select_anime, pattern="^gen_link_anime$|^gen_link_season$|^gen_link_episode$")],
-            GL_GET_ANIME: [CallbackQueryHandler(gen_link_show_anime_list, pattern="^genlink_page_"),
-                            CallbackQueryHandler(gen_link_select_season, pattern="^gen_link_anime_")],
-           # ✅ YEH SAHI FIX HAI
-# ...
+        entry_points=[CallbackQueryHandler(gen_link_menu, pattern="^admin_gen_link$")],
+        states={
+            GL_MENU: [CallbackQueryHandler(gen_link_select_anime, pattern="^gen_link_anime$|^gen_link_season$|^gen_link_episode$")],
+            GL_GET_ANIME: [CallbackQueryHandler(gen_link_show_anime_list, pattern="^genlink_page_"),
+                            CallbackQueryHandler(gen_link_select_season, pattern="^gen_link_anime_")],
             GL_GET_SEASON: [CallbackQueryHandler(gen_link_select_episode, pattern="^gen_link_season_"),
                             CallbackQueryHandler(gen_link_show_anime_list, pattern="^genlink_page_")],
             GL_GET_EPISODE: [
-                CallbackQueryHandler(gen_link_finish, pattern="^gen_link_ep_.*$"), # NAYA FIX: Pattern poora kiya
-                CallbackQueryHandler(gen_link_select_season, pattern="^gen_link_anime_") # Back to seasons
+                CallbackQueryHandler(gen_link_finish, pattern="^gen_link_ep_.*$"), 
+                CallbackQueryHandler(gen_link_select_season, pattern="^gen_link_anime_")
             ],
-        },
-# ...
-# --- (v30) YAHAN SE PART 2 SHURU HOTA HAI ---
-
-                                pattern="^gen_link_ep_.*$"), # NAYA FIX: Pattern poora kiya
-                                CallbackQueryHandler(gen_link_select_season, pattern="^gen_link_anime_")], # Back to seasons
         }, 
         fallbacks=global_fallbacks + gen_link_fallback, allow_reentry=True 
     )
