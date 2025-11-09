@@ -102,6 +102,7 @@ async def is_co_admin(user_id: int) -> bool:
 
 
 # --- NAYA (v29): Message Formatting Helper ---
+# --- NAYA (v29): Message Formatting Helper ---
 async def format_message(full_name: str, text: str):
     """Bot ke saare replies ko format karega."""
     config = await get_config()
@@ -110,17 +111,11 @@ async def format_message(full_name: str, text: str):
     # User ke naam se " . " ya " _ " hata do (agar hai toh)
     cleaned_name = escape_markdown(full_name.replace("_", " ").replace(".", " "), version=2)
     
-    header = f"👋 **Hey, {cleaned_name}**\!\n\n"
+    # --- MODIFICATION: Make header text upper ---
+    header_text = f"👋 HEY, {cleaned_name.upper()}"
+    header = f"**{header_text}**\!\n\n" # For MarkdownV2
     
     if style == "bold":
-        # Telegram MarkdownV2 ke liye special characters ko escape karo
-        # Lekin * ko escape mat karo taaki bold kaam kare
-        
-        # Pehle poore text ko escape karo
-        escaped_text = escape_markdown(text, version=2)
-        # Ab, text ko bold markers se wrap karo
-        # Note: Telegram ka markdown thoda ajeeb hai.
-        # Hum simple bold ke liye HTML use karenge, yeh zyada reliable hai.
         style = "bold_html" # Force HTML for bold
         
     if style == "bold_html":
@@ -128,25 +123,29 @@ async def format_message(full_name: str, text: str):
         escaped_name = full_name.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;")
         escaped_text = text.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;")
         
+        # --- MODIFICATION: Make all text .upper() ---
         formatted_text = (
-            f"<blockquote><b>👋 Hey, {escaped_name}!</b></blockquote>\n\n"
-            f"<b>{escaped_text}</b>"
+            f"<b>👋 HEY, {escaped_name.upper()}!</b>\n\n"
+            f"<b>{escaped_text.upper()}</b>"
         )
         return formatted_text, ParseMode.HTML
 
     elif style == "italic":
         escaped_text = escape_markdown(text, version=2)
-        formatted_text = header + f"_{escaped_text}_"
+        # --- MODIFICATION: Make all text .upper() ---
+        formatted_text = header + f"_{escaped_text.upper()}_"
         return formatted_text, ParseMode.MARKDOWN_V2
 
     elif style == "monospace":
         escaped_text = escape_markdown(text, version=2)
-        formatted_text = header + f"```{escaped_text}```"
+        # --- MODIFICATION: Make all text .upper() ---
+        formatted_text = header + f"```{escaped_text.upper()}```"
         return formatted_text, ParseMode.MARKDOWN_V2
 
     else: # Normal
         escaped_text = escape_markdown(text, version=2)
-        formatted_text = header + escaped_text
+        # --- MODIFICATION: Make all text .upper() ---
+        formatted_text = header + escaped_text.upper()
         return formatted_text, ParseMode.MARKDOWN_V2
 
 # --- Config Helper (NAYA FEATURE: Bahut Saare Custom Messages) ---
