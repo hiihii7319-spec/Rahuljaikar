@@ -2015,7 +2015,7 @@ async def change_font_start(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         [InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]
     ]
     
-    text = f"🎨 **Change Bot Font Style** 🎨\n\nBot users ko kis style mein reply karega? (Quotes ke saath)\n\nCurrent Style: **{current_style}**"
+    text = f"🎨 **Change Bot Font Style** 🎨\n\nBot users ko kis style mein reply karega? (Quotes ke saath)\n\nCurrent Style: `{current_style}`"
     
     # Hamesha edit_message_text use karo, if/else ki zaroorat nahi
     try:
@@ -2056,7 +2056,7 @@ async def change_font_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]
         ]
         
-        text = f"🎨 **Change Bot Font Style** 🎨\n\n✅ Style successfully **{new_style}** par set ho gaya hai!\n\nCurrent Style: **{new_style}**"
+        text = f"🎨 **Change Bot Font Style** 🎨\n\n✅ Style successfully `{new_style}` par set ho gaya hai!\n\nCurrent Style: `{new_style}`"
         
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
 
