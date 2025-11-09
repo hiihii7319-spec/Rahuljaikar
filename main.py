@@ -26,6 +26,7 @@ from telegram.ext import (
     MessageHandler,
     CallbackQueryHandler,
     filters,
+    Defaults  # <-- YEH ADD KARO
 )
 from telegram.error import BadRequest
 # Flask server ke liye
@@ -3709,7 +3710,9 @@ def main():
     PORT = int(os.environ.get("PORT", 8080))
     
     # NAYA: Default ParseMode set karo
-    bot_app = Application.builder().token(BOT_TOKEN).defaults(parse_mode=ParseMode.HTML).build()
+    # --- YEH RAHA FIX ---
+    my_defaults = Defaults(parse_mode=ParseMode.HTML)
+    bot_app = Application.builder().token(BOT_TOKEN).defaults(my_defaults).build()
     
     # --- Saare Handlers ---
     
