@@ -101,51 +101,54 @@ async def is_co_admin(user_id: int) -> bool:
     return user_id in config.get("co_admins", [])
 
 
-# --- NAYA (v29): Message Formatting Helper ---
-# --- NAYA (v29): Message Formatting Helper ---
+# --- NAYA (v29): Message Formatting Helper ---# --- NAYA (v30): Message Formatting Helper ---
 async def format_message(full_name: str, text: str):
     """Bot ke saare replies ko format karega."""
     config = await get_config()
     style = config.get("font_style", "bold") # Default 'bold'
     
     # User ke naam se " . " ya " _ " hata do (agar hai toh)
+    # 1. NAME IS NORMAL CASE
     cleaned_name = escape_markdown(full_name.replace("_", " ").replace(".", " "), version=2)
     
-    # --- MODIFICATION: Make header text upper ---
-    header_text = f"👋 HEY, {cleaned_name.upper()}"
-    header = f"**{header_text}**\!\n\n" # For MarkdownV2
+    header = f"👋 **Hey, {cleaned_name}**\!\n\n" # For MarkdownV2 (normal case name)
     
     if style == "bold":
         style = "bold_html" # Force HTML for bold
         
     if style == "bold_html":
-        # HTML ParseMode ke liye, sirf < > & ko escape karna zaroori hai
+        # HTML ParseMode
+        # 1. NAME IS NORMAL CASE
         escaped_name = full_name.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;")
         escaped_text = text.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;")
         
-        # --- MODIFICATION: Make all text .upper() ---
+        # 2. TEXT IS ALL CAPS
+        # 3. TEXT IS IN QUOTE BLOCK
         formatted_text = (
-            f"<b>👋 HEY, {escaped_name.upper()}!</b>\n\n"
-            f"<b>{escaped_text.upper()}</b>"
+            f"<b>👋 Hey, {escaped_name}!</b>\n\n"
+            f"<blockquote><b>{escaped_text.upper()}</b></blockquote>"
         )
         return formatted_text, ParseMode.HTML
 
     elif style == "italic":
         escaped_text = escape_markdown(text, version=2)
-        # --- MODIFICATION: Make all text .upper() ---
-        formatted_text = header + f"_{escaped_text.upper()}_"
+        # 2. TEXT IS ALL CAPS
+        # 3. TEXT IS IN QUOTE BLOCK (MarkdownV2)
+        formatted_text = header + f"> _{escaped_text.upper()}_"
         return formatted_text, ParseMode.MARKDOWN_V2
 
     elif style == "monospace":
         escaped_text = escape_markdown(text, version=2)
-        # --- MODIFICATION: Make all text .upper() ---
-        formatted_text = header + f"```{escaped_text.upper()}```"
+        # 2. TEXT IS ALL CAPS
+        # 3. TEXT IS IN QUOTE BLOCK (MarkdownV2)
+        formatted_text = header + f"> ```{escaped_text.upper()}```"
         return formatted_text, ParseMode.MARKDOWN_V2
 
     else: # Normal
         escaped_text = escape_markdown(text, version=2)
-        # --- MODIFICATION: Make all text .upper() ---
-        formatted_text = header + escaped_text.upper()
+        # 2. TEXT IS ALL CAPS
+        # 3. TEXT IS IN QUOTE BLOCK (MarkdownV2)
+        formatted_text = header + f"> {escaped_text.upper()}"
         return formatted_text, ParseMode.MARKDOWN_V2
 
 # --- Config Helper (NAYA FEATURE: Bahut Saare Custom Messages) ---
