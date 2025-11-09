@@ -143,7 +143,7 @@ async def format_message(full_name: str, text: str):
     
     # User ke naam se " . " ya " _ " hata do (agar hai toh)
     cleaned_name = escape_markdown(full_name.replace("_", " ").replace(".", " "), version=2)
-    header = f"👋 **Hey, {cleaned_name}**\!\n\n" # For MarkdownV2
+    header = f"👋 **Hey, {cleaned_name}**\\!\n\n" # For MarkdownV2
     
     if style == "bold":
         style = "bold_html" # Force HTML for bold
@@ -3374,9 +3374,16 @@ def main():
             GL_MENU: [CallbackQueryHandler(gen_link_select_anime, pattern="^gen_link_anime$|^gen_link_season$|^gen_link_episode$")],
             GL_GET_ANIME: [CallbackQueryHandler(gen_link_show_anime_list, pattern="^genlink_page_"),
                             CallbackQueryHandler(gen_link_select_season, pattern="^gen_link_anime_")],
-            GL_GET_SEASON: [CallbackQueryHandler(gen_link_select_episode, pattern="^gen_link_season_"),
-                            CallbackQueryHandler(gen_link_show_anime_list, pattern="^genlink_page_")],
-            GL_GET_EPISODE: [CallbackQueryHandler(gen_link_finish, pattern="^gen_link_ep_
+           # ✅ YEH SAHI FIX HAI
+# ...
+            GL_GET_SEASON: [CallbackQueryHandler(gen_link_select_episode, pattern="^gen_link_season_"),
+                            CallbackQueryHandler(gen_link_show_anime_list, pattern="^genlink_page_")],
+            GL_GET_EPISODE: [
+                CallbackQueryHandler(gen_link_finish, pattern="^gen_link_ep_.*$"), # NAYA FIX: Pattern poora kiya
+                CallbackQueryHandler(gen_link_select_season, pattern="^gen_link_anime_") # Back to seasons
+            ],
+        },
+# ...
 # --- (v30) YAHAN SE PART 2 SHURU HOTA HAI ---
 
                                 pattern="^gen_link_ep_.*$"), # NAYA FIX: Pattern poora kiya
