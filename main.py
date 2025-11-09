@@ -2606,7 +2606,15 @@ async def bot_settings_get_quote(update: Update, context: ContextTypes.DEFAULT_T
         text += "Current Quote: *Empty*\n\n"
         
     text += "Naya quote text bhejein.\n"
-    text += "Yeh quote har uss message mein `"{q}"` ki jagah dikhega jahaan aapne yeh placeholder add kiya hai.\n\n"
+    
+    # ============================================
+    # ===           NAYA FIX (v29.1)           ===
+    # ===      (FIX: SyntaxError Line 2609)    ===
+    # ============================================
+    # Yeh line galat thi, ab aisi dikhni chahiye:
+    text += "Yeh quote har uss message mein `'{q}'` ki jagah dikhega jahaan aapne yeh placeholder add kiya hai.\n\n"
+    # ============================================
+    
     text += "/skip - Quote remove karne ke liye.\n/cancel - Cancel."
     
     await query.edit_message_text(text=await format_text(text), parse_mode='Markdown', reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_bot_settings")]]))
