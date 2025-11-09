@@ -122,9 +122,10 @@ def apply_font_style(text: str, style: str) -> str:
     return text.translate(translator)
 
 # --- NAYA (v30) FIX: Font Helper (Links/Commands/Placeholders ko skip karega) ---
+# --- (v31) UPDATE: Markdown ko bhi skip karega ---
 async def format_text(text: str) -> str:
     """Config fetch karega aur global font style apply karega.
-    Links, commands, aur placeholders ko skip kar dega."""
+    Links, commands, placeholders, aur markdown ko skip kar dega."""
     if not text or not isinstance(text, str):
         return text
     try:
@@ -136,23 +137,25 @@ async def format_text(text: str) -> str:
 
         translator = FONT_STYLES.get(style, FONT_STYLES['default'])
 
-        # Regex to find URLs, commands, and placeholders
-        # (?:...) -> non-capturing group
-        # (https?://[^\s]+) -> Capture URLs
-        # (t\.me/[^\s]+) -> Capture t.me links
-        # (www\.[^\s]+) -> Capture www. links
-        # (/[a-zA-Z0-9_]+) -> Capture commands like /start
-        # (\{[a-zA-Z0-9_]+\}) -> Capture placeholders like {anime_name}
-        pattern = re.compile(r'(https?://[^\s]+|t\.me/[^\s]+|www\.[^\s]+|/[a-zA-Z0-9_]+|\{[a-zA-Z0-9_]+\})')
+        # NAYA (v31) FIX: Markdown characters ko bhi skip karo
+        # Yeh regex links, commands, placeholders, aur sabhi markdown types ko dhoondhega
+        pattern = re.compile(
+            r'(\*\*.*?\*\*|__.*?__|'  # **bold** or __bold__
+            r'|\*.*?\*|_.*?_|'         # *italic* or _italic_
+            r'|`.*?`|```.*?```|'       # `code` or ```code```
+            r'|https?://[^\s]+|t\.me/[^\s]+|www\.[^\s]+|'  # Links
+            r'|/[a-zA-Z0-9_]+|'        # Commands
+            r'|\{[a-zA-Z0-9_]+\})'      # Placeholders
+        )
         
         parts = pattern.split(text)
         styled_parts = []
         
         for part in parts:
-            if pattern.match(part):
-                # Yeh ek link/command/placeholder hai, style mat karo
+            if part and pattern.match(part): # Check for 'part' to avoid empty strings
+                # Yeh ek link/command/placeholder/markdown hai, style mat karo
                 styled_parts.append(part)
-            else:
+            elif part: # Check for 'part' to avoid empty strings
                 # Yeh normal text hai, style karo
                 styled_parts.append(part.translate(translator))
                 
