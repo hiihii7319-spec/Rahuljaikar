@@ -1339,19 +1339,22 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         context.user_data['btn_donate'] = btn_donate
         context.user_data['is_episode_post'] = context.user_data.get('is_episode_post', False) # NAYA: Isko bhi save karo
         
-        # Ab Channel ID ke bajaye Short Link maango
-        # NAYA (v29): Style apply karo
+        # ============================================
+        # ===        NAYA FIX (v29.2) Clickable Link   ===
+        # ============================================
+        # Backticks (` `) hata diye gaye hain
         await query.edit_message_text(
             text=await format_text(
                 "✅ **Post Ready!**\n\n"
                 "Aapka original download link hai:\n"
-                f"`{original_download_url}`\n\n"  # Ab yahaan sahi link aayega
+                f"{original_download_url}\n\n"  # <<<--- YAHAN SE BACKTICKS HATA DIYE HAIN
                 "Please iska **shortened link** reply mein bhejein.\n"
                 "(Agar link change nahi karna hai, toh upar waala link hi copy karke bhej dein.)\n\n"
                 "/cancel - Cancel."
             ),
-            parse_mode='Markdown'
+            parse_mode=None # None use karo taaki Telegram link ko detect kare
         )
+        # ============================================
         
         return PG_GET_SHORT_LINK # Naye state par bhejo
         # ============================================
@@ -1584,17 +1587,21 @@ async def gen_link_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         final_link = f"https://t.me/{bot_username}?start={dl_callback_data}"
         
-        # NAYA (v29): Style apply karo
+        # ============================================
+        # ===        NAYA FIX (v29.2) Clickable Link   ===
+        # ============================================
+        # Backticks (` `) hata diye gaye hain
         await query.edit_message_text(
             text=await format_text(
                 f"✅ **Link Generated!**\n\n"
                 f"**Target:** {title}\n"
-                f"**Link:**\n`{final_link}`\n\n"
+                f"**Link:**\n{final_link}\n\n" # <<<--- YAHAN SE BACKTICKS HATA DIYE HAIN
                 f"Is link ko copy karke kahin bhi paste karein."
             ),
-            parse_mode='Markdown',
+            parse_mode=None, # None use karo taaki Telegram link ko detect kare
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]])
         )
+        # ============================================
         
     except Exception as e:
         logger.error(f"Link generate karne me error: {e}", exc_info=True)
