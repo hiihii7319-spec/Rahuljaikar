@@ -141,7 +141,7 @@ async def format_text(text: str) -> str:
         pattern = re.compile(
             r'(\*\*.*?\*\*|__.*?__|'  # **bold** or __bold__
             r'|\*.*?\*|_.*?_|'         # *italic* or _italic*
-            r'|`.*?`|```.*?```|'       # `code` or ```code```
+            r'|`.*?`|```.*?```|'       # `code` or ```code``` (YAHAN FIX HAI)
             r'|https?://[^\s]+|t\.me/[^\s]+|www\.[^\s]+|'  # Links
             r'|/[a-zA-Z0-9_]+|'        # Commands
             r'|\{[a-zA-Z0-9_]+\}|'      # Placeholders
