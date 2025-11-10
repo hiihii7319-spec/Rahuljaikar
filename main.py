@@ -3205,6 +3205,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "full_name": full_name,
                 "first_name": user.first_name # Compatibility ke liye add kiya
             }) # NAYA
+            # Ensure the message uses /user, even if DB message is old
+            text = text.replace("/subscription", "/user") 
             await update.message.reply_text(text, parse_mode=ParseMode.HTML)
     
 async def show_user_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, from_callback: bool = False):
