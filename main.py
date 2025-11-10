@@ -1,10 +1,10 @@
 # ============================================
-# ===       COMPLETE FINAL FIX (v29)       ===
+# ===       COMPLETE FINAL FIX (v30)       ===
 # ============================================
-# === (FEAT: Make ALL messages editable)   ===
-# === (FEAT: "Bot Appearance" Font/Style)  ===
-# === (FEAT: Standardize to HTML ParseMode)===
-# === (FEAT: <f> tag for font formatting)  ===
+# === (FIX: Remove empty <pre> boxes)      ===
+# === (FEAT: Add Help Button & Link)       ===
+# === (FEAT: Show User's Full Name)        ===
+# === (FIX: Broken Font Map characters)    ===
 # ============================================
 import os
 import logging
@@ -26,7 +26,7 @@ from telegram.ext import (
     MessageHandler,
     CallbackQueryHandler,
     filters,
-    Defaults  # <-- YEH ADD KARO
+    Defaults
 )
 from telegram.error import BadRequest
 # Flask server ke liye
@@ -52,7 +52,7 @@ FONT_MAPS = {
         'j': '𝘫', 'k': '𝘬', 'l': '𝘭', 'm': '𝘮', 'n': '𝘯', 'o': '𝘰', 'p': '𝘱', 'q': '𝘲', 'r': '𝘳',
         's': '𝘴', 't': '𝘵', 'u': '𝘶', 'v': '𝘷', 'w': '𝘸', 'x': '𝘹', 'y': '𝘺', 'z': '𝘻',
         'A': '𝘈', 'B': '𝘉', 'C': '𝘊', 'D': '𝘋', 'E': '𝘌', 'F': '𝘍', 'G': '𝘎', 'H': '𝘏', 'I': '𝘐',
-        'J': '𝘑', 'K': '𝘒', 'L': '𝘓', 'M': '𝘔', 'N': '𝘕', 'O': '𝘖', 'P': '𝘗', 'Q': '𝘘', 'R': '𘙿',
+        'J': '𝘑', 'K': '𝘒', 'L': '𝘓', 'M': '𝘔', 'N': '𝘕', 'O': '𝘖', 'P': '𝘗', 'Q': '𝘘', 'R': '𝘙', # <-- FIX
         'S': '𝘚', 'T': '𝘛', 'U': '𝘜', 'V': '𝘝', 'W': '𝘞', 'X': '𝘟', 'Y': '𝘠', 'Z': '𝘡',
         '0': '𝟢', '1': '𝟣', '2': '𝟤', '3': '𝟥', '4': '𝟦', '5': '𝟧', '6': '𝟨', '7': '𝟩', '8': '𝟪', '9': '𝟫'
     },
@@ -96,8 +96,8 @@ FONT_MAPS = {
         'a': '𝘢', 'b': '𝘣', 'c': '𝘤', 'd': '𝘥', 'e': '𝘦', 'f': '𝘧', 'g': '𝘨', 'h': '𝘩', 'i': '𝘪',
         'j': '𝘫', 'k': '𝘬', 'l': '𝘭', 'm': '𝘮', 'n': '𝘯', 'o': '𝘰', 'p': '𝘱', 'q': '𝘲', 'r': '𝘳',
         's': '𝘴', 't': '𝘵', 'u': '𝘶', 'v': '𝘷', 'w': '𝘸', 'x': '𝘹', 'y': '𝘺', 'z': '𝘻',
-        'A': '𝘈', 'B': '𝘉', 'C': '𝘊', 'D': '𝘋', 'E': '𘙰', 'F': '𝘍', 'G': '𝘎', 'H': '𝘏', 'I': '𝘐',
-        'J': '𝘑', 'K': '𝘒', 'L': '𝘓', 'M': '𝘔', 'N': '𝘕', 'O': '𝘖', 'P': '𝘗', 'Q': '𝘘', 'R': '𘙿',
+        'A': '𝘈', 'B': '𝘉', 'C': '𝘊', 'D': '𝘋', 'E': '𝘌', 'F': '𝘍', 'G': '𝘎', 'H': '𝘏', 'I': '𝘐', # <-- FIX
+        'J': '𝘑', 'K': '𝘒', 'L': '𝘓', 'M': '𝘔', 'N': '𝘕', 'O': '𝘖', 'P': '𝘗', 'Q': '𝘘', 'R': '𝘙', # <-- FIX
         'S': '𝘚', 'T': '𝘛', 'U': '𝘜', 'V': '𝘝', 'W': '𝘞', 'X': '𝘟', 'Y': '𝘠', 'Z': '𝘡',
         '0': '0', '1': '1', '2': '2', '3': '3', '4': '4', '5': '5', '6': '6', '7': '7', '8': '8', '9': '9'
     },
@@ -261,6 +261,7 @@ async def format_message(context: ContextTypes.DEFAULT_TYPE, key: str, variables
 async def get_default_messages():
     """
     Saare default messages ki list, <f> tags aur HTML ke saath.
+    FIX: Saare <pre> tags hata diye jo spacing ke liye the.
     """
     # <pre>...</pre> tag commands (/cancel) ko clickable banaye rakhne ke liye zaroori hai
     return {
@@ -272,242 +273,241 @@ async def get_default_messages():
         "user_dl_episodes_not_found": "❌ <f>Error: Is season ke liye episodes nahi mile.</f>",
         "user_dl_seasons_not_found": "❌ <f>Error: Is anime ke liye seasons nahi mile.</f>",
         "user_dl_general_error": "❌ <f>Error! Please try again.</f>",
-        "user_dl_sending_files": "✅ <b>{anime_name}</b> | <b>S{season_name}</b> | <b>E{ep_num}</b><pre>\n\n</pre><f>Aapke saare files bhej raha hoon...</f>",
-        "user_dl_select_episode": "<b>{anime_name}</b> | <b>Season {season_name}</b><pre>\n\n</pre><f>Episode select karein:</f>",
-        "user_dl_select_season": "<b>{anime_name}</b><pre>\n\n</pre><f>Season select karein:</f>",
+        "user_dl_sending_files": "✅ <b>{anime_name}</b> | <b>S{season_name}</b> | <b>E{ep_num}</b>\n\n<f>Aapke saare files bhej raha hoon...</f>",
+        "user_dl_select_episode": "<b>{anime_name}</b> | <b>Season {season_name}</b>\n\n<f>Episode select karein:</f>",
+        "user_dl_select_season": "<b>{anime_name}</b>\n\n<f>Season select karein:</f>",
         "file_warning": "⚠️ <b><f>Yeh file {minutes} minute(s) mein automatically delete ho jaayegi.</f></b>",
         "user_dl_fetching": "⏳ <f>Fetching files...</f>",
 
         # === General User ===
-        "user_menu_greeting": "<f>Salaam {first_name}! Ye raha aapka menu:</f>",
+        "user_menu_greeting": "<f>Salaam {full_name}! Ye raha aapka menu:</f>", # FIX: {full_name}
         "user_donate_qr_error": "❌ <f>Donation info abhi admin ne set nahi ki hai.</f>",
-        "user_donate_qr_text": "❤️ <b><f>Support Us!</f></b><pre>\n\n</pre><f>Agar aapko hamara kaam pasand aata hai, toh aap humein support kar sakte hain.</f>",
+        "user_donate_qr_text": "❤️ <b><f>Support Us!</f></b>\n\n<f>Agar aapko hamara kaam pasand aata hai, toh aap humein support kar sakte hain.</f>",
         "donate_thanks": "❤️ <f>Support karne ke liye shukriya!</f>",
         "user_not_admin": "<f>Aap admin nahi hain.</f>",
         "user_welcome_admin": "<f>Salaam, Admin! Admin panel ke liye</f> /menu <f>use karein.</f>",
-        "user_welcome_basic": "<f>Salaam, {first_name}! Apna user menu dekhne ke liye</f> /subscription <f>use karein.</f>",
+        "user_welcome_basic": "<f>Salaam, {full_name}! Apna user menu dekhne ke liye</f> /subscription <f>use karein.</f>", # FIX: {full_name}
         
         # === Post Generator ===
-        "post_gen_anime_caption": "✅ <b>{anime_name}</b><pre>\n\n</pre><b><f>📖 Synopsis:</f></b><pre>\n</pre>{description}<pre>\n\n</pre><f>Neeche [Download] button dabake download karein!</f>",
-        "post_gen_season_caption": "✅ <b>{anime_name}</b><pre>\n</pre><b>[ S{season_name} ]</b><pre>\n\n</pre><b><f>📖 Synopsis:</f></b><pre>\n</pre>{description}<pre>\n\n</pre><f>Neeche [Download] button dabake download karein!</f>",
-        "post_gen_episode_caption": "✨ <b><f>Episode {ep_num} Added</f></b> ✨<pre>\n\n</pre>🎬 <b><f>Anime:</f></b> {anime_name}<pre>\n</pre>➡️ <b><f>Season:</f></b> {season_name}<pre>\n\n</pre><f>Neeche [Download] button dabake download karein!</f>",
+        "post_gen_anime_caption": "✅ <b>{anime_name}</b>\n\n<b><f>📖 Synopsis:</f></b>\n{description}\n\n<f>Neeche [Download] button dabake download karein!</f>",
+        "post_gen_season_caption": "✅ <b>{anime_name}</b>\n<b>[ S{season_name} ]</b>\n\n<b><f>📖 Synopsis:</f></b>\n{description}\n\n<f>Neeche [Download] button dabake download karein!</f>",
+        "post_gen_episode_caption": "✨ <b><f>Episode {ep_num} Added</f></b> ✨\n\n🎬 <b><f>Anime:</f></b> {anime_name}\n➡️ <b><f>Season:</f></b> {season_name}\n\n<f>Neeche [Download] button dabake download karein!</f>",
 
         # === Admin: General ===
         "admin_cancel": "<f>Operation cancel kar diya gaya hai.</f>",
         "admin_cancel_error_edit": "<f>Cancel me edit nahi kar paya: {e}</f>",
         "admin_cancel_error_general": "<f>Cancel me error: {e}</f>",
-        "admin_panel_main": "👑 <b><f>Salaam, Admin Boss!</f></b> 👑<pre>\n</pre><f>Aapka control panel taiyyar hai.</f>",
-        "admin_panel_co": "👑 <b><f>Salaam, Co-Admin!</f></b> 👑<pre>\n</pre><f>Aapka content panel taiyyar hai.</f>",
+        "admin_panel_main": "👑 <b><f>Salaam, Admin Boss!</f></b> 👑\n<f>Aapka control panel taiyyar hai.</f>",
+        "admin_panel_co": "👑 <b><f>Salaam, Co-Admin!</f></b> 👑\n<f>Aapka content panel taiyyar hai.</f>",
 
         # === Admin: Add Content Menus ===
-        "admin_menu_add_content": "➕ <b><f>Add Content</f></b> ➕<pre>\n\n</pre><f>Aap kya add karna chahte hain?</f>",
-        "admin_menu_manage_content": "🗑️ <b><f>Delete Content</f></b> 🗑️<pre>\n\n</pre><f>Aap kya delete karna chahte hain?</f>",
-        "admin_menu_edit_content": "✏️ <b><f>Edit Content</f></b> ✏️<pre>\n\n</pre><f>Aap kya edit karna chahte hain?</f>",
+        "admin_menu_add_content": "➕ <b><f>Add Content</f></b> ➕\n\n<f>Aap kya add karna chahte hain?</f>",
+        "admin_menu_manage_content": "🗑️ <b><f>Delete Content</f></b> 🗑️\n\n<f>Aap kya delete karna chahte hain?</f>",
+        "admin_menu_edit_content": "✏️ <b><f>Edit Content</f></b> ✏️\n\n<f>Aap kya edit karna chahte hain?</f>",
 
         # === Admin: Add Anime ===
-        "admin_add_anime_start": "<f>Salaam Admin! Anime ka <b>Naam</b> kya hai?</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
-        "admin_add_anime_get_name": "<f>Badhiya! Ab anime ka <b>Poster (Photo)</b> bhejo.</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
+        "admin_add_anime_start": "<f>Salaam Admin! Anime ka <b>Naam</b> kya hai?</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_add_anime_get_name": "<f>Badhiya! Ab anime ka <b>Poster (Photo)</b> bhejo.</f>\n\n/cancel - <f>Cancel.</f>",
         "admin_add_anime_get_poster_error": "Ye photo nahi hai. Please ek photo bhejo.",
-        "admin_add_anime_get_poster": "<f>Poster mil gaya! Ab <b>Description (Synopsis)</b> bhejo.</f><pre>\n\n</pre>/skip <f>ya</f> /cancel.",
-        "admin_add_anime_confirm": "<b>{name}</b><pre>\n\n</pre>{description}<pre>\n\n</pre><f>--- Details Check Karo ---</f>",
+        "admin_add_anime_get_poster": "<f>Poster mil gaya! Ab <b>Description (Synopsis)</b> bhejo.</f>\n\n/skip <f>ya</f> /cancel.",
+        "admin_add_anime_confirm": "<b>{name}</b>\n\n{description}\n\n<f>--- Details Check Karo ---</f>",
         "admin_add_anime_confirm_error": "❌ <f>Error: Poster bhej nahi paya. Dobara try karein ya</f> /cancel.",
         "admin_add_anime_save_exists": "⚠️ <b><f>Error:</f></b> <f>Ye anime naam</f> '{name}' <f>pehle se hai.</f>",
         "admin_add_anime_save_success": "✅ <b><f>Success!</f></b> '{name}' <f>add ho gaya hai.</f>",
         "admin_add_anime_save_error": "❌ <b><f>Error!</f></b> <f>Database me save nahi kar paya.</f>",
 
         # === Admin: Add Season ===
-        "admin_add_season_select_anime": "<f>Aap kis anime mein season add karna chahte hain?</f><pre>\n\n</pre><b><f>Newest First</f></b> <f>(Sabse naya pehle):</f><pre>\n</pre><f>(Page {page})</f>",
+        "admin_add_season_select_anime": "<f>Aap kis anime mein season add karna chahte hain?</f>\n\n<b><f>Newest First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
         "admin_add_season_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai. Pehle 'Add Anime' se add karein.</f>",
-        "admin_add_season_get_anime": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f><pre>\n\n</pre><f>Ab is season ka <b>Number ya Naam</b> bhejo.</f><pre>\n</pre><f>(Jaise: 1, 2, Movie)</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
+        "admin_add_season_get_anime": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Ab is season ka <b>Number ya Naam</b> bhejo.</f>\n<f>(Jaise: 1, 2, Movie)</f>\n\n/cancel - <f>Cancel.</f>",
         "admin_add_season_get_number_error": "⚠️ <b><f>Error!</f></b> <f>Anime</f> '{anime_name}' <f>database mein nahi mila.</f> /cancel <f>karke dobara try karein.</f>",
-        "admin_add_season_get_number_exists": "⚠️ <b><f>Error!</f></b> '{anime_name}' <f>mein 'Season {season_name}' pehle se hai.</f><pre>\n\n</pre><f>Koi doosra naam/number type karein ya</f> /cancel <f>karein.</f>",
-        "admin_add_season_get_poster_prompt": "<f>Aapne Season</f> '{season_name}' <f>select kiya hai.</f><pre>\n\n</pre><f>Ab is season ka <b>Poster (Photo)</b> bhejo.</f><pre>\n\n</pre>/skip - <f>Default anime poster use karo.</f><pre>\n</pre>/cancel - <f>Cancel.</f>",
+        "admin_add_season_get_number_exists": "⚠️ <b><f>Error!</f></b> '{anime_name}' <f>mein 'Season {season_name}' pehle se hai.</f>\n\n<f>Koi doosra naam/number type karein ya</f> /cancel <f>karein.</f>",
+        "admin_add_season_get_poster_prompt": "<f>Aapne Season</f> '{season_name}' <f>select kiya hai.</f>\n\n<f>Ab is season ka <b>Poster (Photo)</b> bhejo.</f>\n\n/skip - <f>Default anime poster use karo.</f>\n/cancel - <f>Cancel.</f>",
         "admin_add_season_get_poster_error": "<f>Ye photo nahi hai. Please ek photo bhejo.</f>",
-        "admin_add_season_get_desc_prompt": "<f>Poster mil gaya! Ab is season ka <b>Description</b> bhejo.</f><pre>\n</pre><f>(Yeh post generator mein use hoga)</f><pre>\n\n</pre>/skip <f>ya</f> /cancel.",
-        "admin_add_season_skip_poster": "<f>Default poster set! Ab is season ka <b>Description</b> bhejo.</f><pre>\n</pre><f>(Yeh post generator mein use hoga)</f><pre>\n\n</pre>/skip <f>ya</f> /cancel.",
-        "admin_add_season_confirm": "<b><f>Confirm Karo:</f></b><pre>\n</pre><f>Anime:</f> <b>{anime_name}</b><pre>\n</pre><f>Naya Season:</f> <b>{season_name}</b><pre>\n</pre><f>Description:</f> {season_desc}<pre>\n\n</pre><f>Save kar doon?</f>",
-        "admin_add_season_save_success": "✅ <b><f>Success!</f></b><pre>\n</pre><b>{anime_name}</b> <f>mein</f> <b>Season {season_name}</b> <f>add ho gaya hai.</f>",
+        "admin_add_season_get_desc_prompt": "<f>Poster mil gaya! Ab is season ka <b>Description</b> bhejo.</f>\n<f>(Yeh post generator mein use hoga)</f>\n\n/skip <f>ya</f> /cancel.",
+        "admin_add_season_skip_poster": "<f>Default poster set! Ab is season ka <b>Description</b> bhejo.</f>\n<f>(Yeh post generator mein use hoga)</f>\n\n/skip <f>ya</f> /cancel.",
+        "admin_add_season_confirm": "<b><f>Confirm Karo:</f></b>\n<f>Anime:</f> <b>{anime_name}</b>\n<f>Naya Season:</f> <b>{season_name}</b>\n<f>Description:</f> {season_desc}\n\n<f>Save kar doon?</f>",
+        "admin_add_season_save_success": "✅ <b><f>Success!</f></b>\n<b>{anime_name}</b> <f>mein</f> <b>Season {season_name}</b> <f>add ho gaya hai.</f>",
         "admin_add_season_save_error": "❌ <b><f>Error!</f></b> <f>Database me save nahi kar paya.</f>",
         
         # === Admin: Add Episode ===
-        "admin_add_ep_select_anime": "<f>Aap kis anime mein episode add karna chahte hain?</f><pre>\n\n</pre><b><f>Newest First</f></b> <f>(Sabse naya pehle):</f><pre>\n</pre><f>(Page {page})</f>",
+        "admin_add_ep_select_anime": "<f>Aap kis anime mein episode add karna chahte hain?</f>\n\n<b><f>Newest First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
         "admin_add_ep_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai. Pehle 'Add Anime' se add karein.</f>",
-        "admin_add_ep_no_season": "❌ <b><f>Error!</f></b> '{anime_name}' <f>mein koi season nahi hai.</f><pre>\n\n</pre><f>Pehle</f> <code>➕ Add Season</code> <f>se season add karo.</f>",
-        "admin_add_ep_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f><pre>\n\n</pre><f>Ab <b>Season</b> select karein:</f>",
-        "admin_add_ep_get_season": "<f>Aapne</f> <b>Season {season_name}</b> <f>select kiya hai.</f><pre>\n\n</pre><f>Ab <b>Episode Number</b> bhejo.</f><pre>\n</pre><f>(Jaise: 1, 2, 3...)</f><pre>\n</pre><f>(Agar yeh ek movie hai, toh</f> <code>1</code> <f>type karein.)</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
-        "admin_add_ep_get_number": "<f>Aapne</f> <b>Episode {ep_num}</b> <f>select kiya hai.</f><pre>\n\n</pre><f>Ab <b>480p</b> quality ki video file bhejein.</f><pre>\n</pre><f>Ya</f> /skip <f>type karein.</f>",
-        "admin_add_ep_get_number_exists": "⚠️ <b><f>Error!</f></b> '{anime_name}' - Season {season_name} - Episode {ep_num} <f>pehle se maujood hai. Please pehle isse delete karein ya koi doosra episode number dein.</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
+        "admin_add_ep_no_season": "❌ <b><f>Error!</f></b> '{anime_name}' <f>mein koi season nahi hai.</f>\n\n<f>Pehle</f> <code>➕ Add Season</code> <f>se season add karo.</f>",
+        "admin_add_ep_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Ab <b>Season</b> select karein:</f>",
+        "admin_add_ep_get_season": "<f>Aapne</f> <b>Season {season_name}</b> <f>select kiya hai.</f>\n\n<f>Ab <b>Episode Number</b> bhejo.</f>\n<f>(Jaise: 1, 2, 3...)</f>\n<f>(Agar yeh ek movie hai, toh</f> <code>1</code> <f>type karein.)</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_add_ep_get_number": "<f>Aapne</f> <b>Episode {ep_num}</b> <f>select kiya hai.</f>\n\n<f>Ab <b>480p</b> quality ki video file bhejein.</f>\n<f>Ya</f> /skip <f>type karein.</f>",
+        "admin_add_ep_get_number_exists": "⚠️ <b><f>Error!</f></b> '{anime_name}' - Season {season_name} - Episode {ep_num} <f>pehle se maujood hai. Please pehle isse delete karein ya koi doosra episode number dein.</f>\n\n/cancel - <f>Cancel.</f>",
         "admin_add_ep_helper_invalid": "<f>Ye video file nahi hai. Please dobara video file bhejein ya</f> /skip <f>karein.</f>",
         "admin_add_ep_helper_success": "✅ <b>{quality}</b> <f>save ho gaya.</f>",
         "admin_add_ep_helper_error": "❌ <b><f>Error!</f></b> {quality} <f>save nahi kar paya. Logs check karein.</f>",
-        "admin_add_ep_get_480p": "<f>Ab <b>720p</b> quality ki video file bhejein.</f><pre>\n</pre><f>Ya</f> /skip <f>type karein.</f>",
-        "admin_add_ep_skip_480p": "✅ <f>480p skip kar diya.</f><pre>\n\n</pre><f>Ab <b>720p</b> quality ki video file bhejein.</f><pre>\n</pre><f>Ya</f> /skip <f>type karein.</f>",
-        "admin_add_ep_get_720p": "<f>Ab <b>1080p</b> quality ki video file bhejein.</f><pre>\n</pre><f>Ya</f> /skip <f>type karein.</f>",
-        "admin_add_ep_skip_720p": "✅ <f>720p skip kar diya.</f><pre>\n\n</pre><f>Ab <b>1080p</b> quality ki video file bhejein.</f><pre>\n</pre><f>Ya</f> /skip <f>type karein.</f>",
-        "admin_add_ep_get_1080p": "<f>Ab <b>4K</b> quality ki video file bhejein.</f><pre>\n</pre><f>Ya</f> /skip <f>type karein.</f>",
-        "admin_add_ep_skip_1080p": "✅ <f>1080p skip kar diya.</f><pre>\n\n</pre><f>Ab <b>4K</b> quality ki video file bhejein.</f><pre>\n</pre><f>Ya</f> /skip <f>type karein.</f>",
+        "admin_add_ep_get_480p": "<f>Ab <b>720p</b> quality ki video file bhejein.</f>\n<f>Ya</f> /skip <f>type karein.</f>",
+        "admin_add_ep_skip_480p": "✅ <f>480p skip kar diya.</f>\n\n<f>Ab <b>720p</b> quality ki video file bhejein.</f>\n<f>Ya</f> /skip <f>type karein.</f>",
+        "admin_add_ep_get_720p": "<f>Ab <b>1080p</b> quality ki video file bhejein.</f>\n<f>Ya</f> /skip <f>type karein.</f>",
+        "admin_add_ep_skip_720p": "✅ <f>720p skip kar diya.</f>\n\n<f>Ab <b>1080p</b> quality ki video file bhejein.</f>\n<f>Ya</f> /skip <f>type karein.</f>",
+        "admin_add_ep_get_1080p": "<f>Ab <b>4K</b> quality ki video file bhejein.</f>\n<f>Ya</f> /skip <f>type karein.</f>",
+        "admin_add_ep_skip_1080p": "✅ <f>1080p skip kar diya.</f>\n\n<f>Ab <b>4K</b> quality ki video file bhejein.</f>\n<f>Ya</f> /skip <f>type karein.</f>",
         "admin_add_ep_get_4k_success": "✅ <b><f>Success!</f></b> <f>Saari qualities save ho gayi hain.</f>",
-        "admin_add_ep_skip_4k": "✅ <f>4K skip kar diya.</f><pre>\n\n</pre>✅ <b><f>Success!</f></b> <f>Episode save ho gaya hai.</f>",
+        "admin_add_ep_skip_4k": "✅ <f>4K skip kar diya.</f>\n\n✅ <b><f>Success!</f></b> <f>Episode save ho gaya hai.</f>",
         
         # === Admin: Settings (Donate, Links, Delete Time) ===
-        "admin_menu_donate": "❤️ <b><f>Donation Settings</f></b> ❤️<pre>\n\n</pre><f>Sirf QR code se donation accept karein.</f>",
-        "admin_set_donate_qr_start": "<f>Aapna <b>Donate QR Code</b> ki photo bhejo.</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
+        "admin_menu_donate": "❤️ <b><f>Donation Settings</f></b> ❤️\n\n<f>Sirf QR code se donation accept karein.</f>",
+        "admin_set_donate_qr_start": "<f>Aapna <b>Donate QR Code</b> ki photo bhejo.</f>\n\n/cancel - <f>Cancel.</f>",
         "admin_set_donate_qr_error": "<f>Ye photo nahi hai. Please ek photo bhejo ya</f> /cancel <f>karein.</f>",
         "admin_set_donate_qr_success": "✅ <b><f>Success!</f></b> <f>Naya donate QR code set ho gaya hai.</f>",
-        "admin_menu_links": "🔗 <b><f>Other Links</f></b> 🔗<pre>\n\n</pre><f>Doosre links yahan set karein.</f>",
-        "admin_set_link_backup": "<f>Aapke <b>Backup Channel</b> ka link bhejo.</f><pre>\n</pre><f>(Example: https://t.me/mychannel)</f><pre>\n\n</pre>/skip - <f>Skip.</f><pre>\n</pre>/cancel - <f>Cancel.</f>",
-        "admin_set_link_download": "<f>Aapka global <b>Download Link</b> bhejo.</f><pre>\n</pre><f>(Yeh post generator mein use hoga)</f><pre>\n\n</pre>/skip - <f>Skip.</f><pre>\n</pre>/cancel - <f>Cancel.</f>",
+        "admin_menu_links": "🔗 <b><f>Other Links</f></b> 🔗\n\n<f>Doosre links yahan set karein.</f>",
+        "admin_set_link_backup": "<f>Aapke <b>Backup Channel</b> ka link bhejo.</f>\n<f>(Example: https://t.me/mychannel)</f>\n\n/skip - <f>Skip.</f>\n/cancel - <f>Cancel.</f>",
+        "admin_set_link_download": "<f>Aapka global <b>Download Link</b> bhejo.</f>\n<f>(Yeh post generator mein use hoga)</f>\n\n/skip - <f>Skip.</f>\n/cancel - <f>Cancel.</f>",
+        "admin_set_link_help": "<f>Aapke <b>Help/Support</b> ka link bhejo.</f>\n<f>(Example: https://t.me/mychannel)</f>\n\n/skip - <f>Skip.</f>\n/cancel - <f>Cancel.</f>", # NAYA
         "admin_set_link_invalid": "<f>Invalid button!</f>",
         "admin_set_link_success": "✅ <b><f>Success!</f></b> <f>Naya {link_type} link set ho gaya hai.</f>",
         "admin_set_link_skip": "✅ <b><f>Success!</f></b> {link_type} <f>link remove kar diya gaya hai.</f>",
-        "admin_set_delete_time_start": "<f>Abhi file auto-delete</f> <b>{current_minutes} <f>minute(s)</f></b> ({current_seconds} <f>seconds</f>) <f>par set hai.</f><pre>\n\n</pre><f>Naya time <b>seconds</b> mein bhejo.</f><pre>\n</pre><f>(Example:</f> <code>300</code> <f>for 5 minutes)</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
+        "admin_set_delete_time_start": "<f>Abhi file auto-delete</f> <b>{current_minutes} <f>minute(s)</f></b> ({current_seconds} <f>seconds</f>) <f>par set hai.</f>\n\n<f>Naya time <b>seconds</b> mein bhejo.</f>\n<f>(Example:</f> <code>300</code> <f>for 5 minutes)</f>\n\n/cancel - <f>Cancel.</f>",
         "admin_set_delete_time_low": "<f>Time 10 second se zyada hona chahiye.</f>",
         "admin_set_delete_time_success": "✅ <b><f>Success!</f></b> <f>Auto-delete time ab</f> <b>{seconds} <f>seconds</f></b> ({minutes} <f>min</f>) <f>par set ho gaya hai.</f>",
         "admin_set_delete_time_nan": "<f>Yeh number nahi hai. Please sirf seconds bhejein (jaise 180) ya</f> /cancel <f>karein.</f>",
         "admin_set_delete_time_error": "❌ <f>Error! Save nahi kar paya.</f>",
 
         # === Admin: Bot Messages Menu ===
-        "admin_menu_messages_main": "⚙️ <b><f>Bot Messages</f></b> ⚙️<pre>\n\n</pre><f>Aap bot ke replies ko edit karne ke liye category select karein.</f>",
-        "admin_menu_messages_dl": "📥 <b><f>Download Flow Messages</f></b> 📥<pre>\n\n</pre><f>Kaunsa message edit karna hai?</f>",
-        "admin_menu_messages_gen": "⚙️ <b><f>General Messages</f></b> ⚙️<pre>\n\n</pre><f>Kaunsa message edit karna hai?</f>",
-        "admin_menu_messages_postgen": "✍️ <b><f>Post Generator Messages</f></b> ✍️<pre>\n\n</pre><f>Kaunsa message edit karna hai?</f>",
-        "admin_menu_messages_admin": "👑 <b><f>Admin Messages</f></b> 👑<pre>\n\n</pre><f>Kaunsa message edit karna hai?</f>", # NAYA
-        "admin_set_msg_start": "<b><f>Editing:</f></b> <code>{msg_key}</code><pre>\n\n</pre><b><f>Current Message:</f></b><pre>\n</pre><code>{current_msg}</code><pre>\n\n</pre><f>Naya message bhejo.</f><pre>\n</pre><f>Aap</f> <code>&lt;b&gt;bold&lt;/b&gt;</code>, <code>&lt;i&gt;italic&lt;/i&gt;</code>, <code>&lt;code&gt;code&lt;/code&gt;</code>, <f>aur</f> <code>&lt;blockquote&gt;quote&lt;/blockquote&gt;</code> <f>use kar sakte hain.</f><pre>\n</pre><f>Font apply karne ke liye</f> <code>&lt;f&gt;...&lt;/f&gt;</code> <f>use karein.</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
+        "admin_menu_messages_main": "⚙️ <b><f>Bot Messages</f></b> ⚙️\n\n<f>Aap bot ke replies ko edit karne ke liye category select karein.</f>",
+        "admin_menu_messages_dl": "📥 <b><f>Download Flow Messages</f></b> 📥\n\n<f>Kaunsa message edit karna hai?</f>",
+        "admin_menu_messages_gen": "⚙️ <b><f>General Messages</f></b> ⚙️\n\n<f>Kaunsa message edit karna hai?</f>",
+        "admin_menu_messages_postgen": "✍️ <b><f>Post Generator Messages</f></b> ✍️\n\n<f>Kaunsa message edit karna hai?</f>",
+        "admin_menu_messages_admin": "👑 <b><f>Admin Messages</f></b> 👑\n\n<f>Kaunsa message edit karna hai?</f>", # NAYA
+        "admin_set_msg_start": "<b><f>Editing:</f></b> <code>{msg_key}</code>\n\n<b><f>Current Message:</f></b>\n<code>{current_msg}</code>\n\n<f>Naya message bhejo.</f>\n<f>Aap</f> <code>&lt;b&gt;bold&lt;/b&gt;</code>, <code>&lt;i&gt;italic&lt;/i&gt;</code>, <code>&lt;code&gt;code&lt;/code&gt;</code>, <f>aur</f> <code>&lt;blockquote&gt;quote&lt;/blockquote&gt;</code> <f>use kar sakte hain.</f>\n<f>Font apply karne ke liye</f> <code>&lt;f&gt;...&lt;/f&gt;</code> <f>use karein.</f>\n\n/cancel - <f>Cancel.</f>",
         "admin_set_msg_success": "✅ <b><f>Success!</f></b> <f>Naya</f> '{msg_key}' <f>message set ho gaya hai.</f>",
         "admin_set_msg_error": "❌ <f>Error! Save nahi kar paya.</f>",
 
         # === Admin: Post Generator ===
-        "admin_menu_post_gen": "✍️ <b><f>Post Generator</f></b> ✍️<pre>\n\n</pre><f>Aap kis tarah ka post generate karna chahte hain?</f>",
-        "admin_post_gen_select_anime": "<f>Kaunsa <b>Anime</b> select karna hai?</f><pre>\n\n</pre><b><f>Newest First</f></b> <f>(Sabse naya pehle):</f><pre>\n</pre><f>(Page {page})</f>",
+        "admin_menu_post_gen": "✍️ <b><f>Post Generator</f></b> ✍️\n\n<f>Aap kis tarah ka post generate karna chahte hain?</f>",
+        "admin_post_gen_select_anime": "<f>Kaunsa <b>Anime</b> select karna hai?</f>\n\n<b><f>Newest First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
         "admin_post_gen_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
         "admin_post_gen_no_season": "❌ <b><f>Error!</f></b> '{anime_name}' <f>mein koi season nahi hai.</f>",
-        "admin_post_gen_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f><pre>\n\n</pre><f>Ab <b>Season</b> select karein:</f>",
+        "admin_post_gen_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Ab <b>Season</b> select karein:</f>",
         "admin_post_gen_no_episode": "❌ <b><f>Error!</f></b> '{anime_name}' - Season {season_name} <f>mein koi episode nahi hai.</f>",
-        "admin_post_gen_select_episode": "<f>Aapne</f> <b>Season {season_name}</b> <f>select kiya hai.</f><pre>\n\n</pre><f>Ab <b>Episode</b> select karein:</f>",
-        "admin_post_gen_ask_shortlink": "✅ <b><f>Post Ready!</f></b><pre>\n\n</pre><f>Aapka original download link hai:</f><pre>\n</pre><code>{original_download_url}</code><pre>\n\n</pre><f>Please iska <b>shortened link</b> reply mein bhejein.</f><pre>\n</pre><f>(Agar link change nahi karna hai, toh upar waala link hi copy karke bhej dein.)</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
-        "admin_post_gen_ask_chat": "✅ <b><f>Short Link Saved!</f></b><pre>\n\n</pre><f>Ab uss <b>Channel ka @username</b> ya <b>Group/Channel ki Chat ID</b> bhejo jahaan ye post karna hai.</f><pre>\n</pre><f>(Example: @MyAnimeChannel ya -100123456789)</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
-        "admin_post_gen_success": "✅ <b><f>Success!</f></b><pre>\n</pre><f>Post ko</f> '{chat_id}' <f>par bhej diya gaya hai.</f>",
-        "admin_post_gen_error": "❌ <b><f>Error!</f></b><pre>\n</pre><f>Post</f> '{chat_id}' <f>par nahi bhej paya. Check karo ki bot uss channel me admin hai ya ID sahi hai.</f><pre>\n</pre><f>Error:</f> {e}",
+        "admin_post_gen_select_episode": "<f>Aapne</f> <b>Season {season_name}</b> <f>select kiya hai.</f>\n\n<f>Ab <b>Episode</b> select karein:</f>",
+        "admin_post_gen_ask_shortlink": "✅ <b><f>Post Ready!</f></b>\n\n<f>Aapka original download link hai:</f>\n<code>{original_download_url}</code>\n\n<f>Please iska <b>shortened link</b> reply mein bhejein.</f>\n<f>(Agar link change nahi karna hai, toh upar waala link hi copy karke bhej dein.)</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_post_gen_ask_chat": "✅ <b><f>Short Link Saved!</f></b>\n\n<f>Ab uss <b>Channel ka @username</b> ya <b>Group/Channel ki Chat ID</b> bhejo jahaan ye post karna hai.</f>\n<f>(Example: @MyAnimeChannel ya -100123456789)</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_post_gen_success": "✅ <b><f>Success!</f></b>\n<f>Post ko</f> '{chat_id}' <f>par bhej diya gaya hai.</f>",
+        "admin_post_gen_error": "❌ <b><f>Error!</f></b>\n<f>Post</f> '{chat_id}' <f>par nahi bhej paya. Check karo ki bot uss channel me admin hai ya ID sahi hai.</f>\n<f>Error:</f> {e}",
         "admin_post_gen_invalid_state": "❌ <f>Error! Invalid state. Please start over.</f>",
         "admin_post_gen_error_general": "❌ <b><f>Error!</f></b> <f>Post generate nahi ho paya. Logs check karein.</f>",
         
         # === Admin: Generate Link ===
-        "admin_menu_gen_link": "🔗 <b><f>Generate Download Link</f></b> 🔗<pre>\n\n</pre><f>Aap kis cheez ka link generate karna chahte hain?</f>",
-        "admin_gen_link_select_anime": "<f>Kaunsa <b>Anime</b> select karna hai?</f><pre>\n\n</pre><f>(Page {page})</f>",
+        "admin_menu_gen_link": "🔗 <b><f>Generate Download Link</f></b> 🔗\n\n<f>Aap kis cheez ka link generate karna chahte hain?</f>",
+        "admin_gen_link_select_anime": "<f>Kaunsa <b>Anime</b> select karna hai?</f>\n\n<f>(Page {page})</f>",
         "admin_gen_link_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
         "admin_gen_link_no_season": "❌ <b><f>Error!</f></b> '{anime_name}' <f>mein koi season nahi hai.</f>",
-        "admin_gen_link_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f><pre>\n\n</pre><f>Ab <b>Season</b> select karein:</f>",
+        "admin_gen_link_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Ab <b>Season</b> select karein:</f>",
         "admin_gen_link_no_episode": "❌ <b><f>Error!</f></b> '{anime_name}' - Season {season_name} <f>mein koi episode nahi hai.</f>",
-        "admin_gen_link_select_episode": "<f>Aapne</f> <b>Season {season_name}</b> <f>select kiya hai.</f><pre>\n\n</pre><f>Ab <b>Episode</b> select karein:</f>",
-        "admin_gen_link_success": "✅ <b><f>Link Generated!</f></b><pre>\n\n</pre><b><f>Target:</f></b> {title}<pre>\n</pre><b><f>Link:</f></b><pre>\n</pre><code>{final_link}</code><pre>\n\n</pre><f>Is link ko copy karke kahin bhi paste karein.</f>",
+        "admin_gen_link_select_episode": "<f>Aapne</f> <b>Season {season_name}</b> <f>select kiya hai.</f>\n\n<f>Ab <b>Episode</b> select karein:</f>",
+        "admin_gen_link_success": "✅ <b><f>Link Generated!</f></b>\n\n<b><f>Target:</f></b> {title}\n<b><f>Link:</f></b>\n<code>{final_link}</code>\n\n<f>Is link ko copy karke kahin bhi paste karein.</f>",
         "admin_gen_link_error": "❌ <b><f>Error!</f></b> <f>Link generate nahi ho paya. Logs check karein.</f>",
 
         # === Admin: Delete Anime ===
-        "admin_del_anime_select": "<f>Kaunsa <b>Anime</b> delete karna hai?</f><pre>\n\n</pre><b><f>Newest First</f></b> <f>(Sabse naya pehle):</f><pre>\n</pre><f>(Page {page})</f>",
+        "admin_del_anime_select": "<f>Kaunsa <b>Anime</b> delete karna hai?</f>\n\n<b><f>Newest First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
         "admin_del_anime_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
-        "admin_del_anime_confirm": "⚠️ <b><f>FINAL WARNING</f></b> ⚠️<pre>\n\n</pre><f>Aap</f> <b>{anime_name}</b> <f>ko delete karne wale hain. Iske saare seasons aur episodes delete ho jayenge.</f><pre>\n\n</pre><b><f>Are you sure?</f></b>",
-        "admin_del_anime_success": "✅ <b><f>Success!</f></b><pre>\n</pre><f>Anime</f> '{anime_name}' <f>delete ho gaya hai.</f>",
+        "admin_del_anime_confirm": "⚠️ <b><f>FINAL WARNING</f></b> ⚠️\n\n<f>Aap</f> <b>{anime_name}</b> <f>ko delete karne wale hain. Iske saare seasons aur episodes delete ho jayenge.</f>\n\n<b><f>Are you sure?</f></b>",
+        "admin_del_anime_success": "✅ <b><f>Success!</f></b>\n<f>Anime</f> '{anime_name}' <f>delete ho gaya hai.</f>",
         "admin_del_anime_error": "❌ <b><f>Error!</f></b> <f>Anime delete nahi ho paya.</f>",
         
         # === Admin: Delete Season ===
-        "admin_del_season_select_anime": "<f>Kaunse <b>Anime</b> ka season delete karna hai?</f><pre>\n\n</pre><b><f>Newest First</f></b> <f>(Sabse naya pehle):</f><pre>\n</pre><f>(Page {page})</f>",
+        "admin_del_season_select_anime": "<f>Kaunse <b>Anime</b> ka season delete karna hai?</f>\n\n<b><f>Newest First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
         "admin_del_season_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
         "admin_del_season_no_season": "❌ <b><f>Error!</f></b> '{anime_name}' <f>mein koi season nahi hai.</f>",
-        "admin_del_season_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f><pre>\n\n</pre><f>Kaunsa <b>Season</b> delete karna hai?</f>",
-        "admin_del_season_confirm": "⚠️ <b><f>FINAL WARNING</f></b> ⚠️<pre>\n\n</pre><f>Aap</f> <b>{anime_name}</b> <f>ka</f> <b>Season {season_name}</b> <f>delete karne wale hain. Iske saare episodes delete ho jayenge.</f><pre>\n\n</pre><b><f>Are you sure?</f></b>",
-        "admin_del_season_success": "✅ <b><f>Success!</f></b><pre>\n</pre><f>Season</f> '{season_name}' <f>delete ho gaya hai.</f>",
+        "admin_del_season_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Kaunsa <b>Season</b> delete karna hai?</f>",
+        "admin_del_season_confirm": "⚠️ <b><f>FINAL WARNING</f></b> ⚠️\n\n<f>Aap</f> <b>{anime_name}</b> <f>ka</f> <b>Season {season_name}</b> <f>delete karne wale hain. Iske saare episodes delete ho jayenge.</f>\n\n<b><f>Are you sure?</f></b>",
+        "admin_del_season_success": "✅ <b><f>Success!</f></b>\n<f>Season</f> '{season_name}' <f>delete ho gaya hai.</f>",
         "admin_del_season_error": "❌ <b><f>Error!</f></b> <f>Season delete nahi ho paya.</f>",
 
         # === Admin: Delete Episode ===
-        "admin_del_ep_select_anime": "<f>Kaunse <b>Anime</b> ka episode delete karna hai?</f><pre>\n\n</pre><b><f>Newest First</f></b> <f>(Sabse naya pehle):</f><pre>\n</pre><f>(Page {page})</f>",
+        "admin_del_ep_select_anime": "<f>Kaunse <b>Anime</b> ka episode delete karna hai?</f>\n\n<b><f>Newest First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
         "admin_del_ep_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
         "admin_del_ep_no_season": "❌ <b><f>Error!</f></b> '{anime_name}' <f>mein koi season nahi hai.</f>",
-        "admin_del_ep_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f><pre>\n\n</pre><f>Kaunsa <b>Season</b> delete karna hai?</f>",
+        "admin_del_ep_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Kaunsa <b>Season</b> delete karna hai?</f>",
         "admin_del_ep_no_episode": "❌ <b><f>Error!</f></b> '{anime_name}' - Season {season_name} <f>mein koi episode nahi hai.</f>",
-        "admin_del_ep_select_episode": "<f>Aapne</f> <b>Season {season_name}</b> <f>select kiya hai.</f><pre>\n\n</pre><f>Kaunsa <b>Episode</b> delete karna hai?</f>",
-        "admin_del_ep_confirm": "⚠️ <b><f>FINAL WARNING</f></b> ⚠️<pre>\n\n</pre><f>Aap</f> <b>{anime_name}</b> - <b>S{season_name}</b> - <b>Ep {ep_num}</b> <f>delete karne wale hain. Iske saare qualities delete ho jayenge.</f><pre>\n\n</pre><b><f>Are you sure?</f></b>",
-        "admin_del_ep_success": "✅ <b><f>Success!</f></b><pre>\n</pre><f>Episode</f> '{ep_num}' <f>delete ho gaya hai.</f>",
+        "admin_del_ep_select_episode": "<f>Aapne</f> <b>Season {season_name}</b> <f>select kiya hai.</f>\n\n<f>Kaunsa <b>Episode</b> delete karna hai?</f>",
+        "admin_del_ep_confirm": "⚠️ <b><f>FINAL WARNING</f></b> ⚠️\n\n<f>Aap</f> <b>{anime_name}</b> - <b>S{season_name}</b> - <b>Ep {ep_num}</b> <f>delete karne wale hain. Iske saare qualities delete ho jayenge.</f>\n\n<b><f>Are you sure?</f></b>",
+        "admin_del_ep_success": "✅ <b><f>Success!</f></b>\n<f>Episode</f> '{ep_num}' <f>delete ho gaya hai.</f>",
         "admin_del_ep_error": "❌ <b><f>Error!</f></b> <f>Episode delete nahi ho paya.</f>",
 
         # === Admin: Update Photo ===
-        "admin_update_photo_select_anime": "<f>Kaunse <b>Anime</b> ka poster update karna hai?</f><pre>\n\n</pre><b><f>Newest First</f></b> <f>(Sabse naya pehle):</f><pre>\n</pre><f>(Page {page})</f>",
+        "admin_update_photo_select_anime": "<f>Kaunse <b>Anime</b> ka poster update karna hai?</f>\n\n<b><f>Newest First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
         "admin_update_photo_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
-        "admin_update_photo_select_target": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f><pre>\n\n</pre><f>Aap iska <b>Main Poster</b> change karna chahte hain ya kisi <b>Season</b> ka?</f>",
-        "admin_update_photo_get_poster": "<f>Aapne</f> <b>{target_name}</b> <f>select kiya hai.</f><pre>\n\n</pre><f>Ab naya <b>Poster (Photo)</b> bhejo.</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
+        "admin_update_photo_select_target": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Aap iska <b>Main Poster</b> change karna chahte hain ya kisi <b>Season</b> ka?</f>",
+        "admin_update_photo_get_poster": "<f>Aapne</f> <b>{target_name}</b> <f>select kiya hai.</f>\n\n<f>Ab naya <b>Poster (Photo)</b> bhejo.</f>\n\n/cancel - <f>Cancel.</f>",
         "admin_update_photo_invalid": "<f>Ye photo nahi hai. Please ek photo bhejo ya</f> /cancel <f>karo.</f>",
         "admin_update_photo_save_error": "<f>Ye photo nahi hai. Please ek photo bhejo.</f>",
-        "admin_update_photo_save_success_main": "✅ <b><f>Success!</f></b><pre>\n</pre>{anime_name} <f>ka <b>Main Poster</b> change ho gaya hai.</f>",
-        "admin_update_photo_save_success_season": "✅ <b><f>Success!</f></b><pre>\n</pre>{anime_name} - <b>Season {season_name}</b> <f>ka poster change ho gaya hai.</f>",
+        "admin_update_photo_save_success_main": "✅ <b><f>Success!</f></b>\n{anime_name} <f>ka <b>Main Poster</b> change ho gaya hai.</f>",
+        "admin_update_photo_save_success_season": "✅ <b><f>Success!</f></b>\n{anime_name} - <b>Season {season_name}</b> <f>ka poster change ho gaya hai.</f>",
         "admin_update_photo_save_error_db": "❌ <b><f>Error!</f></b> <f>Poster update nahi ho paya.</f>",
 
         # === Admin: Edit Anime ===
-        "admin_edit_anime_select": "<f>Kaunsa <b>Anime</b> ka naam edit karna hai?</f><pre>\n\n</pre><b><f>Newest First</f></b> <f>(Sabse naya pehle):</f><pre>\n</pre><f>(Page {page})</f>",
+        "admin_edit_anime_select": "<f>Kaunsa <b>Anime</b> ka naam edit karna hai?</f>\n\n<b><f>Newest First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
         "admin_edit_anime_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
-        "admin_edit_anime_get_name": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f><pre>\n\n</pre><f>Ab iska <b>Naya Naam</b> bhejo.</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
-        "admin_edit_anime_save_exists": "⚠️ <b><f>Error!</f></b> <f>Naya naam</f> '{new_name}' <f>pehle se maujood hai. Koi doosra naam dein.</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
-        "admin_edit_anime_confirm": "<b><f>Confirm Karo:</f></b><pre>\n\n</pre><f>Purana Naam:</f> <code>{old_name}</code><pre>\n</pre><f>Naya Naam:</f> <code>{new_name}</code><pre>\n\n</pre><b><f>Are you sure?</f></b>",
-        "admin_edit_anime_success": "✅ <b><f>Success!</f></b><pre>\n</pre><f>Anime</f> '{old_name}' <f>ka naam badal kar</f> '{new_name}' <f>ho gaya hai.</f>",
+        "admin_edit_anime_get_name": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Ab iska <b>Naya Naam</b> bhejo.</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_edit_anime_save_exists": "⚠️ <b><f>Error!</f></b> <f>Naya naam</f> '{new_name}' <f>pehle se maujood hai. Koi doosra naam dein.</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_edit_anime_confirm": "<b><f>Confirm Karo:</f></b>\n\n<f>Purana Naam:</f> <code>{old_name}</code>\n<f>Naya Naam:</f> <code>{new_name}</code>\n\n<b><f>Are you sure?</f></b>",
+        "admin_edit_anime_success": "✅ <b><f>Success!</f></b>\n<f>Anime</f> '{old_name}' <f>ka naam badal kar</f> '{new_name}' <f>ho gaya hai.</f>",
         "admin_edit_anime_error": "❌ <b><f>Error!</f></b> <f>Anime naam update nahi ho paya.</f>",
         
         # === Admin: Edit Season ===
-        "admin_edit_season_select_anime": "<f>Kaunse <b>Anime</b> ka season edit karna hai?</f><pre>\n\n</pre><b><f>Newest First</f></b> <f>(Sabse naya pehle):</f><pre>\n</pre><f>(Page {page})</f>",
+        "admin_edit_season_select_anime": "<f>Kaunse <b>Anime</b> ka season edit karna hai?</f>\n\n<b><f>Newest First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
         "admin_edit_season_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
         "admin_edit_season_no_season": "❌ <b><f>Error!</f></b> '{anime_name}' <f>mein koi season nahi hai.</f>",
-        "admin_edit_season_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f><pre>\n\n</pre><f>Kaunsa <b>Season</b> ka naam edit karna hai?</f>",
-        "admin_edit_season_get_name": "<f>Aapne</f> <b>{anime_name}</b> -> <b>Season {season_name}</b> <f>select kiya hai.</f><pre>\n\n</pre><f>Ab iska <b>Naya Naam/Number</b> bhejo.</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
-        "admin_edit_season_save_exists": "⚠️ <b><f>Error!</f></b> <f>Naya naam</f> '{new_name}' <f>is anime mein pehle se maujood hai. Koi doosra naam dein.</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
-        "admin_edit_season_confirm": "<b><f>Confirm Karo:</f></b><pre>\n\n</pre><f>Anime:</f> <code>{anime_name}</code><pre>\n</pre><f>Purana Season:</f> <code>{old_name}</code><pre>\n</pre><f>Naya Season:</f> <code>{new_name}</code><pre>\n\n</pre><b><f>Are you sure?</f></b>",
-        "admin_edit_season_success": "✅ <b><f>Success!</f></b><pre>\n</pre><f>Season</f> '{old_name}' <f>ka naam badal kar</f> '{new_name}' <f>ho gaya hai.</f>",
+        "admin_edit_season_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Kaunsa <b>Season</b> ka naam edit karna hai?</f>",
+        "admin_edit_season_get_name": "<f>Aapne</f> <b>{anime_name}</b> -> <b>Season {season_name}</b> <f>select kiya hai.</f>\n\n<f>Ab iska <b>Naya Naam/Number</b> bhejo.</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_edit_season_save_exists": "⚠️ <b><f>Error!</f></b> <f>Naya naam</f> '{new_name}' <f>is anime mein pehle se maujood hai. Koi doosra naam dein.</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_edit_season_confirm": "<b><f>Confirm Karo:</f></b>\n\n<f>Anime:</f> <code>{anime_name}</code>\n<f>Purana Season:</f> <code>{old_name}</code>\n<f>Naya Season:</f> <code>{new_name}</code>\n\n<b><f>Are you sure?</f></b>",
+        "admin_edit_season_success": "✅ <b><f>Success!</f></b>\n<f>Season</f> '{old_name}' <f>ka naam badal kar</f> '{new_name}' <f>ho gaya hai.</f>",
         "admin_edit_season_error": "❌ <b><f>Error!</f></b> <f>Season naam update nahi ho paya.</f>",
 
         # === Admin: Edit Episode ===
-        "admin_edit_ep_select_anime": "<f>Kaunse <b>Anime</b> ka episode edit karna hai?</f><pre>\n\n</pre><b><f>Newest First</f></b> <f>(Sabse naya pehle):</f><pre>\n</pre><f>(Page {page})</f>",
+        "admin_edit_ep_select_anime": "<f>Kaunse <b>Anime</b> ka episode edit karna hai?</f>\n\n<b><f>Newest First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
         "admin_edit_ep_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
         "admin_edit_ep_no_season": "❌ <b><f>Error!</f></b> '{anime_name}' <f>mein koi season nahi hai.</f>",
-        "admin_edit_ep_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f><pre>\n\n</pre><f>Kaunsa <b>Season</b> select karna hai?</f>",
+        "admin_edit_ep_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Kaunsa <b>Season</b> select karna hai?</f>",
         "admin_edit_ep_no_episode": "❌ <b><f>Error!</f></b> '{anime_name}' - Season {season_name} <f>mein koi episode nahi hai.</f>",
-        "admin_edit_ep_select_episode": "<f>Aapne</f> <b>Season {season_name}</b> <f>select kiya hai.</f><pre>\n\n</pre><f>Kaunsa <b>Episode</b> ka number edit karna hai?</f>",
-        "admin_edit_ep_get_num": "<f>Aapne</f> <b>{anime_name}</b> -> <b>S{season_name}</b> -> <b>Ep {ep_num}</b> <f>select kiya hai.</f><pre>\n\n</pre><f>Ab iska <b>Naya Number</b> bhejo.</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
-        "admin_edit_ep_save_exists": "⚠️ <b><f>Error!</f></b> <f>Naya number</f> '{new_num}' <f>is season mein pehle se maujood hai. Koi doosra number dein.</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
-        "admin_edit_ep_confirm": "<b><f>Confirm Karo:</f></b><pre>\n\n</pre><f>Anime:</f> <code>{anime_name}</code><pre>\n</pre><f>Season:</f> <code>{season_name}</code><pre>\n</pre><f>Purana Episode:</f> <code>{old_num}</code><pre>\n</pre><f>Naya Episode:</f> <code>{new_num}</code><pre>\n\n</pre><b><f>Are you sure?</f></b>",
-        "admin_edit_ep_success": "✅ <b><f>Success!</f></b><pre>\n</pre><f>Episode</f> '{old_num}' <f>ka number badal kar</f> '{new_num}' <f>ho gaya hai.</f>",
+        "admin_edit_ep_select_episode": "<f>Aapne</f> <b>Season {season_name}</b> <f>select kiya hai.</f>\n\n<f>Kaunsa <b>Episode</b> ka number edit karna hai?</f>",
+        "admin_edit_ep_get_num": "<f>Aapne</f> <b>{anime_name}</b> -> <b>S{season_name}</b> -> <b>Ep {ep_num}</b> <f>select kiya hai.</f>\n\n<f>Ab iska <b>Naya Number</b> bhejo.</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_edit_ep_save_exists": "⚠️ <b><f>Error!</f></b> <f>Naya number</f> '{new_num}' <f>is season mein pehle se maujood hai. Koi doosra number dein.</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_edit_ep_confirm": "<b><f>Confirm Karo:</f></b>\n\n<f>Anime:</f> <code>{anime_name}</code>\n<f>Season:</f> <code>{season_name}</code>\n<f>Purana Episode:</f> <code>{old_num}</code>\n<f>Naya Episode:</f> <code>{new_num}</code>\n\n<b><f>Are you sure?</f></b>",
+        "admin_edit_ep_success": "✅ <b><f>Success!</f></b>\n<f>Episode</f> '{old_num}' <f>ka number badal kar</f> '{new_num}' <f>ho gaya hai.</f>",
         "admin_edit_ep_error": "❌ <b><f>Error!</f></b> <f>Episode number update nahi ho paya.</f>",
 
         # === Admin: Admin Settings (Co-Admin, Custom Post) ===
-        "admin_menu_admin_settings": "🛠️ <b><f>Admin Settings</f></b> 🛠️<pre>\n\n</pre><f>Yahan aap Co-Admins aur doosri advanced settings manage kar sakte hain.</f>",
-        "admin_co_admin_add_start": "<f>Naye Co-Admin ki <b>Telegram User ID</b> bhejein.</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
-        "admin_co_admin_add_invalid_id": "<f>Yeh valid User ID nahi hai. Please sirf number bhejein.</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
-        "admin_co_admin_add_is_main": "<f>Aap Main Admin hain, khud ko add nahi kar sakte.</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
-        "admin_co_admin_add_exists": "<f>User</f> <code>{user_id}</code> <f>pehle se Co-Admin hai.</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
-        "admin_co_admin_add_confirm": "<f>Aap user ID</f> <code>{user_id}</code> <f>ko <b>Co-Admin</b> banane wale hain.</f><pre>\n\n</pre><f>Woh content add, remove, aur post generate kar payenge.</f><pre>\n\n</pre><b><f>Are you sure?</f></b>",
-        "admin_co_admin_add_success": "✅ <b><f>Success!</f></b><pre>\n</pre><f>User ID</f> <code>{user_id}</code> <f>ab Co-Admin hai.</f>",
+        "admin_menu_admin_settings": "🛠️ <b><f>Admin Settings</f></b> 🛠️\n\n<f>Yahan aap Co-Admins aur doosri advanced settings manage kar sakte hain.</f>",
+        "admin_co_admin_add_start": "<f>Naye Co-Admin ki <b>Telegram User ID</b> bhejein.</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_co_admin_add_invalid_id": "<f>Yeh valid User ID nahi hai. Please sirf number bhejein.</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_co_admin_add_is_main": "<f>Aap Main Admin hain, khud ko add nahi kar sakte.</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_co_admin_add_exists": "<f>User</f> <code>{user_id}</code> <f>pehle se Co-Admin hai.</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_co_admin_add_confirm": "<f>Aap user ID</f> <code>{user_id}</code> <f>ko <b>Co-Admin</b> banane wale hain.</f>\n\n<f>Woh content add, remove, aur post generate kar payenge.</f>\n\n<b><f>Are you sure?</f></b>",
+        "admin_co_admin_add_success": "✅ <b><f>Success!</f></b>\n<f>User ID</f> <code>{user_id}</code> <f>ab Co-Admin hai.</f>",
         "admin_co_admin_add_error": "❌ <b><f>Error!</f></b> <f>Co-Admin add nahi ho paya.</f>",
         "admin_co_admin_remove_no_co": "<f>Abhi koi Co-Admin nahi hai.</f>",
         "admin_co_admin_remove_start": "<f>Kis Co-Admin ko remove karna hai?</f>",
-        "admin_co_admin_remove_confirm": "<f>Aap Co-Admin ID</f> <code>{user_id}</code> <f>ko remove karne wale hain.</f><pre>\n\n</pre><b><f>Are you sure?</f></b>",
-        "admin_co_admin_remove_success": "✅ <b><f>Success!</f></b><pre>\n</pre><f>Co-Admin ID</f> <code>{user_id}</code> <f>remove ho gaya hai.</f>",
+        "admin_co_admin_remove_confirm": "<f>Aap Co-Admin ID</f> <code>{user_id}</code> <f>ko remove karne wale hain.</f>\n\n<b><f>Are you sure?</f></b>",
+        "admin_co_admin_remove_success": "✅ <b><f>Success!</f></b>\n<f>Co-Admin ID</f> <code>{user_id}</code> <f>remove ho gaya hai.</f>",
         "admin_co_admin_remove_error": "❌ <b><f>Error!</f></b> <f>Co-Admin remove nahi ho paya.</f>",
         "admin_co_admin_list_none": "<f>Abhi koi Co-Admin nahi hai.</f>",
-        "admin_co_admin_list_header": "<b><f>List of Co-Admins:</f></b><pre>\n</pre>",
-        "admin_custom_post_start": "🚀 <b><f>Custom Post Generator</f></b><pre>\n\n</pre><f>Ab uss <b>Channel ka @username</b> ya <b>Group/Channel ki Chat ID</b> bhejo jahaan ye post karna hai.</f><pre>\n</pre><f>(Example: @MyAnimeChannel ya -100123456789)</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
-        "admin_custom_post_get_chat": "<f>Chat ID set! Ab post ka <b>Poster (Photo)</b> bhejo.</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
+        "admin_co_admin_list_header": "<b><f>List of Co-Admins:</f></b>\n", # <pre> hata diya
+        "admin_custom_post_start": "🚀 <b><f>Custom Post Generator</f></b>\n\n<f>Ab uss <b>Channel ka @username</b> ya <b>Group/Channel ki Chat ID</b> bhejo jahaan ye post karna hai.</f>\n<f>(Example: @MyAnimeChannel ya -100123456789)</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_custom_post_get_chat": "<f>Chat ID set! Ab post ka <b>Poster (Photo)</b> bhejo.</f>\n\n/cancel - <f>Cancel.</f>",
         "admin_custom_post_get_poster_error": "<f>Ye photo nahi hai. Please ek photo bhejo.</f>",
-        "admin_custom_post_get_poster": "<f>Poster set! Ab post ka <b>Caption</b> (text) bhejo.</f><pre>\n</pre><f>(Aap</f> <code>&lt;f&gt;...&lt;/f&gt;</code> <f>tags use kar sakte hain)</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
-        "admin_custom_post_get_caption": "<f>Caption set! Ab custom button ka <b>Text</b> bhejo.</f><pre>\n</pre><f>(Example: 'Join Now')</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
-        "admin_custom_post_get_btn_text": "<f>Button text set! Ab button ka <b>URL (Link)</b> bhejo.</f><pre>\n</pre><f>(Example: 'https://t.me/mychannel')</f><pre>\n\n</pre>/cancel - <f>Cancel.</f>",
-        "admin_custom_post_confirm": "<b><f>--- PREVIEW ---</f></b><pre>\n\n</pre>{caption}<pre>\n\n</pre><b><f>Target:</f></b> <code>{chat_id}</code>",
-        "admin_custom_post_success": "✅ <b><f>Success!</f></b><pre>\n</pre><f>Post ko</f> '{chat_id}' <f>par bhej diya gaya hai.</f>",
-        "admin_custom_post_error": "❌ <b><f>Error!</f></b><pre>\n</pre><f>Post</f> '{chat_id}' <f>par nahi bhej paya.</f><pre>\n</pre><f>Error:</f> {e}",
+        "admin_custom_post_get_poster": "<f>Poster set! Ab post ka <b>Caption</b> (text) bhejo.</f>\n<f>(Aap</f> <code>&lt;f&gt;...&lt;/f&gt;</code> <f>tags use kar sakte hain)</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_custom_post_get_caption": "<f>Caption set! Ab custom button ka <b>Text</b> bhejo.</f>\n<f>(Example: 'Join Now')</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_custom_post_get_btn_text": "<f>Button text set! Ab button ka <b>URL (Link)</b> bhejo.</f>\n<f>(Example: 'https://t.me/mychannel')</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_custom_post_confirm": "<b><f>--- PREVIEW ---</f></b>\n\n{caption}\n\n<b><f>Target:</f></b> <code>{chat_id}</code>",
+        "admin_custom_post_success": "✅ <b><f>Success!</f></b>\n<f>Post ko</f> '{chat_id}' <f>par bhej diya gaya hai.</f>",
+        "admin_custom_post_error": "❌ <b><f>Error!</f></b>\n<f>Post</f> '{chat_id}' <f>par nahi bhej paya.</f>\n<f>Error:</f> {e}",
         
         # === Admin: Bot Appearance Menu (NAYA) ===
-        "admin_menu_appearance": "🎨 <b><f>Bot Appearance</f></b> 🎨<pre>\n\n</pre><f>Bot ke messages ka look aur feel yahaan change karein.</f><pre>\n\n</pre><f>Current Font:</f> <b>{font}</b><pre>\n</pre><f>Current Style:</f> <b>{style}</b>",
-        "admin_appearance_select_font": "<f>Kaunsa font select karna hai?</f><pre>\n\n</pre><f>Current:</f> <b>{font}</b>",
-        "admin_appearance_select_style": "<f>Kaunsa style select karna hai?</f><pre>\n\n</pre><f>Current:</f> <b>{style}</b>",
+        "admin_menu_appearance": "🎨 <b><f>Bot Appearance</f></b> 🎨\n\n<f>Bot ke messages ka look aur feel yahaan change karein.</f>\n\n<f>Current Font:</f> <b>{font}</b>\n<f>Current Style:</f> <b>{style}</b>",
+        "admin_appearance_select_font": "<f>Kaunsa font select karna hai?</f>\n\n<f>Current:</f> <b>{font}</b>",
+        "admin_appearance_select_style": "<f>Kaunsa style select karna hai?</f>\n\n<f>Current:</f> <b>{style}</b>",
         "admin_appearance_set_font_success": "✅ <b><f>Success!</f></b> <f>Font ko</f> <b>{font}</b> <f>par set kar diya gaya hai.</f>",
         "admin_appearance_set_style_success": "✅ <b><f>Success!</f></b> <f>Style ko</f> <b>{style}</b> <f>par set kar diya gaya hai.</f>",
     }
-
-
 # --- Config Helper (MAJOR REFACTOR) ---
 async def get_config():
     """Database se bot config fetch karega"""
@@ -518,11 +518,11 @@ async def get_config():
     if not config:
         default_config = {
             "_id": "bot_config", "donate_qr_id": None, 
-            "links": {"backup": None, "download": None}, 
+            "links": {"backup": None, "download": None, "help": None}, # NAYA: Help link
             "delete_seconds": 300, 
             "messages": default_messages,
             "co_admins": [],
-            "appearance": {"font": "default", "style": "normal"} # NAYA
+            "appearance": {"font": "default", "style": "normal"}
         }
         config_collection.insert_one(default_config)
         return default_config
@@ -536,12 +536,19 @@ async def get_config():
     if "co_admins" not in config:
         config["co_admins"] = []
         needs_update = True
-    if "appearance" not in config: # NAYA
+    if "appearance" not in config:
         config["appearance"] = {"font": "default", "style": "normal"}
         needs_update = True
     
     if "messages" not in config: 
         config["messages"] = {}
+        needs_update = True
+        
+    if "links" not in config: # NAYA: Links check
+        config["links"] = {"backup": None, "download": None, "help": None}
+        needs_update = True
+    elif "help" not in config["links"]: # NAYA: Help link check
+        config["links"]["help"] = None
         needs_update = True
 
     # Check karo ki saare default messages config me hain ya nahi
@@ -574,7 +581,8 @@ async def get_config():
             "messages": config["messages"], 
             "delete_seconds": config.get("delete_seconds", 300),
             "co_admins": config.get("co_admins", []),
-            "appearance": config.get("appearance", {"font": "default", "style": "normal"}) # NAYA
+            "appearance": config.get("appearance", {"font": "default", "style": "normal"}),
+            "links": config.get("links", {"backup": None, "download": None, "help": None}) # NAYA
         }
         
         config_collection.update_one(
@@ -1289,6 +1297,10 @@ async def set_links_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['link_type'] = "download"
         text = await format_message(context, "admin_set_link_download")
         back_button = "back_to_links"
+    elif link_type == "help_link": # NAYA
+        context.user_data['link_type'] = "help"
+        text = await format_message(context, "admin_set_link_help")
+        back_button = "back_to_links"
     else:
         text = await format_message(context, "admin_set_link_invalid")
         await query.answer(text, show_alert=True)
@@ -1317,7 +1329,6 @@ async def skip_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await other_links_menu(update, context)
     context.user_data.clear()
     return ConversationHandler.END
-
 # --- NAYA: Conversation: Set Custom Messages (PAGINATED) ---
 async def set_msg_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1512,9 +1523,8 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
             poster_id = anime_doc['poster_id']
             description = anime_doc.get('description', '')
             
-            caption_template = config.get("messages", {}).get("post_gen_anime_caption", "...")
-            caption = caption_template.replace("{anime_name}", anime_name) \
-                                        .replace("{description}", description if description else "")
+            caption_template = await format_message(context, "post_gen_anime_caption") # NAYA
+            caption = caption_template.format(anime_name=anime_name, description=description if description else "")
         
         elif not ep_num and season_name:
             context.user_data['is_episode_post'] = False
@@ -1524,19 +1534,15 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
             poster_id = season_data.get("_poster_id") or anime_doc['poster_id']
             description = season_data.get("_description") or anime_doc.get('description', '')
             
-            caption_template = config.get("messages", {}).get("post_gen_season_caption", "...")
-            caption = caption_template.replace("{anime_name}", anime_name) \
-                                        .replace("{season_name}", season_name) \
-                                        .replace("{description}", description if description else "")
+            caption_template = await format_message(context, "post_gen_season_caption") # NAYA
+            caption = caption_template.format(anime_name=anime_name, season_name=season_name, description=description if description else "")
     
         elif ep_num:
             context.user_data['is_episode_post'] = True
             dl_callback_data = f"dl{anime_id}__{season_name}__{ep_num}" 
             
-            caption_template = config.get("messages", {}).get("post_gen_episode_caption", "...")
-            caption = caption_template.replace("{anime_name}", anime_name) \
-                                        .replace("{season_name}", season_name) \
-                                        .replace("{ep_num}", ep_num)
+            caption_template = await format_message(context, "post_gen_episode_caption") # NAYA
+            caption = caption_template.format(anime_name=anime_name, season_name=season_name, ep_num=ep_num)
             
             poster_id = None 
         
@@ -1548,17 +1554,20 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
         
         links = config.get('links', {})
         backup_url = links.get('backup') or "https://t.me/"
+        help_url = links.get('help') or "https://t.me/" # NAYA
         donate_url = f"https://t.me/{bot_username}?start=donate"
         
         original_download_url = f"https://t.me/{bot_username}?start={dl_callback_data}"
         
         btn_backup = InlineKeyboardButton("Backup", url=backup_url)
         btn_donate = InlineKeyboardButton("Donate", url=donate_url)
+        btn_help = InlineKeyboardButton("🆘 Help", url=help_url) # NAYA
 
-        context.user_data['post_caption'] = caption
+        context.user_data['post_caption_raw'] = caption # Raw caption (bina font)
         context.user_data['post_poster_id'] = poster_id 
         context.user_data['btn_backup'] = btn_backup
         context.user_data['btn_donate'] = btn_donate
+        context.user_data['btn_help'] = btn_help # NAYA
         context.user_data['is_episode_post'] = context.user_data.get('is_episode_post', False) 
         
         text = await format_message(context, "admin_post_gen_ask_shortlink", {
@@ -1582,23 +1591,32 @@ async def generate_post_ask_chat(update: Update, context: ContextTypes.DEFAULT_T
 async def post_gen_get_short_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     short_link_url = update.message.text
     
-    caption = context.user_data['post_caption']
+    caption_raw = context.user_data['post_caption_raw']
     poster_id = context.user_data['post_poster_id']
     btn_backup = context.user_data['btn_backup']
     btn_donate = context.user_data['btn_donate']
+    btn_help = context.user_data['btn_help'] # NAYA
     is_episode_post = context.user_data.get('is_episode_post', False)
     
     btn_download = InlineKeyboardButton("Download", url=short_link_url)
     
     if is_episode_post:
-        keyboard = [[btn_donate, btn_download]]
+        keyboard = [
+            [btn_donate, btn_download],
+            [btn_help] # NAYA
+        ]
     else:
         keyboard = [
             [btn_backup, btn_donate],  
+            [btn_help], # NAYA
             [btn_download]            
         ]
     
     context.user_data['post_keyboard'] = InlineKeyboardMarkup(keyboard)
+    # NAYA: Caption ko font ke saath format karo (Post ke liye hamesha default)
+    font_settings = {"font": "default", "style": "normal"}
+    caption_formatted = await apply_font_formatting(caption_raw, font_settings)
+    context.user_data['post_caption_formatted'] = caption_formatted
     
     text = await format_message(context, "admin_post_gen_ask_chat")
     await update.message.reply_text(
@@ -1611,10 +1629,7 @@ async def post_gen_get_short_link(update: Update, context: ContextTypes.DEFAULT_
 async def post_gen_send_to_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.text
     is_episode_post = context.user_data.get('is_episode_post', False) 
-    
-    # NAYA: Font ko caption par apply karo (Post ke liye hamesha default)
-    font_settings = {"font": "default", "style": "normal"}
-    caption_text = await apply_font_formatting(context.user_data['post_caption'], font_settings)
+    caption_text = context.user_data['post_caption_formatted'] # Pehle se formatted
     
     try:
         if is_episode_post:
@@ -2649,7 +2664,7 @@ async def co_admin_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         text = await format_message(context, "admin_co_admin_list_header")
         for admin_id in co_admins:
-            text += f"- <code>{admin_id}</code><pre>\n</pre>"
+            text += f"- <code>{admin_id}</code>\n" # <pre> hata diya
 
     await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_admin_settings")]]))
     return ConversationHandler.END
@@ -2938,9 +2953,11 @@ async def other_links_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     config = await get_config()
     backup_status = "✅" if config.get('links', {}).get('backup') else "❌"
     download_status = "✅" if config.get('links', {}).get('download') else "❌"
+    help_status = "✅" if config.get('links', {}).get('help') else "❌" # NAYA
     keyboard = [
         [InlineKeyboardButton(f"Set Backup Link {backup_status}", callback_data="admin_set_backup_link")],
         [InlineKeyboardButton(f"Set Download Link {download_status}", callback_data="admin_set_download_link")], 
+        [InlineKeyboardButton(f"Set Help Link {help_status}", callback_data="admin_set_help_link")], # NAYA
         [InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]
     ]
     text = await format_message(context, "admin_menu_links")
@@ -2977,7 +2994,7 @@ async def bot_messages_menu_dl(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
     keyboard = [
         [InlineKeyboardButton("Edit Check DM Alert", callback_data="msg_edit_user_dl_dm_alert")],
-        [InlineKeyboardButton("Edit Fetching Files", callback_data="msg_edit_user_dl_fetching")], # NAYA
+        [InlineKeyboardButton("Edit Fetching Files", callback_data="msg_edit_user_dl_fetching")],
         [InlineKeyboardButton("Edit Anime Not Found", callback_data="msg_edit_user_dl_anime_not_found")],
         [InlineKeyboardButton("Edit Seasons Not Found", callback_data="msg_edit_user_dl_seasons_not_found")],
         [InlineKeyboardButton("Edit Episodes Not Found", callback_data="msg_edit_user_dl_episodes_not_found")],
@@ -3002,9 +3019,9 @@ async def bot_messages_menu_gen(update: Update, context: ContextTypes.DEFAULT_TY
         [InlineKeyboardButton("Edit Donate QR Error", callback_data="msg_edit_user_donate_qr_error")],
         [InlineKeyboardButton("Edit Donate QR Text", callback_data="msg_edit_user_donate_qr_text")],
         [InlineKeyboardButton("Edit Donate Thanks", callback_data="msg_edit_donate_thanks")],
-        [InlineKeyboardButton("Edit Not Admin", callback_data="msg_edit_user_not_admin")], # NAYA
-        [InlineKeyboardButton("Edit Welcome Admin", callback_data="msg_edit_user_welcome_admin")], # NAYA
-        [InlineKeyboardButton("Edit Welcome User", callback_data="msg_edit_user_welcome_basic")], # NAYA
+        [InlineKeyboardButton("Edit Not Admin", callback_data="msg_edit_user_not_admin")],
+        [InlineKeyboardButton("Edit Welcome Admin", callback_data="msg_edit_user_welcome_admin")],
+        [InlineKeyboardButton("Edit Welcome User", callback_data="msg_edit_user_welcome_basic")],
         [InlineKeyboardButton("⬅️ Back", callback_data="admin_menu_messages")]
     ]
     text = await format_message(context, "admin_menu_messages_gen")
@@ -3033,7 +3050,7 @@ async def bot_messages_menu_admin(update: Update, context: ContextTypes.DEFAULT_
     keys = await get_default_messages()
     admin_keys = sorted([k for k in keys.keys() if k.startswith("admin_")])
     
-    buttons = [InlineKeyboardButton(k.replace("admin_", "").title(), callback_data=f"msg_edit_{k}") for k in admin_keys]
+    buttons = [InlineKeyboardButton(k.replace("admin_", "").replace("_", " ").title(), callback_data=f"msg_edit_{k}") for k in admin_keys]
     keyboard = build_grid_keyboard(buttons, 1) # 1-column list
     keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="admin_menu_messages")])
     
@@ -3134,17 +3151,17 @@ async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TY
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Smart /start command"""
     user = update.effective_user
-    user_id, first_name = user.id, user.first_name
-    logger.info(f"User {user_id} ({first_name}) ne /start dabaya.")
+    user_id, full_name = user.id, user.full_name # NAYA: Full name
+    logger.info(f"User {user_id} ({full_name}) ne /start dabaya.")
     
     user_data = users_collection.find_one({"_id": user_id})
     if not user_data:
-        users_collection.insert_one({"_id": user_id, "first_name": first_name, "username": user.username})
+        users_collection.insert_one({"_id": user_id, "first_name": user.first_name, "full_name": full_name, "username": user.username}) # NAYA
         logger.info(f"Naya user database me add kiya: {user_id}")
     else:
         users_collection.update_one(
             {"_id": user_id},
-            {"$set": {"first_name": first_name, "username": user.username}}
+            {"$set": {"first_name": user.first_name, "full_name": full_name, "username": user.username}} # NAYA
         )
     
     args = context.args
@@ -3165,7 +3182,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = await format_message(context, "user_welcome_admin")
         await update.message.reply_text(text, parse_mode=ParseMode.HTML)
     else:
-        text = await format_message(context, "user_welcome_basic", {"first_name": first_name})
+        text = await format_message(context, "user_welcome_basic", {"full_name": full_name}) # NAYA
         await update.message.reply_text(text, parse_mode=ParseMode.HTML)
     
 async def show_user_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, from_callback: bool = False):
@@ -3181,13 +3198,18 @@ async def show_user_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, fro
     config = await get_config()
     links = config.get('links', {})
     backup_url = links.get('backup') or "https://t.me/"
+    help_url = links.get('help') or "https://t.me/" # NAYA
         
     btn_backup = InlineKeyboardButton("Backup", url=backup_url)
     btn_donate = InlineKeyboardButton("Donate", callback_data="user_show_donate_menu")
+    btn_help = InlineKeyboardButton("🆘 Help", url=help_url) # NAYA
     
-    keyboard = [[btn_backup, btn_donate]] 
+    keyboard = [
+        [btn_backup, btn_donate],
+        [btn_help] # NAYA
+    ] 
     
-    menu_text = await format_message(context, "user_menu_greeting", {"first_name": user.first_name})
+    menu_text = await format_message(context, "user_menu_greeting", {"full_name": user.full_name}) # NAYA
     
     if from_callback:
         query = update.callback_query
@@ -3289,7 +3311,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
             ],
             [
                 InlineKeyboardButton("⚙️ Bot Messages", callback_data="admin_menu_messages"),
-                InlineKeyboardButton("🎨 Bot Appearance", callback_data="admin_menu_appearance") # NAYA
+                InlineKeyboardButton("🎨 Bot Appearance", callback_data="admin_menu_appearance")
             ],
             [InlineKeyboardButton("🛠️ Admin Settings", callback_data="admin_menu_admin_settings")] 
         ]
@@ -3429,7 +3451,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                 sent_message = None 
                 try:
                     # NAYA: Caption ko font ke saath format karo
-                    caption_base = "🎬 <b>{anime_name}</b><pre>\n</pre>S{season_name} - E{ep_num} ({quality})<pre>\n\n</pre>{warning_msg}"
+                    caption_base = "🎬 <b>{anime_name}</b>\nS{season_name} - E{ep_num} ({quality})\n\n{warning_msg}" # <pre> hata diya
                     caption_raw = caption_base.format(
                         anime_name=anime_name,
                         season_name=season_name,
@@ -3688,7 +3710,9 @@ def run_async_bot_tasks(loop, app):
     try:
         webhook_path_url = f"{WEBHOOK_URL}/{BOT_TOKEN}"
         logger.info(f"Webhook ko {webhook_path_url} par set kar raha hai...")
-        httpx.get(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_path_url}")
+        # Use httpx for sync request in async thread setup
+        with httpx.Client() as client:
+            client.get(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_path_url}")
         logger.info("Webhook successfully set!")
 
         loop.run_until_complete(app.initialize())
@@ -3710,7 +3734,6 @@ def main():
     PORT = int(os.environ.get("PORT", 8080))
     
     # NAYA: Default ParseMode set karo
-    # --- YEH RAHA FIX ---
     my_defaults = Defaults(parse_mode=ParseMode.HTML)
     bot_app = Application.builder().token(BOT_TOKEN).defaults(my_defaults).build()
     
@@ -3734,7 +3757,6 @@ def main():
     messages_fallback = [CallbackQueryHandler(back_to_messages_menu, pattern="^admin_menu_messages$"), global_cancel_handler]
     admin_settings_fallback = [CallbackQueryHandler(back_to_admin_settings_menu, pattern="^back_to_admin_settings$"), global_cancel_handler]
     gen_link_fallback = [CallbackQueryHandler(gen_link_menu, pattern="^admin_gen_link$"), global_cancel_handler]
-    # NAYA: Appearance Fallback
     appearance_fallback = [CallbackQueryHandler(back_to_appearance_menu, pattern="^back_to_appearance$"), global_cancel_handler]
 
 
@@ -3797,7 +3819,7 @@ def main():
         allow_reentry=True 
     )
     set_links_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(set_links_start, pattern="^admin_set_backup_link$|^admin_set_download_link$")], 
+        entry_points=[CallbackQueryHandler(set_links_start, pattern="^admin_set_backup_link$|^admin_set_download_link$|^admin_set_help_link$")], # NAYA
         states={CL_GET_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_link), CommandHandler("skip", skip_link)]}, 
         fallbacks=global_fallbacks + links_fallback,
         allow_reentry=True 
@@ -4009,19 +4031,18 @@ def main():
                 CallbackQueryHandler(bot_messages_menu_dl, pattern="^msg_menu_dl$"),
                 CallbackQueryHandler(bot_messages_menu_postgen, pattern="^msg_menu_postgen$"),
                 CallbackQueryHandler(bot_messages_menu_gen, pattern="^msg_menu_gen$"),
-                CallbackQueryHandler(bot_messages_menu_admin, pattern="^msg_menu_admin$"), # NAYA
+                CallbackQueryHandler(bot_messages_menu_admin, pattern="^msg_menu_admin$"),
             ],
             M_MENU_DL: [CallbackQueryHandler(set_msg_start, pattern="^msg_edit_")],
             M_MENU_POSTGEN: [CallbackQueryHandler(set_msg_start, pattern="^msg_edit_")],
             M_MENU_GEN: [CallbackQueryHandler(set_msg_start, pattern="^msg_edit_")],
-            M_MENU_ADMIN: [CallbackQueryHandler(set_msg_start, pattern="^msg_edit_")], # NAYA
+            M_MENU_ADMIN: [CallbackQueryHandler(set_msg_start, pattern="^msg_edit_")],
             M_GET_MSG: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_msg_save)],
         },
         fallbacks=global_fallbacks + admin_menu_fallback,
         allow_reentry=True
     )
     
-    # --- NAYA: APPEARANCE CONVERSATION ---
     appearance_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(appearance_menu_start, pattern="^admin_menu_appearance$")],
         states={
@@ -4062,7 +4083,7 @@ def main():
     bot_app.add_handler(custom_post_conv) 
     bot_app.add_handler(set_delete_time_conv) 
     bot_app.add_handler(set_messages_conv) 
-    bot_app.add_handler(appearance_conv) # NAYA: Appearance Handler
+    bot_app.add_handler(appearance_conv)
 
     # Standard commands
     bot_app.add_handler(CommandHandler("start", start_command)) 
@@ -4080,7 +4101,7 @@ def main():
     bot_app.add_handler(CallbackQueryHandler(co_admin_list, pattern="^admin_list_co_admin$")) 
 
     # User menu navigation (non-conversation)
-    bot_app.add_handler(CallbackQueryHandler(user_show_donate_menu, pattern="^user_show_donate_menu$"))
+   bot_app.add_handler(CallbackQueryHandler(user_show_donate_menu, pattern="^user_show_donate_menu$"))
     bot_app.add_handler(CallbackQueryHandler(back_to_user_menu, pattern="^user_back_menu$"))
 
     # User Download Flow (Non-conversation)
