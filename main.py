@@ -4114,7 +4114,7 @@ def main():
 
     # Standard commands
     bot_app.add_handler(CommandHandler("start", start_command)) 
-    bot_app.add_handler(CommandHandler("subscription", subscription_command)) 
+    bot_app.add_handler(CommandHandler("user", user_command)) 
     bot_app.add_handler(CommandHandler("menu", menu_command)) 
     bot_app.add_handler(CommandHandler("admin", admin_command)) 
 
