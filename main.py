@@ -1631,12 +1631,10 @@ async def post_gen_get_short_link(update: Update, context: ContextTypes.DEFAULT_
     if is_episode_post:
         keyboard = [
             [btn_donate, btn_download],
-            [btn_help] # NAYA
         ]
     else:
         keyboard = [
-            [btn_backup, btn_donate],  
-            [btn_help], # NAYA
+            [btn_backup, btn_donate],
             [btn_download]            
         ]
     
