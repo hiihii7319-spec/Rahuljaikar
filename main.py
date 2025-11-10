@@ -4192,11 +4192,13 @@ def main():
        },
        fallbacks=global_fallbacks + admin_menu_fallback,
        allow_reentry=True
-   )
-   bot_app.add_handler(set_menu_photo_conv)
+   # ...
+    )
+    bot_app.add_handler(set_menu_photo_conv) # <-- Ise 4 space kar do
 
     # Standard commands
     bot_app.add_handler(CommandHandler("start", start_command)) 
+# ... 
     bot_app.add_handler(CommandHandler("user", user_command)) 
     bot_app.add_handler(CommandHandler("menu", menu_command)) 
     bot_app.add_handler(CommandHandler("admin", admin_command)) 
