@@ -3201,8 +3201,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = await format_message(context, "user_welcome_admin")
         await update.message.reply_text(text, parse_mode=ParseMode.HTML)
     else:
-        text = await format_message(context, "user_welcome_basic", {"full_name": full_name}) # NAYA
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+            text = await format_message(context, "user_welcome_basic", {
+                "full_name": full_name,
+                "first_name": user.first_name # Compatibility ke liye add kiya
+            }) # NAYA
+            await update.message.reply_text(text, parse_mode=ParseMode.HTML)
     
 async def show_user_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, from_callback: bool = False):
     """User ka main menu (/menu)"""
@@ -3228,7 +3231,10 @@ async def show_user_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, fro
         [btn_help] # NAYA
     ] 
     
-    menu_text = await format_message(context, "user_menu_greeting", {"full_name": user.full_name}) # NAYA
+    menu_text = await format_message(context, "user_menu_greeting", {
+        "full_name": user.full_name,
+        "first_name": user.first_name # Compatibility ke liye add kiya
+    }) # NAYA
     
     if from_callback:
         query = update.callback_query
