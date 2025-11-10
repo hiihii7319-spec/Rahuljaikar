@@ -723,6 +723,7 @@ async def delete_message_later(bot, chat_id: int, message_id: int, seconds: int)
 (GL_MENU, GL_GET_ANIME, GL_GET_SEASON, GL_GET_EPISODE) = range(78, 82) 
 # NAYA: Bot Appearance States
 (AP_MENU, AP_SET_FONT, AP_SET_STYLE) = range(82, 85)
+(CS_GET_MENU_PHOTO,) = range(85, 86)
 
 
 # --- NAYA: Global Cancel Function ---
