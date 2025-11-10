@@ -538,6 +538,7 @@ async def get_config():
         default_config = {
             "_id": "bot_config", "donate_qr_id": None, 
             "links": {"backup": None, "download": None, "help": None}, # NAYA: Help link
+            "user_menu_photo_id": None, # NAYA: User Menu Photo
             "delete_seconds": 300, 
             "messages": default_messages,
             "co_admins": [],
@@ -598,6 +599,7 @@ async def get_config():
     if needs_update:
         update_set = {
             "messages": config["messages"], 
+            "user_menu_photo_id": config.get("user_menu_photo_id"), # NAYA
             "delete_seconds": config.get("delete_seconds", 300),
             "co_admins": config.get("co_admins", []),
             "appearance": config.get("appearance", {"font": "default", "style": "normal"}),
