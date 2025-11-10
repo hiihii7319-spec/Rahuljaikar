@@ -3349,6 +3349,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
                 InlineKeyboardButton("⚙️ Bot Messages", callback_data="admin_menu_messages"),
                 InlineKeyboardButton("🎨 Bot Appearance", callback_data="admin_menu_appearance")
             ],
+            [InlineKeyboardButton("🖼️ Set Menu Photo", callback_data="admin_set_menu_photo")], # NAYA
             [InlineKeyboardButton("🛠️ Admin Settings", callback_data="admin_menu_admin_settings")] 
         ]
         admin_menu_text = await format_message(context, "admin_panel_main")
