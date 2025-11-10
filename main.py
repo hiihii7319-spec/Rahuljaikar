@@ -305,7 +305,7 @@ async def get_default_messages():
         "donate_thanks": "❤️ <f>Support karne ke liye shukriya!</f>",
         "user_not_admin": "<f>Aap admin nahi hain.</f>",
         "user_welcome_admin": "<f>Salaam, Admin! Admin panel ke liye</f> /menu <f>use karein.</f>",
-        "user_welcome_basic": "<f>Salaam, {full_name}! Apna user menu dekhne ke liye</f> /subscription <f>use karein.</f>", # FIX: {full_name}
+        "user_welcome_basic": "<f>Salaam, {full_name}! Apna user menu dekhne ke liye</f> /user <f>use karein.</f>", # FIX: {full_name}
         
         # === Post Generator ===
         "post_gen_anime_caption": "✅ <b>{anime_name}</b>\n\n<b><f>📖 Synopsis:</f></b>\n{description}\n\n<f>Neeche [Download] button dabake download karein!</f>",
