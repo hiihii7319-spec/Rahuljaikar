@@ -130,6 +130,7 @@ FONT_MAPS['default_bold'] = {
 async def apply_font_formatting(raw_text: str, font_settings: dict) -> str:
     """
     <f>...</f> tags ke andar ke text ko font apply karega.
+    (FIX v31: HTML tags jaise <b> ko ignore karega)
     """
     font = font_settings.get('font', 'default')
     style = font_settings.get('style', 'normal')
@@ -148,13 +149,31 @@ async def apply_font_formatting(raw_text: str, font_settings: dict) -> str:
         if not font_map: # Agar default_bold bhi fail ho
              return raw_text.replace('<f>', '').replace('</f>', '')
 
-    def replace_chars(match):
-        text_to_font = match.group(1)
-        return "".join([font_map.get(char, char) for char in text_to_font])
+    def replace_chars_html_safe(text_chunk):
+        # Yeh function sirf plain text par chalega
+        return "".join([font_map.get(char, char) for char in text_chunk])
 
-    # <f> tag ke andar sab kuch replace karo
+    def process_tags(match):
+        content = match.group(1) # <f> ke andar ka content
+        
+        # Content ko HTML tags aur text me todo
+        # Yeh 'Salaam <b>Naam</b>' ko ['Salaam ', '<b>', 'Naam', '</b>', ''] me tod dega
+        parts = re.split(r'(<[^>]+>)', content)
+        
+        processed_parts = []
+        for part in parts:
+            if re.match(r'<[^>]+>', part):
+                # Yeh ek HTML tag hai (jaise <b>), isko chhedo mat
+                processed_parts.append(part)
+            else:
+                # Yeh plain text hai, ispar font apply karo
+                processed_parts.append(replace_chars_html_safe(part))
+        
+        return "".join(processed_parts)
+
+    # <f> tag ke andar sab kuch process karo
     try:
-        formatted_text = re.sub(r'<f>(.*?)</f>', replace_chars, raw_text, flags=re.DOTALL)
+        formatted_text = re.sub(r'<f>(.*?)</f>', process_tags, raw_text, flags=re.DOTALL)
         return formatted_text
     except Exception as e:
         logger.error(f"Font formatting me error: {e}")
