@@ -3401,6 +3401,38 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
             await query.answer()
     else:
         await update.message.reply_text(admin_menu_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+
+# --- Conversation: Set User Menu Photo ---
+async def set_menu_photo_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    text = await format_message(context, "admin_set_menu_photo_start")
+    await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="admin_menu")]]))
+    return CS_GET_MENU_PHOTO
+
+async def set_menu_photo_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message.photo:
+        text = await format_message(context, "admin_set_menu_photo_error")
+        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        return CS_GET_MENU_PHOTO
+
+    photo_id = update.message.photo[-1].file_id
+    config_collection.update_one({"_id": "bot_config"}, {"$set": {"user_menu_photo_id": photo_id}}, upsert=True)
+    logger.info(f"User menu photo update ho gaya.")
+    text = await format_message(context, "admin_set_menu_photo_success")
+    await update.message.reply_photo(photo=photo_id, caption=text, parse_mode=ParseMode.HTML)
+
+    await admin_command(update, context, from_callback=False)
+    return ConversationHandler.END
+
+async def skip_menu_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    config_collection.update_one({"_id": "bot_config"}, {"$set": {"user_menu_photo_id": None}}, upsert=True)
+    logger.info(f"User menu photo remove kar diya gaya.")
+    text = await format_message(context, "admin_set_menu_photo_skip")
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+
+    await admin_command(update, context, from_callback=False)
+    return ConversationHandler.END
 # --- User Download Handler (CallbackQuery) ---
 async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -4149,6 +4181,19 @@ def main():
     bot_app.add_handler(set_delete_time_conv) 
     bot_app.add_handler(set_messages_conv) 
     bot_app.add_handler(appearance_conv)
+
+    set_menu_photo_conv = ConversationHandler(
+       entry_points=[CallbackQueryHandler(set_menu_photo_start, pattern="^admin_set_menu_photo$")],
+       states={
+           CS_GET_MENU_PHOTO: [
+               MessageHandler(filters.PHOTO, set_menu_photo_save),
+               CommandHandler("skip", skip_menu_photo)
+           ]
+       },
+       fallbacks=global_fallbacks + admin_menu_fallback,
+       allow_reentry=True
+   )
+   bot_app.add_handler(set_menu_photo_conv)
 
     # Standard commands
     bot_app.add_handler(CommandHandler("start", start_command)) 
