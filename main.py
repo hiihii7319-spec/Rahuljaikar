@@ -807,8 +807,8 @@ async def back_to_user_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_user_menu(update, context, from_callback=True) 
     return ConversationHandler.END
     
-async def subscription_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"User {update.effective_user.id} ne /subscription dabaya.")
+async def user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"User {update.effective_user.id} ne /user dabaya.")
     await show_user_menu(update, context)
 
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
