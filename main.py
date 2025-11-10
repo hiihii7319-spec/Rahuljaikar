@@ -3219,51 +3219,79 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(text, parse_mode=ParseMode.HTML)
     
 async def show_user_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, from_callback: bool = False):
-    """User ka main menu (/menu)"""
+    """User ka main menu (/user) dikhayega, photo ke saath (agar set ho)"""
     user = update.effective_user
     user_id = user.id
-    
+
     if from_callback:
         logger.info(f"User {user_id} 'Back to Menu' se aaya.")
     else:
-        logger.info(f"User {user_id} ne /menu khola.")
-    
+        logger.info(f"User {user_id} ne /user khola.")
+
     config = await get_config()
     links = config.get('links', {})
     backup_url = links.get('backup') or "https://t.me/"
-    help_url = links.get('help') or "https://t.me/" # NAYA
-        
+    help_url = links.get('help') or "https://t.me/" 
+
     btn_backup = InlineKeyboardButton("Backup", url=backup_url)
     btn_donate = InlineKeyboardButton("Donate", callback_data="user_show_donate_menu")
-    btn_help = InlineKeyboardButton("🆘 Help", url=help_url) # NAYA
-    
+    btn_help = InlineKeyboardButton("🆘 Help", url=help_url) 
+
     keyboard = [
         [btn_backup, btn_donate],
-        [btn_help] # NAYA
+        [btn_help]
     ] 
-    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
     menu_text = await format_message(context, "user_menu_greeting", {
         "full_name": user.full_name,
-        "first_name": user.first_name # Compatibility ke liye add kiya
-    }) # NAYA
-    
+        "first_name": user.first_name # Compatibility
+    })
+
+    menu_photo_id = config.get("user_menu_photo_id")
+
     if from_callback:
         query = update.callback_query
         await query.answer()
+
         try:
-            if query.message.photo:
-                await query.message.delete()
-                await context.bot.send_message(query.from_user.id, menu_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+            if menu_photo_id:
+                # Admin ne photo set kiya hai
+                if query.message.photo:
+                    # Pehle se photo hai, caption edit karo
+                    await query.edit_message_caption(caption=menu_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+                else:
+                    # Pehle text tha, delete karke photo bhejo
+                    await query.message.delete()
+                    await context.bot.send_photo(chat_id=user_id, photo=menu_photo_id, caption=menu_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
             else:
-                await query.edit_message_text(menu_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+                # Admin ne koi photo set nahi kiya (default)
+                if query.message.photo:
+                    # Pehle photo tha, delete karke text bhejo
+                    await query.message.delete()
+                    await context.bot.send_message(chat_id=user_id, text=menu_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+                else:
+                    # Pehle bhi text tha, edit karo
+                    await query.edit_message_text(text=menu_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
         except Exception as e:
-            logger.warning(f"Menu edit/reply nahi kar paya: {e}")
+            logger.warning(f"Menu edit/reply nahi kar paya: {e}. Naya message bhej raha hoon.")
             try:
-                await context.bot.send_message(query.from_user.id, menu_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+                # Fallback: Agar kuch bhi fail ho, naya message bhejo
+                if menu_photo_id:
+                    await context.bot.send_photo(chat_id=user_id, photo=menu_photo_id, caption=menu_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+                else:
+                    await context.bot.send_message(chat_id=user_id, text=menu_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
             except Exception as e2:
                 logger.error(f"Menu command (callback) me critical error: {e2}")
     else:
-        await update.message.reply_text(menu_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+        # Jab user ne /user command type kiya
+        try:
+            if menu_photo_id:
+                await update.message.reply_photo(photo=menu_photo_id, caption=menu_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+            else:
+                await update.message.reply_text(text=menu_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        except Exception as e:
+            logger.error(f"Show user menu me error: {e}")
 
 async def user_show_donate_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/menu se Donate button ko handle karega (DM bhejega)"""
