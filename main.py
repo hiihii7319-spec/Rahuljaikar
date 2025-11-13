@@ -1259,7 +1259,28 @@ async def get_season_for_episode(update: Update, context: ContextTypes.DEFAULT_T
     context.user_data['season_name'] = season_name
     anime_name = context.user_data['anime_name']
 
-    text = await format_message(context, "admin_add_ep_get_season", {"season_name": season_name})
+    # NEW CODE
+    # NAYA: Last episode number check karo
+    anime_doc = animes_collection.find_one({"name": anime_name})
+    episodes = anime_doc.get("seasons", {}).get(season_name, {})
+    
+    episode_keys = [ep for ep in episodes.keys() if not ep.startswith("_")]
+    
+    if not episode_keys:
+        text = await format_message(context, "admin_add_ep_get_season_no_last", {"season_name": season_name})
+    else:
+        # Last episode (numerically) find karo
+        try:
+            sorted_eps = sorted(episode_keys, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+            last_ep_num = sorted_eps[-1]
+            text = await format_message(context, "admin_add_ep_get_season_with_last", {
+                "season_name": season_name,
+                "last_ep_num": last_ep_num
+            })
+        except Exception as e:
+            logger.warning(f"Last episode find karne me error (shayad non-numeric): {e}")
+            text = await format_message(context, "admin_add_ep_get_season_no_last", {"season_name": season_name})
+
     await query.edit_message_text(text, parse_mode=ParseMode.HTML)
     return E_GET_NUMBER
 
