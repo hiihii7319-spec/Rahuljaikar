@@ -1041,7 +1041,38 @@ async def get_anime_for_season(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
     anime_name = query.data.replace("season_anime_", "")
     context.user_data['anime_name'] = anime_name
-    text = await format_message(context, "admin_add_season_get_anime", {"anime_name": anime_name})
+    
+    # --- NAYA LOGIC (Last Season Check) START ---
+    anime_doc = animes_collection.find_one({"name": anime_name})
+    if not anime_doc:
+        text = await format_message(context, "admin_add_season_get_number_error", {"anime_name": anime_name})
+        await query.edit_message_text(text, parse_mode=ParseMode.HTML)
+        return ConversationHandler.END
+    
+    seasons = anime_doc.get("seasons", {})
+    season_keys = list(seasons.keys()) # Yahan _ keys filter karne ki zaroorat nahi
+    
+    if not season_keys:
+        text = await format_message(context, "admin_add_season_get_anime_no_last", {
+            "anime_name": anime_name
+        })
+    else:
+        try:
+            # Seasons ko numerically sort karo
+            sorted_seasons = sorted(season_keys, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+            last_season_name = sorted_seasons[-1]
+            text = await format_message(context, "admin_add_season_get_anime_with_last", {
+                "anime_name": anime_name,
+                "last_season_name": last_season_name
+            })
+        except Exception as e:
+            logger.warning(f"Last season find karne me error: {e}")
+            # Error hone par fallback
+            text = await format_message(context, "admin_add_season_get_anime_no_last", {
+                "anime_name": anime_name
+            })
+    # --- NAYA LOGIC END ---
+
     await query.edit_message_text(text, parse_mode=ParseMode.HTML)
     return S_GET_NUMBER
 
