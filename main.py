@@ -367,6 +367,8 @@ async def get_default_messages():
         "admin_add_season_select_anime": "<f>Aap kis anime mein season add karna chahte hain?</f>\n\n<b><f>Recently Updated First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>", # NAYA: Text change
         "admin_add_season_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai. Pehle 'Add Anime' se add karein.</f>",
         "admin_add_season_get_anime": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Ab is season ka <b>Number ya Naam</b> bhejo.</f>\n<f>(Jaise: 1, 2, Movie)</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_add_season_get_anime_with_last": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n<f>Last added season:</f> <b>{last_season_name}</b>\n\n<f>Ab is season ka <b>Number ya Naam</b> bhejo.</f>\n<f>(Jaise: 1, 2, Movie)</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_add_season_get_anime_no_last": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n<f>Is anime mein abhi koi season nahi hai.</f>\n\n<f>Ab is season ka <b>Number ya Naam</b> bhejo.</f>\n<f>(Jaise: 1, 2, Movie)</f>\n\n/cancel - <f>Cancel.</f>",
         "admin_add_season_get_number_error": "⚠️ <b><f>Error!</f></b> <f>Anime</f> '{anime_name}' <f>database mein nahi mila.</f> /cancel <f>karke dobara try karein.</f>",
         "admin_add_season_get_number_exists": "⚠️ <b><f>Error!</f></b> '{anime_name}' <f>mein 'Season {season_name}' pehle se hai.</f>\n\n<f>Koi doosra naam/number type karein ya</f> /cancel <f>karein.</f>",
         "admin_add_season_get_poster_prompt": "<f>Aapne Season</f> '{season_name}' <f>select kiya hai.</f>\n\n<f>Ab is season ka <b>Poster (Photo)</b> bhejo.</f>\n\n/skip - <f>Default anime poster use karo.</f>\n/cancel - <f>Cancel.</f>",
