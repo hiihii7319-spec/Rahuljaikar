@@ -1,10 +1,11 @@
 # ============================================
-# ===       COMPLETE FINAL FIX (v30)       ===
+# ===       COMPLETE FINAL FIX (v31)       ===
 # ============================================
-# === (FIX: Remove empty <pre> boxes)      ===
-# === (FEAT: Add Help Button & Link)       ===
-# === (FEAT: Show User's Full Name)        ===
-# === (FIX: Broken Font Map characters)    ===
+# === (FEAT: Add More Episodes flow)       ===
+# === (FEAT: Set Items per Page to 20)     ===
+# === (FEAT: Sort anime by last_modified)  ===
+# === (FEAT: Add 2 new fonts)              ===
+# === (FIX: Back button logic for new flow)===
 # ============================================
 import os
 import logging
@@ -65,6 +66,26 @@ FONT_MAPS = {
         'S': '𝐒', 'T': '𝐓', 'U': '𝐔', 'V': '𝐕', 'W': '𝐖', 'X': '𝐗', 'Y': '𝐘', 'Z': '𝐙',
         '0': '𝟎', '1': '𝟏', '2': '𝟐', '3': '𝟑', '4': '𝟒', '5': '𝟓', '6': '𝟔', '7': '𝟕', '8': '𝟖', '9': '𝟗'
     },
+    # NAYA FONT 1: sans_serif_regular
+    'sans_serif_regular': {
+        'a': '𝖺', 'b': '𝖻', 'c': '𝖼', 'd': '𝖽', 'e': '𝖾', 'f': '𝖿', 'g': '𝗀', 'h': '𝗁', 'i': '𝗂',
+        'j': '𝗃', 'k': '𝗄', 'l': '𝗅', 'm': '𝗆', 'n': '𝗇', 'o': '𝗈', 'p': '𝗉', 'q': '𝗊', 'r': '𝗋',
+        's': '𝗌', 't': '𝗍', 'u': '𝗎', 'v': '𝗏', 'w': '𝗐', 'x': '𝗑', 'y': '𝗒', 'z': '𝗓',
+        'A': '𝖠', 'B': '𝖡', 'C': '𝖢', 'D': '𝖣', 'E': '𝖤', 'F': '𝖥', 'G': '𝖦', 'H': '𝖧', 'I': '𝖨',
+        'J': '𝖩', 'K': '𝖪', 'L': '𝖫', 'M': '𝖬', 'N': '𝖭', 'O': '𝖮', 'P': '𝖯', 'Q': '𝖰', 'R': '𝖱',
+        'S': '𝖲', 'T': '𝖳', 'U': '𝖴', 'V': '𝖵', 'W': '𝖶', 'X': '𝖷', 'Y': '𝖸', 'Z': '𝖹',
+        '0': '𝟢', '1': '𝟣', '2': '𝟤', '3': '𝟥', '4': '𝟦', '5': '𝟧', '6': '𝟨', '7': '𝟩', '8': '𝟪', '9': '𝟫'
+    },
+    # NAYA FONT 2: sans_serif_regular_bold
+    'sans_serif_regular_bold': {
+        'a': '𝗮', 'b': '𝗯', 'c': '𝗰', 'd': '𝗱', 'e': '𝗲', 'f': '𝗳', 'g': '𝗴', 'h': '𝗵', 'i': '𝗶',
+        'j': '𝗷', 'k': '𝗸', 'l': '𝗹', 'm': '𝗺', 'n': '𝗻', 'o': '𝗼', 'p': '𝗽', 'q': '𝗾', 'r': '𝗿',
+        's': '𝘀', 't': '𝘁', 'u': '𝘂', 'v': '𝘃', 'w': '𝘄', 'x': '𝘅', 'y': '𝘆', 'z': '𝘇',
+        'A': '𝗔', 'B': '𝗕', 'C': '𝗖', 'D': '𝗗', 'E': '𝗘', 'F': '𝗙', 'G': '𝗚', 'H': '𝗛', 'I': '𝗜',
+        'J': '𝗝', 'K': '𝗞', 'L': '𝗟', 'M': '𝗠', 'N': '𝗡', 'O': '𝗢', 'P': '𝗣', 'Q': '𝗤', 'R': '𝗥',
+        'S': '𝗦', 'T': '𝗧', 'U': '𝗨', 'V': '𝗩', 'W': '𝗪', 'X': '𝗫', 'Y': '𝗬', 'Z': '𝗭',
+        '0': '𝟬', '1': '𝟭', '2': '𝟮', '3': '𝟯', '4': '𝟰', '5': '𝟱', '6': '𝟲', '7': '𝟳', '8': '𝟴', '9': '𝟵'
+    },
     'script': {
         'a': '𝒶', 'b': '𝒷', 'c': '𝒸', 'd': '𝒹', 'e': '𝑒', 'f': '𝒻', 'g': '𝑔', 'h': '𝒽', 'i': '𝒾',
         'j': '𝒿', 'k': '𝓀', 'l': '𝓁', 'm': '𝓂', 'n': '𝓃', 'o': '𝑜', 'p': '𝓅', 'q': '𝓆', 'r': '𝓇',
@@ -115,7 +136,7 @@ FONT_MAPS = {
 FONT_MAPS['small_caps_bold'] = FONT_MAPS['small_caps']
 # Monospace ka bold nahi hota
 FONT_MAPS['monospace_bold'] = FONT_MAPS['monospace']
-# Default ke liye bold
+# Default ke liye bold (yeh sans_serif_regular_bold se alag hai)
 FONT_MAPS['default_bold'] = {
     'a': '𝗮', 'b': '𝗯', 'c': '𝗰', 'd': '𝗱', 'e': '𝗲', 'f': '𝗳', 'g': '𝗴', 'h': '𝗵', 'i': '𝗶',
     'j': '𝗷', 'k': '𝗸', 'l': '𝗹', 'm': '𝗺', 'n': '𝗻', 'o': '𝗼', 'p': '𝗽', 'q': '𝗾', 'r': '𝗿',
@@ -216,6 +237,7 @@ try:
     
     animes_collection.create_index([("name", ASCENDING)])
     animes_collection.create_index([("created_at", DESCENDING)]) 
+    animes_collection.create_index([("last_modified", DESCENDING)]) # NAYA: Smart sort ke liye
     
     client.admin.command('ping') 
     logger.info("MongoDB se successfully connect ho gaya!")
@@ -223,7 +245,7 @@ except Exception as e:
     logger.error(f"MongoDB connection failed: {e}")
     exit()
 
-ITEMS_PER_PAGE = 8 
+ITEMS_PER_PAGE = 20 # NAYA: 8 se 20 kar diya
 
 # --- NAYA: Admin & Co-Admin Checks ---
 async def is_main_admin(user_id: int) -> bool:
@@ -342,7 +364,7 @@ async def get_default_messages():
         "admin_add_anime_save_error": "❌ <b><f>Error!</f></b> <f>Database me save nahi kar paya.</f>",
 
         # === Admin: Add Season ===
-        "admin_add_season_select_anime": "<f>Aap kis anime mein season add karna chahte hain?</f>\n\n<b><f>Newest First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
+        "admin_add_season_select_anime": "<f>Aap kis anime mein season add karna chahte hain?</f>\n\n<b><f>Recently Updated First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>", # NAYA: Text change
         "admin_add_season_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai. Pehle 'Add Anime' se add karein.</f>",
         "admin_add_season_get_anime": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Ab is season ka <b>Number ya Naam</b> bhejo.</f>\n<f>(Jaise: 1, 2, Movie)</f>\n\n/cancel - <f>Cancel.</f>",
         "admin_add_season_get_number_error": "⚠️ <b><f>Error!</f></b> <f>Anime</f> '{anime_name}' <f>database mein nahi mila.</f> /cancel <f>karke dobara try karein.</f>",
@@ -356,7 +378,7 @@ async def get_default_messages():
         "admin_add_season_save_error": "❌ <b><f>Error!</f></b> <f>Database me save nahi kar paya.</f>",
         
         # === Admin: Add Episode ===
-        "admin_add_ep_select_anime": "<f>Aap kis anime mein episode add karna chahte hain?</f>\n\n<b><f>Newest First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
+        "admin_add_ep_select_anime": "<f>Aap kis anime mein episode add karna chahte hain?</f>\n\n<b><f>Recently Updated First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>", # NAYA: Text change
         "admin_add_ep_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai. Pehle 'Add Anime' se add karein.</f>",
         "admin_add_ep_no_season": "❌ <b><f>Error!</f></b> '{anime_name}' <f>mein koi season nahi hai.</f>\n\n<f>Pehle</f> <code>➕ Add Season</code> <f>se season add karo.</f>",
         "admin_add_ep_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Ab <b>Season</b> select karein:</f>",
@@ -374,6 +396,9 @@ async def get_default_messages():
         "admin_add_ep_skip_1080p": "✅ <f>1080p skip kar diya.</f>\n\n<f>Ab <b>4K</b> quality ki video file bhejein.</f>\n<f>Ya</f> /skip <f>type karein.</f>",
         "admin_add_ep_get_4k_success": "✅ <b><f>Success!</f></b> <f>Saari qualities save ho gayi hain.</f>",
         "admin_add_ep_skip_4k": "✅ <f>4K skip kar diya.</f>\n\n✅ <b><f>Success!</f></b> <f>Episode save ho gaya hai.</f>",
+        "admin_add_ep_ask_more": "✅ <f>Ep</f> <b>{ep_num}</b> <f>save ho gaya!</f>\n\n<f>Aap</f> <b>S{season_name}</b> <f>mein aur episode add karna chahte hain?</f>", # NAYA
+        "admin_add_ep_next_prompt": "<f>Last Ep:</f> <b>{ep_num}</b>. <f>Season:</f> <b>{season_name}</b>\n\n<f>Ab agla <b>Episode Number</b> bhejo.</f>\n<f>(Suggestion: {next_ep_num})</f>\n\n/cancel - <f>Cancel.</f>", # NAYA
+        "admin_add_ep_next_prompt_no_suggestion": "<f>Last Ep:</f> <b>{ep_num}</b>. <f>Season:</f> <b>{season_name}</b>\n\n<f>Ab agla <b>Episode Number</b> bhejo.</f>\n\n/cancel - <f>Cancel.</f>", # NAYA
         
         # === Admin: Settings (Donate, Links, Delete Time) ===
         "admin_menu_donate": "❤️ <b><f>Donation Settings</f></b> ❤️\n\n<f>Sirf QR code se donation accept karein.</f>",
@@ -405,7 +430,7 @@ async def get_default_messages():
 
         # === Admin: Post Generator ===
         "admin_menu_post_gen": "✍️ <b><f>Post Generator</f></b> ✍️\n\n<f>Aap kis tarah ka post generate karna chahte hain?</f>",
-        "admin_post_gen_select_anime": "<f>Kaunsa <b>Anime</b> select karna hai?</f>\n\n<b><f>Newest First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
+        "admin_post_gen_select_anime": "<f>Kaunsa <b>Anime</b> select karna hai?</f>\n\n<b><f>Recently Updated First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>", # NAYA: Text change
         "admin_post_gen_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
         "admin_post_gen_no_season": "❌ <b><f>Error!</f></b> '{anime_name}' <f>mein koi season nahi hai.</f>",
         "admin_post_gen_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Ab <b>Season</b> select karein:</f>",
@@ -420,7 +445,7 @@ async def get_default_messages():
         
         # === Admin: Generate Link ===
         "admin_menu_gen_link": "🔗 <b><f>Generate Download Link</f></b> 🔗\n\n<f>Aap kis cheez ka link generate karna chahte hain?</f>",
-        "admin_gen_link_select_anime": "<f>Kaunsa <b>Anime</b> select karna hai?</f>\n\n<f>(Page {page})</f>",
+        "admin_gen_link_select_anime": "<f>Kaunsa <b>Anime</b> select karna hai?</f>\n\n<b><f>Recently Updated First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>", # NAYA: Text change
         "admin_gen_link_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
         "admin_gen_link_no_season": "❌ <b><f>Error!</f></b> '{anime_name}' <f>mein koi season nahi hai.</f>",
         "admin_gen_link_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Ab <b>Season</b> select karein:</f>",
@@ -430,14 +455,14 @@ async def get_default_messages():
         "admin_gen_link_error": "❌ <b><f>Error!</f></b> <f>Link generate nahi ho paya. Logs check karein.</f>",
 
         # === Admin: Delete Anime ===
-        "admin_del_anime_select": "<f>Kaunsa <b>Anime</b> delete karna hai?</f>\n\n<b><f>Newest First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
+        "admin_del_anime_select": "<f>Kaunsa <b>Anime</b> delete karna hai?</f>\n\n<b><f>Recently Updated First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>", # NAYA: Text change
         "admin_del_anime_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
         "admin_del_anime_confirm": "⚠️ <b><f>FINAL WARNING</f></b> ⚠️\n\n<f>Aap</f> <b>{anime_name}</b> <f>ko delete karne wale hain. Iske saare seasons aur episodes delete ho jayenge.</f>\n\n<b><f>Are you sure?</f></b>",
         "admin_del_anime_success": "✅ <b><f>Success!</f></b>\n<f>Anime</f> '{anime_name}' <f>delete ho gaya hai.</f>",
         "admin_del_anime_error": "❌ <b><f>Error!</f></b> <f>Anime delete nahi ho paya.</f>",
         
         # === Admin: Delete Season ===
-        "admin_del_season_select_anime": "<f>Kaunse <b>Anime</b> ka season delete karna hai?</f>\n\n<b><f>Newest First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
+        "admin_del_season_select_anime": "<f>Kaunse <b>Anime</b> ka season delete karna hai?</f>\n\n<b><f>Recently Updated First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>", # NAYA: Text change
         "admin_del_season_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
         "admin_del_season_no_season": "❌ <b><f>Error!</f></b> '{anime_name}' <f>mein koi season nahi hai.</f>",
         "admin_del_season_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Kaunsa <b>Season</b> delete karna hai?</f>",
@@ -446,7 +471,7 @@ async def get_default_messages():
         "admin_del_season_error": "❌ <b><f>Error!</f></b> <f>Season delete nahi ho paya.</f>",
 
         # === Admin: Delete Episode ===
-        "admin_del_ep_select_anime": "<f>Kaunse <b>Anime</b> ka episode delete karna hai?</f>\n\n<b><f>Newest First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
+        "admin_del_ep_select_anime": "<f>Kaunse <b>Anime</b> ka episode delete karna hai?</f>\n\n<b><f>Recently Updated First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>", # NAYA: Text change
         "admin_del_ep_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
         "admin_del_ep_no_season": "❌ <b><f>Error!</f></b> '{anime_name}' <f>mein koi season nahi hai.</f>",
         "admin_del_ep_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Kaunsa <b>Season</b> delete karna hai?</f>",
@@ -457,7 +482,7 @@ async def get_default_messages():
         "admin_del_ep_error": "❌ <b><f>Error!</f></b> <f>Episode delete nahi ho paya.</f>",
 
         # === Admin: Update Photo ===
-        "admin_update_photo_select_anime": "<f>Kaunse <b>Anime</b> ka poster update karna hai?</f>\n\n<b><f>Newest First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
+        "admin_update_photo_select_anime": "<f>Kaunse <b>Anime</b> ka poster update karna hai?</f>\n\n<b><f>Recently Updated First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>", # NAYA: Text change
         "admin_update_photo_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
         "admin_update_photo_select_target": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Aap iska <b>Main Poster</b> change karna chahte hain ya kisi <b>Season</b> ka?</f>",
         "admin_update_photo_get_poster": "<f>Aapne</f> <b>{target_name}</b> <f>select kiya hai.</f>\n\n<f>Ab naya <b>Poster (Photo)</b> bhejo.</f>\n\n/cancel - <f>Cancel.</f>",
@@ -468,7 +493,7 @@ async def get_default_messages():
         "admin_update_photo_save_error_db": "❌ <b><f>Error!</f></b> <f>Poster update nahi ho paya.</f>",
 
         # === Admin: Edit Anime ===
-        "admin_edit_anime_select": "<f>Kaunsa <b>Anime</b> ka naam edit karna hai?</f>\n\n<b><f>Newest First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
+        "admin_edit_anime_select": "<f>Kaunsa <b>Anime</b> ka naam edit karna hai?</f>\n\n<b><f>Recently Updated First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>", # NAYA: Text change
         "admin_edit_anime_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
         "admin_edit_anime_get_name": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Ab iska <b>Naya Naam</b> bhejo.</f>\n\n/cancel - <f>Cancel.</f>",
         "admin_edit_anime_save_exists": "⚠️ <b><f>Error!</f></b> <f>Naya naam</f> '{new_name}' <f>pehle se maujood hai. Koi doosra naam dein.</f>\n\n/cancel - <f>Cancel.</f>",
@@ -477,18 +502,18 @@ async def get_default_messages():
         "admin_edit_anime_error": "❌ <b><f>Error!</f></b> <f>Anime naam update nahi ho paya.</f>",
         
         # === Admin: Edit Season ===
-        "admin_edit_season_select_anime": "<f>Kaunse <b>Anime</b> ka season edit karna hai?</f>\n\n<b><f>Newest First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
+        "admin_edit_season_select_anime": "<f>Kaunse <b>Anime</b> ka season edit karna hai?</f>\n\n<b><f>Recently Updated First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>", # NAYA: Text change
         "admin_edit_season_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
         "admin_edit_season_no_season": "❌ <b><f>Error!</f></b> '{anime_name}' <f>mein koi season nahi hai.</f>",
         "admin_edit_season_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Kaunsa <b>Season</b> ka naam edit karna hai?</f>",
         "admin_edit_season_get_name": "<f>Aapne</f> <b>{anime_name}</b> -> <b>Season {season_name}</b> <f>select kiya hai.</f>\n\n<f>Ab iska <b>Naya Naam/Number</b> bhejo.</f>\n\n/cancel - <f>Cancel.</f>",
         "admin_edit_season_save_exists": "⚠️ <b><f>Error!</f></b> <f>Naya naam</f> '{new_name}' <f>is anime mein pehle se maujood hai. Koi doosra naam dein.</f>\n\n/cancel - <f>Cancel.</f>",
-        "admin_edit_season_confirm": "<b><f>Confirm Karo:</f></b>\n\n<f>Anime:</f> <code>{anime_name}</code>\n<f>Purana Season:</f> <code>{old_name}</code>\n<f>Naya Season:</f> <code>{new_name}</code>\n\n<b><f>Are you sure?</f></b>",
+        "admin_edit_season_confirm": "<b><f>Confirm Karo:</f></b>\n\n<f>Anime:</f> Code {anime_name}</code>\n<f>Purana Season:</f> <code>{old_name}</code>\n<f>Naya Season:</f> <code>{new_name}</code>\n\n<b><f>Are you sure?</f></b>",
         "admin_edit_season_success": "✅ <b><f>Success!</f></b>\n<f>Season</f> '{old_name}' <f>ka naam badal kar</f> '{new_name}' <f>ho gaya hai.</f>",
         "admin_edit_season_error": "❌ <b><f>Error!</f></b> <f>Season naam update nahi ho paya.</f>",
 
         # === Admin: Edit Episode ===
-        "admin_edit_ep_select_anime": "<f>Kaunse <b>Anime</b> ka episode edit karna hai?</f>\n\n<b><f>Newest First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
+        "admin_edit_ep_select_anime": "<f>Kaunse <b>Anime</b> ka episode edit karna hai?</f>\n\n<b><f>Recently Updated First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>", # NAYA: Text change
         "admin_edit_ep_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
         "admin_edit_ep_no_season": "❌ <b><f>Error!</f></b> '{anime_name}' <f>mein koi season nahi hai.</f>",
         "admin_edit_ep_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Kaunsa <b>Season</b> select karna hai?</f>",
@@ -506,7 +531,7 @@ async def get_default_messages():
         "admin_co_admin_add_invalid_id": "<f>Yeh valid User ID nahi hai. Please sirf number bhejein.</f>\n\n/cancel - <f>Cancel.</f>",
         "admin_co_admin_add_is_main": "<f>Aap Main Admin hain, khud ko add nahi kar sakte.</f>\n\n/cancel - <f>Cancel.</f>",
         "admin_co_admin_add_exists": "<f>User</f> <code>{user_id}</code> <f>pehle se Co-Admin hai.</f>\n\n/cancel - <f>Cancel.</f>",
-        "admin_co_admin_add_confirm": "<f>Aap user ID</f> <code>{user_id}</code> <f>ko <b>Co-Admin</b> banane wale hain.</f>\n\n<f>Woh content add, remove, aur post generate kar payenge.</f>\n\n<b><f>Are you sure?</f></b>",
+        "admin_co_admin_add_confirm": "<f>Aap user ID</f> Code {user_id}</code> <f>ko <b>Co-Admin</b> banane wale hain.</f>\n\n<f>Woh content add, remove, aur post generate kar payenge.</f>\n\n<b><f>Are you sure?</f></b>",
         "admin_co_admin_add_success": "✅ <b><f>Success!</f></b>\n<f>User ID</f> <code>{user_id}</code> <f>ab Co-Admin hai.</f>",
         "admin_co_admin_add_error": "❌ <b><f>Error!</f></b> <f>Co-Admin add nahi ho paya.</f>",
         "admin_co_admin_remove_no_co": "<f>Abhi koi Co-Admin nahi hai.</f>",
@@ -659,7 +684,8 @@ async def build_paginated_keyboard(
     skip = page * ITEMS_PER_PAGE
     total_items = collection.count_documents(filter_query)
     
-    items = list(collection.find(filter_query).sort("created_at", DESCENDING).skip(skip).limit(ITEMS_PER_PAGE))
+    # NAYA: Sort by last_modified (descending)
+    items = list(collection.find(filter_query).sort("last_modified", DESCENDING).skip(skip).limit(ITEMS_PER_PAGE))
     
     if not items and page == 0:
         return None, InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data=back_callback)]])
@@ -687,7 +713,6 @@ async def build_paginated_keyboard(
     keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data=back_callback)])
     
     return items, InlineKeyboardMarkup(keyboard)
-
 # --- Job Queue Callbacks ---
 async def send_donate_thank_you(context: ContextTypes.DEFAULT_TYPE):
     """1 min baad thank you message bhejega"""
@@ -708,10 +733,26 @@ async def delete_message_later(bot, chat_id: int, message_id: int, seconds: int)
     except Exception as e:
         logger.warning(f"Message (asyncio.sleep) delete karne me error: {e}")
 
+# NAYA: Anime ka timestamp update karne ke liye helper
+async def _update_anime_timestamp(anime_name: str):
+    """
+    Jab bhi koi anime/season/ep add/edit/delete hoga,
+    toh iska 'last_modified' timestamp update karega.
+    """
+    try:
+        animes_collection.update_one(
+            {"name": anime_name},
+            {"$set": {"last_modified": datetime.now()}}
+        )
+        logger.info(f"'{anime_name}' ka timestamp update ho gaya.")
+    except Exception as e:
+        logger.error(f"'{anime_name}' ka timestamp update karne me error: {e}")
+
+
 # --- Conversation States ---
 (A_GET_NAME, A_GET_POSTER, A_GET_DESC, A_CONFIRM) = range(4)
 (S_GET_ANIME, S_GET_NUMBER, S_GET_POSTER, S_GET_DESC, S_CONFIRM) = range(4, 9)
-(E_GET_ANIME, E_GET_SEASON, E_GET_NUMBER, E_GET_480P, E_GET_720P, E_GET_1080P, E_GET_4K) = range(9, 16)
+(E_GET_ANIME, E_GET_SEASON, E_GET_NUMBER, E_GET_480P, E_GET_720P, E_GET_1080P, E_GET_4K, E_ASK_MORE) = range(9, 17) # NAYA: E_ASK_MORE
 (CD_GET_QR,) = range(17, 18)
 (CL_GET_LINK,) = range(19, 20) 
 (PG_MENU, PG_GET_ANIME, PG_GET_SEASON, PG_GET_EPISODE, PG_GET_SHORT_LINK, PG_GET_CHAT) = range(22, 28) 
@@ -768,6 +809,19 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     
     return ConversationHandler.END
 
+# NAYA: 'Add Episode' flow ke liye special back/cancel
+async def cancel_add_episode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Add Episode flow ko cancel karke Add Content menu par bhejega."""
+    if context.user_data:
+        context.user_data.clear()
+    
+    await cancel(update, context) # Pehle normal cancel message dikhao
+    await asyncio.sleep(0.1)
+    
+    if update.callback_query:
+        await add_content_menu(update, context) # Phir Add Content menu dikhao
+    
+    return ConversationHandler.END
 
 # --- Common Conversation Fallbacks ---
 async def back_to_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -779,6 +833,8 @@ async def back_to_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def back_to_add_content_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    if context.user_data:
+        context.user_data.clear() # NAYA: State clear karo
     await add_content_menu(update, context)
     return ConversationHandler.END
 
@@ -913,7 +969,8 @@ async def save_anime_details(update: Update, context: ContextTypes.DEFAULT_TYPE)
             "poster_id": context.user_data['anime_poster_id'], 
             "description": context.user_data['anime_desc'], 
             "seasons": {},
-            "created_at": datetime.now() 
+            "created_at": datetime.now(),
+            "last_modified": datetime.now() # NAYA: Timestamp
         }
         animes_collection.insert_one(anime_document)
         caption = await format_message(context, "admin_add_anime_save_success", {"name": name})
@@ -953,7 +1010,7 @@ async def add_season_show_anime_list(update: Update, context: ContextTypes.DEFAU
     if not animes and page == 0:
         text = await format_message(context, "admin_add_season_no_anime")
     else:
-        text = await format_message(context, "admin_add_season_select_anime", {"page": page + 1})
+        text = await format_message(context, "admin_add_season_select_anime", {"page": page + 1}) # NAYA: Text DB se aayega
     
     await query.edit_message_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
     return S_GET_ANIME
@@ -1055,7 +1112,10 @@ async def save_season(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         animes_collection.update_one(
             {"name": anime_name}, 
-            {"$set": {f"seasons.{season_name}": season_data}} 
+            {"$set": {
+                f"seasons.{season_name}": season_data,
+                "last_modified": datetime.now() # NAYA: Timestamp
+            }} 
         )
         
         caption = await format_message(context, "admin_add_season_save_success", {
@@ -1098,7 +1158,7 @@ async def add_episode_show_anime_list(update: Update, context: ContextTypes.DEFA
     if not animes and page == 0:
         text = await format_message(context, "admin_add_ep_no_anime")
     else:
-        text = await format_message(context, "admin_add_ep_select_anime", {"page": page + 1})
+        text = await format_message(context, "admin_add_ep_select_anime", {"page": page + 1}) # NAYA: Text DB se aayega
 
     await query.edit_message_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
     return E_GET_ANIME
@@ -1156,7 +1216,15 @@ async def _save_episode_file_helper(update: Update, context: ContextTypes.DEFAUL
         ep_num = context.user_data['ep_num']
         
         dot_notation_key = f"seasons.{season_name}.{ep_num}.{quality}"
-        animes_collection.update_one({"name": anime_name}, {"$set": {dot_notation_key: file_id}})
+        
+        # NAYA: File save karne ke saath timestamp update karo
+        animes_collection.update_one(
+            {"name": anime_name},
+            {"$set": {
+                dot_notation_key: file_id,
+                "last_modified": datetime.now()
+            }}
+        )
         logger.info(f"Naya episode save ho gaya: {anime_name} S{season_name} E{ep_num} {quality}")
         
         text = await format_message(context, "admin_add_ep_helper_success", {"quality": quality})
@@ -1233,17 +1301,80 @@ async def get_4k_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         return E_GET_4K 
     
-    await add_content_menu(update, context) 
-    context.user_data.clear()
-    return ConversationHandler.END
+    return await ask_add_more_episodes(update, context) # NAYA
 
 async def skip_4k(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = await format_message(context, "admin_add_ep_skip_4k")
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
     
-    await add_content_menu(update, context) 
+    return await ask_add_more_episodes(update, context) # NAYA
+
+# NAYA: "Add More Episodes" flow
+async def ask_add_more_episodes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Ek episode save hone ke baad poochhega ki aur add karna hai ya nahi.
+    """
+    ep_num = context.user_data['ep_num']
+    season_name = context.user_data['season_name']
+    
+    text = await format_message(context, "admin_add_ep_ask_more", {
+        "ep_num": ep_num,
+        "season_name": season_name
+    })
+    
+    keyboard = [
+        [InlineKeyboardButton("✅ Yes (Add More)", callback_data="add_ep_more_yes")],
+        [InlineKeyboardButton("🚫 No (Back to Menu)", callback_data="add_ep_more_no")]
+    ]
+    
+    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+    return E_ASK_MORE
+
+async def add_more_episodes_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    User ne 'Yes (Add More)' dabaya. Agle episode ka number maango.
+    """
+    query = update.callback_query
+    await query.answer()
+    
+    last_ep_num = context.user_data['ep_num']
+    season_name = context.user_data['season_name']
+    
+    # NAYA: Agle episode number ka suggestion
+    try:
+        next_ep_num = str(int(last_ep_num) + 1)
+        text = await format_message(context, "admin_add_ep_next_prompt", {
+            "ep_num": last_ep_num,
+            "season_name": season_name,
+            "next_ep_num": next_ep_num
+        })
+    except ValueError:
+        # Agar pichla number 'Movie' ya 'OVA' jaisa tha
+        text = await format_message(context, "admin_add_ep_next_prompt_no_suggestion", {
+            "ep_num": last_ep_num,
+            "season_name": season_name
+        })
+
+    # Sirf 'ep_num' ko context se clear karo, taaki naya set ho sake
+    context.user_data.pop('ep_num', None)
+    
+    await query.edit_message_text(text, parse_mode=ParseMode.HTML)
+    return E_GET_NUMBER # Wapas episode number maangne wale state par bhej do
+
+async def add_more_episodes_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    User ne 'No (Back to Menu)' dabaya. Conversation end karo.
+    """
+    query = update.callback_query
+    await query.answer()
+    
+    # Poora context clear karo
     context.user_data.clear()
+    
+    # Wapas 'Add Content' menu par bhej do
+    await add_content_menu(update, context)
     return ConversationHandler.END
+
 
 # --- Conversation: Set Auto-Delete Time ---
 async def set_delete_time_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1310,7 +1441,6 @@ async def set_donate_qr_save(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
     await donate_settings_menu(update, context)
     return ConversationHandler.END
-
 # --- Conversation: Set Links ---
 async def set_links_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1450,7 +1580,7 @@ async def post_gen_show_anime_list(update: Update, context: ContextTypes.DEFAULT
     if not animes and page == 0:
         text = await format_message(context, "admin_post_gen_no_anime")
     else:
-        text = await format_message(context, "admin_post_gen_select_anime", {"page": page + 1})
+        text = await format_message(context, "admin_post_gen_select_anime", {"page": page + 1}) # NAYA: Text DB se
 
     await query.edit_message_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
     return PG_GET_ANIME
@@ -1725,7 +1855,7 @@ async def gen_link_show_anime_list(update: Update, context: ContextTypes.DEFAULT
     if not animes and page == 0:
         text = await format_message(context, "admin_gen_link_no_anime")
     else:
-        text = await format_message(context, "admin_gen_link_select_anime", {"page": page + 1})
+        text = await format_message(context, "admin_gen_link_select_anime", {"page": page + 1}) # NAYA: Text DB se
 
     await query.edit_message_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
     return GL_GET_ANIME
@@ -1869,7 +1999,7 @@ async def delete_anime_show_anime_list(update: Update, context: ContextTypes.DEF
     if not animes and page == 0:
         text = await format_message(context, "admin_del_anime_no_anime")
     else:
-        text = await format_message(context, "admin_del_anime_select", {"page": page + 1})
+        text = await format_message(context, "admin_del_anime_select", {"page": page + 1}) # NAYA: Text DB se
 
     await query.edit_message_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
     return DA_GET_ANIME
@@ -1928,7 +2058,7 @@ async def delete_season_show_anime_list(update: Update, context: ContextTypes.DE
     if not animes and page == 0:
         text = await format_message(context, "admin_del_season_no_anime")
     else:
-        text = await format_message(context, "admin_del_season_select_anime", {"page": page + 1})
+        text = await format_message(context, "admin_del_season_select_anime", {"page": page + 1}) # NAYA: Text DB se
 
     await query.edit_message_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
     return DS_GET_ANIME
@@ -1975,7 +2105,11 @@ async def delete_season_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
     anime_name = context.user_data['anime_name']
     season_name = context.user_data['season_name']
     try:
-        animes_collection.update_one({"name": anime_name}, {"$unset": {f"seasons.{season_name}": ""}})
+        animes_collection.update_one(
+            {"name": anime_name},
+            {"$unset": {f"seasons.{season_name}": ""},
+             "$set": {"last_modified": datetime.now()}} # NAYA: Timestamp
+        )
         logger.info(f"Season deleted: {anime_name} - S{season_name}")
         text = await format_message(context, "admin_del_season_success", {"season_name": season_name})
         await query.edit_message_text(text, parse_mode=ParseMode.HTML)
@@ -2014,7 +2148,7 @@ async def delete_episode_show_anime_list(update: Update, context: ContextTypes.D
     if not animes and page == 0:
         text = await format_message(context, "admin_del_ep_no_anime")
     else:
-        text = await format_message(context, "admin_del_ep_select_anime", {"page": page + 1})
+        text = await format_message(context, "admin_del_ep_select_anime", {"page": page + 1}) # NAYA: Text DB se
 
     await query.edit_message_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
     return DE_GET_ANIME
@@ -2093,7 +2227,11 @@ async def delete_episode_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
     season_name = context.user_data['season_name']
     ep_num = context.user_data['ep_num']
     try:
-        animes_collection.update_one({"name": anime_name}, {"$unset": {f"seasons.{season_name}.{ep_num}": ""}})
+        animes_collection.update_one(
+            {"name": anime_name},
+            {"$unset": {f"seasons.{season_name}.{ep_num}": ""},
+             "$set": {"last_modified": datetime.now()}} # NAYA: Timestamp
+        )
         logger.info(f"Episode deleted: {anime_name} - S{season_name} - E{ep_num}")
         text = await format_message(context, "admin_del_ep_success", {"ep_num": ep_num})
         await query.edit_message_text(text, parse_mode=ParseMode.HTML)
@@ -2132,7 +2270,7 @@ async def update_photo_show_anime_list(update: Update, context: ContextTypes.DEF
     if not animes and page == 0:
         text = await format_message(context, "admin_update_photo_no_anime")
     else:
-        text = await format_message(context, "admin_update_photo_select_anime", {"page": page + 1})
+        text = await format_message(context, "admin_update_photo_select_anime", {"page": page + 1}) # NAYA: Text DB se
 
     await query.edit_message_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
     return UP_GET_ANIME
@@ -2195,15 +2333,19 @@ async def update_photo_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target = context.user_data['target']
     
     try:
+        update_query = {"$set": {"last_modified": datetime.now()}} # NAYA: Timestamp
+        
         if target == "MAIN":
-            animes_collection.update_one({"name": anime_name}, {"$set": {"poster_id": poster_id}})
+            update_query["$set"]["poster_id"] = poster_id
+            animes_collection.update_one({"name": anime_name}, update_query)
             caption = await format_message(context, "admin_update_photo_save_success_main", {"anime_name": anime_name})
             logger.info(f"Main poster change ho gaya: {anime_name}")
         else:
             season_name = context.user_data['season_name']
+            update_query["$set"][f"seasons.{season_name}._poster_id"] = poster_id
             animes_collection.update_one(
                 {"name": anime_name}, 
-                {"$set": {f"seasons.{season_name}._poster_id": poster_id}}
+                update_query
             )
             caption = await format_message(context, "admin_update_photo_save_success_season", {
                 "anime_name": anime_name,
@@ -2250,7 +2392,7 @@ async def edit_anime_show_anime_list(update: Update, context: ContextTypes.DEFAU
     if not animes and page == 0:
         text = await format_message(context, "admin_edit_anime_no_anime")
     else:
-        text = await format_message(context, "admin_edit_anime_select", {"page": page + 1})
+        text = await format_message(context, "admin_edit_anime_select", {"page": page + 1}) # NAYA: Text DB se
 
     await query.edit_message_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
     return EA_GET_ANIME
@@ -2289,7 +2431,13 @@ async def edit_anime_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
     old_name = context.user_data['old_anime_name']
     new_name = context.user_data['new_anime_name']
     try:
-        animes_collection.update_one({"name": old_name}, {"$set": {"name": new_name}})
+        animes_collection.update_one(
+            {"name": old_name},
+            {"$set": {
+                "name": new_name,
+                "last_modified": datetime.now() # NAYA: Timestamp
+            }}
+        )
         logger.info(f"Anime naam update ho gaya: {old_name} -> {new_name}")
         text = await format_message(context, "admin_edit_anime_success", {
             "old_name": old_name,
@@ -2332,7 +2480,7 @@ async def edit_season_show_anime_list(update: Update, context: ContextTypes.DEFA
     if not animes and page == 0:
         text = await format_message(context, "admin_edit_season_no_anime")
     else:
-        text = await format_message(context, "admin_edit_season_select_anime", {"page": page + 1})
+        text = await format_message(context, "admin_edit_season_select_anime", {"page": page + 1}) # NAYA: Text DB se
 
     await query.edit_message_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
     return ES_GET_ANIME
@@ -2404,7 +2552,8 @@ async def edit_season_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         animes_collection.update_one(
             {"name": anime_name},
-            {"$rename": {f"seasons.{old_name}": f"seasons.{new_name}"}}
+            {"$rename": {f"seasons.{old_name}": f"seasons.{new_name}"},
+             "$set": {"last_modified": datetime.now()}} # NAYA: Timestamp
         )
         logger.info(f"Season naam update ho gaya: {anime_name} - {old_name} -> {new_name}")
         text = await format_message(context, "admin_edit_season_success", {
@@ -2448,7 +2597,7 @@ async def edit_episode_show_anime_list(update: Update, context: ContextTypes.DEF
     if not animes and page == 0:
         text = await format_message(context, "admin_edit_ep_no_anime")
     else:
-        text = await format_message(context, "admin_edit_ep_select_anime", {"page": page + 1})
+        text = await format_message(context, "admin_edit_ep_select_anime", {"page": page + 1}) # NAYA: Text DB se
 
     await query.edit_message_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
     return EE_GET_ANIME
@@ -2554,7 +2703,8 @@ async def edit_episode_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         animes_collection.update_one(
             {"name": anime_name},
-            {"$rename": {f"seasons.{season_name}.{old_num}": f"seasons.{season_name}.{new_num}"}}
+            {"$rename": {f"seasons.{season_name}.{old_num}": f"seasons.{season_name}.{new_num}"},
+             "$set": {"last_modified": datetime.now()}} # NAYA: Timestamp
         )
         logger.info(f"Episode number update ho gaya: {anime_name} S{season_name} - {old_num} -> {new_num}")
         text = await format_message(context, "admin_edit_ep_success", {
@@ -2839,16 +2989,17 @@ async def appearance_set_font(update: Update, context: ContextTypes.DEFAULT_TYPE
     config = await get_config()
     current_font = config.get("appearance", {}).get("font", "default")
     
-    fonts = ["default", "small_caps", "sans_serif", "script", "monospace", "serif"]
+    # NAYA: sans_serif_regular add kiya
+    fonts = ["default", "small_caps", "sans_serif", "sans_serif_regular", "script", "monospace", "serif"]
     buttons = []
     for font in fonts:
         prefix = "✅ " if font == current_font else ""
-        buttons.append(InlineKeyboardButton(f"{prefix}{font.title()}", callback_data=f"app_font_{font}"))
+        buttons.append(InlineKeyboardButton(f"{prefix}{font.title().replace('_', ' ')}", callback_data=f"app_font_{font}"))
         
     keyboard = build_grid_keyboard(buttons, 2)
     keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="back_to_appearance")])
     
-    text = await format_message(context, "admin_appearance_select_font", {"font": current_font.title()})
+    text = await format_message(context, "admin_appearance_select_font", {"font": current_font.title().replace('_', ' ')})
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
     return AP_SET_FONT
 
@@ -2863,7 +3014,7 @@ async def appearance_save_font(update: Update, context: ContextTypes.DEFAULT_TYP
     )
     await query.answer(f"Font changed to {font}")
     
-    text = await format_message(context, "admin_appearance_set_font_success", {"font": font.title()})
+    text = await format_message(context, "admin_appearance_set_font_success", {"font": font.title().replace('_', ' ')})
     await query.message.reply_text(text, parse_mode=ParseMode.HTML)
     
     await appearance_menu_start(update, context)
@@ -3835,6 +3986,9 @@ def main():
     # --- Saare Handlers ---
     
     global_cancel_handler = CommandHandler("cancel", cancel)
+    # NAYA: Add Episode ke liye special cancel handler
+    add_ep_cancel_handler = CommandHandler("cancel", cancel_add_episode)
+    
     global_fallbacks = [
         CommandHandler("start", cancel),
         CommandHandler("menu", cancel),
@@ -3843,6 +3997,9 @@ def main():
     ]
     admin_menu_fallback = [CallbackQueryHandler(back_to_admin_menu, pattern="^admin_menu$"), global_cancel_handler]
     add_content_fallback = [CallbackQueryHandler(back_to_add_content_menu, pattern="^back_to_add_content$"), global_cancel_handler]
+    # NAYA: Add Episode ke liye special fallback
+    add_episode_fallback = [CallbackQueryHandler(back_to_add_content_menu, pattern="^back_to_add_content$"), add_ep_cancel_handler]
+    
     manage_fallback = [CallbackQueryHandler(back_to_manage_menu, pattern="^back_to_manage$"), global_cancel_handler]
     edit_fallback = [CallbackQueryHandler(back_to_edit_menu, pattern="^back_to_edit_menu$"), global_cancel_handler] 
     sub_settings_fallback = [CallbackQueryHandler(back_to_sub_settings_menu, pattern="^back_to_sub_settings$"), global_cancel_handler]
@@ -3887,6 +4044,8 @@ def main():
         fallbacks=global_fallbacks + add_content_fallback,
         allow_reentry=True 
     )
+    
+    # NAYA: Updated Add Episode Conversation
     add_episode_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(add_episode_start, pattern="^admin_add_episode$")], 
         states={
@@ -3903,10 +4062,15 @@ def main():
             E_GET_720P: [MessageHandler(filters.ALL & ~filters.COMMAND, get_720p_file), CommandHandler("skip", skip_720p)],
             E_GET_1080P: [MessageHandler(filters.ALL & ~filters.COMMAND, get_1080p_file), CommandHandler("skip", skip_1080p)],
             E_GET_4K: [MessageHandler(filters.ALL & ~filters.COMMAND, get_4k_file), CommandHandler("skip", skip_4k)],
+            E_ASK_MORE: [ # NAYA State
+                CallbackQueryHandler(add_more_episodes_yes, pattern="^add_ep_more_yes$"),
+                CallbackQueryHandler(add_more_episodes_no, pattern="^add_ep_more_no$")
+            ]
         }, 
-        fallbacks=global_fallbacks + add_content_fallback,
+        fallbacks=global_fallbacks + add_episode_fallback, # NAYA: Special fallback
         allow_reentry=True 
     )
+    
     set_donate_qr_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(set_donate_qr_start, pattern="^admin_set_donate_qr$")], 
         states={CD_GET_QR: [MessageHandler(filters.PHOTO, set_donate_qr_save)]}, 
@@ -4190,13 +4354,11 @@ def main():
        },
        fallbacks=global_fallbacks + admin_menu_fallback,
        allow_reentry=True
-   # ...
     )
-    bot_app.add_handler(set_menu_photo_conv) # <-- Ise 4 space kar do
+    bot_app.add_handler(set_menu_photo_conv)
 
     # Standard commands
     bot_app.add_handler(CommandHandler("start", start_command)) 
-# ... 
     bot_app.add_handler(CommandHandler("user", user_command)) 
     bot_app.add_handler(CommandHandler("menu", menu_command)) 
     bot_app.add_handler(CommandHandler("admin", admin_command)) 
@@ -4215,23 +4377,22 @@ def main():
     bot_app.add_handler(CallbackQueryHandler(back_to_user_menu, pattern="^user_back_menu$"))
 
     # User Download Flow (Non-conversation)
-    bot_app.add_handler(CallbackQueryHandler(download_button_handler, pattern="^dl"))
-    
-    # Error handler
-    bot_app.add_error_handler(error_handler)
-    
-    # --- NAYA: Threading setup ---
-    bot_event_loop = asyncio.new_event_loop()
-    
-    bot_thread = threading.Thread(
-        target=run_async_bot_tasks,
-        args=(bot_event_loop, bot_app), 
-        daemon=True
-    )
-    bot_thread.start()
-    
-    logger.info(f"Main thread mein Waitress server ko 0.0.0.0:{PORT} par start kar raha hai...")
-    serve(app, host='0.0.0.0', port=PORT)
+        bot_app.add_handler(CallbackQueryHandler(download_button_handler, pattern="^dl"))
+
+        # Error handler
+        bot_app.add_handler(error_handler)
+
+        # --- NAYA: Webhook setup ---
+        logger.info("Starting Flask server for webhook...")
+        
+        # Start the bot in a separate thread
+        bot_event_loop = asyncio.new_event_loop()
+        bot_thread = threading.Thread(target=run_async_bot_tasks, args=(bot_event_loop, bot_app))
+        bot_thread.start()
+        
+        # Start Flask app (Waitress)
+        logger.info(f"Flask (Waitress) server {WEBHOOK_URL} port {PORT} par sun raha hai...")
+        serve(app, host='0.0.0.0', port=PORT)
 
 if __name__ == "__main__":
     main()
