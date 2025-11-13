@@ -428,7 +428,7 @@ async def get_default_messages():
         "admin_menu_messages_postgen": "✍️ <b><f>Post Generator Messages</f></b> ✍️\n\n<f>Kaunsa message edit karna hai?</f>",
         "admin_menu_messages_admin": "👑 <b><f>Admin Messages</f></b> 👑\n\n<f>Kaunsa message edit karna hai?</f>", # NAYA
         # Yeh shayad ek dictionary hai, isliye end mein comma (,) bhi ho sakta hai
-"admin_set_msg_start": "<b>Editing:</b> </b> {msg_key}</code>\n\n<b>Current Message:</b>\n{current_msg}\n</code><f>Naya message bhejo </b><f><code>&lt;f&gt;&lt;b&gt;&lt;/b&gt;&lt;/f&gt;</code>, <code>&lt;i&gt;italic&lt;/i&gt;</code>, <code>&lt;s&gt;st&lt;/s&gt;</code>, <code>&lt;a&gt;link&lt;/a&gt;</code> CODE]",
+"admin_set_msg_start": "<b>Editing:</b> </b> {msg_key}</code>\n\n<b>Current Message:</b>\n{current_msg}\n</code><f>Naya message bhejo </b><f><code>&lt;f&gt;&lt;b&gt;&lt;/b&gt;&lt;/f&gt;</code>, <code>&lt;i&gt;italic&lt;/i&gt;</code>, <code>&lt;s&gt;st&lt;/s&gt;</code>, <code>&lt;a&gt;link&lt;/a&gt;</code> CODE]",}
 [Code block 1 of 3]
 [Code block 2 of 3]
 &lt;blockquote&gt;quote&lt;/blockquote&gt;</code> <f>use kar sakte hain.</f>\n<f>Font apply karne ke liye</f> <code>&lt;f&gt;...&lt;/f&gt;</code> <f>use karein.</f>\n\n/cancel - <f>Cancel.</f>",
