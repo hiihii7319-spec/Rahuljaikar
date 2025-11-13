@@ -824,6 +824,20 @@ async def cancel_add_episode(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     return ConversationHandler.END
 
+# NAYA: 'Add Season' flow ke liye special back/cancel
+async def cancel_add_season(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Add Season flow ko cancel karke Add Content menu par bhejega."""
+    if context.user_data:
+        context.user_data.clear()
+    
+    await cancel(update, context) # Pehle normal cancel message dikhao
+    await asyncio.sleep(0.1)
+    
+    if update.callback_query:
+        await add_content_menu(update, context) # Phir Add Content menu dikhao
+    
+    return ConversationHandler.END
+
 # --- Common Conversation Fallbacks ---
 async def back_to_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
