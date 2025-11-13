@@ -4103,6 +4103,10 @@ def main():
                 CommandHandler("skip", skip_season_desc)
             ],
             S_CONFIRM: [CallbackQueryHandler(save_season, pattern="^save_season$")]
+            S_ASK_MORE: [ # NAYA State
+                CallbackQueryHandler(add_more_seasons_yes, pattern="^add_season_more_yes$"),
+                CallbackQueryHandler(add_more_seasons_no, pattern="^add_season_more_no$")
+            ]
         }, 
         fallbacks=global_fallbacks + add_content_fallback,
         allow_reentry=True 
