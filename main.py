@@ -753,7 +753,9 @@ async def _update_anime_timestamp(anime_name: str):
         logger.error(f"'{anime_name}' ka timestamp update karne me error: {e}")
 
 
-# NEW STATES
+# --- Conversation States ---
+# NEW (SAHI) CODE
+(A_GET_NAME, A_GET_POSTER, A_GET_DESC, A_CONFIRM) = range(4) # <-- YEH LINE MISS HO GAYI THI
 (S_GET_ANIME, S_GET_NUMBER, S_GET_POSTER, S_GET_DESC, S_CONFIRM, S_ASK_MORE) = range(4, 10) # NAYA: S_ASK_MORE
 (E_GET_ANIME, E_GET_SEASON, E_GET_NUMBER, E_GET_480P, E_GET_720P, E_GET_1080P, E_GET_4K, E_ASK_MORE) = range(10, 18) # 9->10, 17->18
 (CD_GET_QR,) = range(18, 19) # 17->18, 18->19
