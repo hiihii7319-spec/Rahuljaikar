@@ -376,6 +376,8 @@ async def get_default_messages():
         "admin_add_season_confirm": "<b><f>Confirm Karo:</f></b>\n<f>Anime:</f> <b>{anime_name}</b>\n<f>Naya Season:</f> <b>{season_name}</b>\n<f>Description:</f> {season_desc}\n\n<f>Save kar doon?</f>",
         "admin_add_season_save_success": "✅ <b><f>Success!</f></b>\n<b>{anime_name}</b> <f>mein</f> <b>Season {season_name}</b> <f>add ho gaya hai.</f>",
         "admin_add_season_save_error": "❌ <b><f>Error!</f></b> <f>Database me save nahi kar paya.</f>",
+        "admin_add_season_ask_more": "✅ <f>Season</f> <b>{season_name}</b> <f>save ho gaya!</f>\n\n<f>Aap</f> <b>{anime_name}</b> <f>mein aur season add karna chahte hain?</f>", 
+        "admin_add_season_next_prompt": "<f>Last Season:</f> <b>{season_name}</b>. <f>Anime:</f> <b>{anime_name}</b>\n\n<f>Ab agla <b>Season Number/Naam</b> bhejo.</f>\n\n/cancel - <f>Cancel.</f>",
         
         # === Admin: Add Episode ===
         "admin_add_ep_select_anime": "<f>Aap kis anime mein episode add karna chahte hain?</f>\n\n<b><f>Recently Updated First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>", # NAYA: Text change
