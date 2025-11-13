@@ -4127,7 +4127,7 @@ def main():
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_season_desc),
                 CommandHandler("skip", skip_season_desc)
             ],
-            S_CONFIRM: [CallbackQueryHandler(save_season, pattern="^save_season$")]
+            S_CONFIRM: [CallbackQueryHandler(save_season, pattern="^save_season$")], # <-- YEH COMMA ADD KARO
             S_ASK_MORE: [ # NAYA State
                 CallbackQueryHandler(add_more_seasons_yes, pattern="^add_season_more_yes$"),
                 CallbackQueryHandler(add_more_seasons_no, pattern="^add_season_more_no$")
