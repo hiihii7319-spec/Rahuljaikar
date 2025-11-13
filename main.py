@@ -4380,7 +4380,7 @@ def main():
     bot_app.add_handler(CallbackQueryHandler(download_button_handler, pattern="^dl"))
 
     # Error handler
-    bot_app.add_handler(error_handler)
+    bot_app.add_error_handler(error_handler)
 
     # --- NAYA: Webhook setup ---
     logger.info("Starting Flask server for webhook...")
