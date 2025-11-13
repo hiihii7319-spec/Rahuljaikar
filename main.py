@@ -1133,18 +1133,66 @@ async def save_season(update: Update, context: ContextTypes.DEFAULT_TYPE):
             }} 
         )
         
-        caption = await format_message(context, "admin_add_season_save_success", {
+        # NEW CODE
+        # NAYA: Ask to add more seasons
+        text = await format_message(context, "admin_add_season_ask_more", {
             "anime_name": anime_name,
             "season_name": season_name
         })
-        await query.edit_message_caption(caption=caption, parse_mode=ParseMode.HTML)
-        await asyncio.sleep(3)
-        await add_content_menu(update, context)
+        keyboard = [
+            [InlineKeyboardButton("✅ Yes (Add More)", callback_data="add_season_more_yes")],
+            [InlineKeyboardButton("🚫 No (Back to Menu)", callback_data="add_season_more_no")]
+        ]
+        await query.edit_message_caption(caption=text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+        
+        # Poster delete karo
+        await query.message.delete_reply_markup() 
+        try:
+            await query.edit_message_media(None)
+        except: pass
     except Exception as e:
         logger.error(f"Season save karne me error: {e}")
         caption = await format_message(context, "admin_add_season_save_error")
         await query.edit_message_caption(caption=caption, parse_mode=ParseMode.HTML)
     context.user_data.clear()
+    return ConversationHandler.END
+
+# NAYA: "Add More Seasons" flow
+async def add_more_seasons_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    User ne 'Yes (Add More)' dabaya. Agle season ka number maango.
+    """
+    query = update.callback_query
+    await query.answer()
+    
+    last_season_name = context.user_data['season_name']
+    anime_name = context.user_data['anime_name']
+    
+    text = await format_message(context, "admin_add_season_next_prompt", {
+        "season_name": last_season_name,
+        "anime_name": anime_name,
+    })
+
+    # Sirf 'season_name' aur related data ko context se clear karo
+    context.user_data.pop('season_name', None)
+    context.user_data.pop('season_poster_id', None)
+    context.user_data.pop('season_desc', None)
+    
+    await query.edit_message_text(text, parse_mode=ParseMode.HTML)
+    return S_GET_NUMBER # Wapas season number maangne wale state par bhej do
+
+async def add_more_seasons_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    User ne 'No (Back to Menu)' dabaya. Conversation end karo.
+    """
+    query = update.callback_query
+    await query.answer()
+    
+    # Poora context clear karo
+    context.user_data.clear()
+    
+    # Wapas 'Add Content' menu par bhej do
+    await add_content_menu(update, context)
     return ConversationHandler.END
 
 # --- Conversation: Add Episode (Multi-Quality) ---
