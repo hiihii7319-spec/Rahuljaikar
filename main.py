@@ -1116,7 +1116,8 @@ async def confirm_season_details(update: Update, context: ContextTypes.DEFAULT_T
 
 async def save_season(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+    await query.answer() # "Save" button press ko acknowledge karo
+    
     try:
         anime_name = context.user_data['anime_name']
         season_name = context.user_data['season_name']
@@ -1129,15 +1130,16 @@ async def save_season(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if season_desc:
             season_data["_description"] = season_desc 
         
+        # 1. Database update
         animes_collection.update_one(
             {"name": anime_name}, 
             {"$set": {
                 f"seasons.{season_name}": season_data,
-                "last_modified": datetime.now() # NAYA: Timestamp
+                "last_modified": datetime.now()
             }} 
         )
         
-        # NAYA: Ask to add more seasons
+        # 2. "Yes/No" message format karo
         text = await format_message(context, "admin_add_season_ask_more", {
             "anime_name": anime_name,
             "season_name": season_name
@@ -1146,27 +1148,48 @@ async def save_season(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("✅ Yes (Add More)", callback_data="add_season_more_yes")],
             [InlineKeyboardButton("🚫 No (Back to Menu)", callback_data="add_season_more_no")]
         ]
-        await query.edit_message_caption(caption=text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
-        
-        # Poster delete karo
-        await query.message.delete_reply_markup() 
+
+        # 3. === NAYA FIX: Purana photo message delete karo ===
         try:
-            await query.edit_message_media(None)
-        except: pass
+            await query.message.delete()
+        except Exception as e:
+            logger.warning(f"Purana photo message delete nahi kar paya: {e}")
+            # Agar delete fail ho, toh purana (buggy) tareeka try karo
+            await query.edit_message_caption(caption=text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+            try:
+                await query.message.delete_reply_markup() 
+                await query.edit_message_media(None)
+            except: pass
+            return S_ASK_MORE
+
+        # 4. === NAYA FIX: Naya text message bhejo ===
+        await context.bot.send_message(
+            chat_id=query.from_user.id,
+            text=text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.HTML
+        )
         
-        # === FIX 1: Yeh ab 'try' block ke andar hai ===
-        return S_ASK_MORE # NAYA: Naye state par jao
+        # 5. Agle state par jao
+        return S_ASK_MORE 
 
     except Exception as e:
         logger.error(f"Season save karne me error: {e}")
         caption = await format_message(context, "admin_add_season_save_error")
-        await query.edit_message_caption(caption=caption, parse_mode=ParseMode.HTML)
         
-        # === FIX 2: Error aane par conversation ko end karo ===
-        context.user_data.clear() # Context yahan clear karo
-        await asyncio.sleep(3) # Taaki user error padh sake
-        await add_content_menu(update, context) # Wapas menu par bhej do
-        return ConversationHandler.END # Conversation khatam karo
+        # Error aane par, purane photo message par hi error dikhao
+        try:
+            await query.edit_message_caption(caption=caption, parse_mode=ParseMode.HTML, reply_markup=None)
+        except Exception as e2:
+            logger.error(f"Error message bhi nahi dikha paya: {e2}")
+            # Fallback
+            await context.bot.send_message(chat_id=query.from_user.id, text=caption, parse_mode=ParseMode.HTML)
+
+        # Conversation ko end karo
+        context.user_data.clear()
+        await asyncio.sleep(3) 
+        await add_content_menu(update, context) 
+        return ConversationHandler.END
 
     # === FIX 3: Woh 2 lines yahan se delete kar di hain ===
 
