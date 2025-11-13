@@ -4376,23 +4376,25 @@ def main():
     bot_app.add_handler(CallbackQueryHandler(user_show_donate_menu, pattern="^user_show_donate_menu$"))
     bot_app.add_handler(CallbackQueryHandler(back_to_user_menu, pattern="^user_back_menu$"))
 
-    # User Download Flow (Non-conversation)
-     bot_app.add_handler(CallbackQueryHandler(download_button_handler, pattern="^dl"))
+# User Download Flow (Non-conversation)
+    bot_app.add_handler(CallbackQueryHandler(download_button_handler, pattern="^dl"))
 
     # Error handler
     bot_app.add_handler(error_handler)
 
     # --- NAYA: Webhook setup ---
     logger.info("Starting Flask server for webhook...")
-        
+    
     # Start the bot in a separate thread
     bot_event_loop = asyncio.new_event_loop()
     bot_thread = threading.Thread(target=run_async_bot_tasks, args=(bot_event_loop, bot_app))
     bot_thread.start()
-        
+    
     # Start Flask app (Waitress)
     logger.info(f"Flask (Waitress) server {WEBHOOK_URL} port {PORT} par sun raha hai...")
     serve(app, host='0.0.0.0', port=PORT)
 
 if __name__ == "__main__":
     main()
+
+
