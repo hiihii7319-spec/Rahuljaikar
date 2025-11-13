@@ -1,11 +1,9 @@
 # ============================================
-# ===       COMPLETE FINAL FIX (v31)       ===
+# ===       COMPLETE FINAL FIX (v32)       ===
 # ============================================
-# === (FEAT: Add More Episodes flow)       ===
-# === (FEAT: Set Items per Page to 20)     ===
-# === (FEAT: Sort anime by last_modified)  ===
-# === (FEAT: Add 2 new fonts)              ===
-# === (FIX: Back button logic for new flow)===
+# === (FIX: Placeholder formatting bug)    ===
+# === (FEAT: 'Update Photo' sub-menu)      ===
+# === (FEAT: Add 'Merge Seasons' stub)     ===
 # ============================================
 import os
 import logging
@@ -258,10 +256,11 @@ async def is_co_admin(user_id: int) -> bool:
     return user_id in config.get("co_admins", [])
 
 
-# --- NAYA: Message Formatting Helper ---
+# --- NAYA: Message Formatting Helper (v32 FIX) ---
 async def format_message(context: ContextTypes.DEFAULT_TYPE, key: str, variables: dict = None) -> str:
     """
-    DB se message laayega, font apply karega, aur variables replace karega.
+    DB se message laayega, variables replace karega, aur font apply karega.
+    (FIX: Pehle variables replace karo, phir font apply karo)
     """
     config = await get_config()
     
@@ -269,11 +268,7 @@ async def format_message(context: ContextTypes.DEFAULT_TYPE, key: str, variables
     default_messages = await get_default_messages() # Default list laao
     raw_text = config.get("messages", {}).get(key, default_messages.get(key, f"MISSING_KEY: {key}"))
     
-    # 2. Font settings apply karo
-    font_settings = config.get("appearance", {"font": "default", "style": "normal"})
-    formatted_text = await apply_font_formatting(raw_text, font_settings)
-    
-    # 3. Variables (jaise {anime_name}) replace karo
+    # 2. Variables (jaise {anime_name}) replace karo (PEHLE)
     if variables:
         # Variables ko HTML-safe banao (agar woh text hain)
         safe_variables = {}
@@ -284,16 +279,23 @@ async def format_message(context: ContextTypes.DEFAULT_TYPE, key: str, variables
                 safe_variables[k] = v
         
         try:
-            formatted_text = formatted_text.format(**safe_variables)
+            text_with_vars = raw_text.format(**safe_variables)
         except KeyError as e:
             logger.error(f"Message format karne me KeyError: {e} (Key: {key})")
             # Koshish karo ki problem waale variable ke bina format ho
             try:
-                formatted_text = formatted_text.format_map(safe_variables)
+                text_with_vars = raw_text.format_map(safe_variables)
             except:
-                pass # Agar phir bhi fail ho, toh raw text hi bhej do
+                text_with_vars = raw_text # Fallback
         except Exception as e:
              logger.error(f"Message format karne me error: {e} (Key: {key})")
+             text_with_vars = raw_text # Fallback
+    else:
+        text_with_vars = raw_text
+
+    # 3. Font settings apply karo (BAAD MEIN)
+    font_settings = config.get("appearance", {"font": "default", "style": "normal"})
+    formatted_text = await apply_font_formatting(text_with_vars, font_settings)
 
     return formatted_text
 
@@ -488,6 +490,7 @@ async def get_default_messages():
         "admin_del_ep_error": "❌ <b><f>Error!</f></b> <f>Episode delete nahi ho paya.</f>",
 
         # === Admin: Update Photo ===
+        "admin_menu_update_photo": "🖼️ <b><f>Photo Settings</f></b> 🖼️\n\n<f>Aap kaunsi photo change karna chahte hain?</f>", # NAYA
         "admin_update_photo_select_anime": "<f>Kaunse <b>Anime</b> ka poster update karna hai?</f>\n\n<b><f>Recently Updated First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>", # NAYA: Text change
         "admin_update_photo_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
         "admin_update_photo_select_target": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Aap iska <b>Main Poster</b> change karna chahte hain ya kisi <b>Season</b> ka?</f>",
@@ -514,7 +517,7 @@ async def get_default_messages():
         "admin_edit_season_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Kaunsa <b>Season</b> ka naam edit karna hai?</f>",
         "admin_edit_season_get_name": "<f>Aapne</f> <b>{anime_name}</b> -> <b>Season {season_name}</b> <f>select kiya hai.</f>\n\n<f>Ab iska <b>Naya Naam/Number</b> bhejo.</f>\n\n/cancel - <f>Cancel.</f>",
         "admin_edit_season_save_exists": "⚠️ <b><f>Error!</f></b> <f>Naya naam</f> '{new_name}' <f>is anime mein pehle se maujood hai. Koi doosra naam dein.</f>\n\n/cancel - <f>Cancel.</f>",
-        "admin_edit_season_confirm": "<b><f>Confirm Karo:</f></b>\n\n<f>Anime:</f> Code {anime_name}</code>\n<f>Purana Season:</f> <code>{old_name}</code>\n<f>Naya Season:</f> <code>{new_name}</code>\n\n<b><f>Are you sure?</f></b>",
+        "admin_edit_season_confirm": "<b><f>Confirm Karo:</f></b>\n\n<f>Anime:</f> Code {anime_name}</code>\n<f>Purana Season:</f> Code {old_name}</code>\n<f>Naya Season:</f> <code>{new_name}</code>\n\n<b><f>Are you sure?</f></b>",
         "admin_edit_season_success": "✅ <b><f>Success!</f></b>\n<f>Season</f> '{old_name}' <f>ka naam badal kar</f> '{new_name}' <f>ho gaya hai.</f>",
         "admin_edit_season_error": "❌ <b><f>Error!</f></b> <f>Season naam update nahi ho paya.</f>",
 
@@ -563,6 +566,19 @@ async def get_default_messages():
         "admin_appearance_select_style": "<f>Kaunsa style select karna hai?</f>\n\n<f>Current:</f> <b>{style}</b>",
         "admin_appearance_set_font_success": "✅ <b><f>Success!</f></b> <f>Font ko</f> <b>{font}</b> <f>par set kar diya gaya hai.</f>",
         "admin_appearance_set_style_success": "✅ <b><f>Success!</f></b> <f>Style ko</f> <b>{style}</b> <f>par set kar diya gaya hai.</f>",
+        
+        # === Admin: Merge Seasons (NAYA) ===
+        "admin_menu_merge_seasons": "➕ <b><f>Merge Seasons</f></b> ➕\n\n<f>Yeh feature do ya zyada seasons ko ek 'Complete' season mein merge kar dega.</f>",
+        "admin_merge_select_anime": "<f>Kaunsa <b>Anime</b> select karna hai jiske seasons merge karne hain?</f>\n\n<b><f>Recently Updated First</f></b> <f>(Sabse naya pehle):</f>\n<f>(Page {page})</f>",
+        "admin_merge_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
+        "admin_merge_no_seasons": "❌ <b><f>Error!</f></b> '{anime_name}' <f>mein merge karne ke liye seasons (min 2) nahi hain.</f>",
+        "admin_merge_select_seasons": "<b>{anime_name}</b>\n\n<f>Kaunse seasons merge karne hain? Select karein aur phir 'Done' dabayein.</f>\n\n<f>Selected:</f> {selected_list}",
+        "admin_merge_min_2": "⚠️ <f>Merge karne ke liye kam se kam 2 season select karein.</f>",
+        "admin_merge_get_new_name": "<f>Aapne</f> {count} <f>seasons select kiye hain.</f>\n\n<f>Ab is naye 'Merged' season ka <b>Naam</b> bhejo.</f>\n<f>(Example: Complete Series, S1-S3, All-in-One)</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_merge_name_exists": "⚠️ <b><f>Error!</f></b> <f>Naam</f> '{new_name}' <f>pehle se maujood hai. Koi doosra naam dein.</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_merge_confirm": "<b><f>Confirm Merge:</f></b>\n\n<f>Anime:</f> <b>{anime_name}</b>\n<f>Naya Naam:</f> <b>{new_name}</b>\n<f>Seasons to Merge:</f>\n{seasons_list}\n\n<f>Isse ek naya season ban jayega jisme total</f> <b>{total_eps} <f>episodes</f></b> <f>honge. Purane seasons delete nahi honge.</f>\n\n<b><f>Are you sure?</f></b>",
+        "admin_merge_success": "✅ <b><f>Success!</f></b>\n<f>Naya merged season</f> '<b>{new_name}</b>' <f>ban gaya hai jisme</f> {total_eps} <f>episodes hain.</f>",
+        "admin_merge_error": "❌ <b><f>Error!</f></b> <f>Merge nahi ho paya. Logs check karein.</f>",
     }
 # --- Config Helper (MAJOR REFACTOR) ---
 async def get_config():
@@ -661,8 +677,7 @@ async def get_config():
                  config_collection.update_one({"_id": "bot_config"}, {"$set": {"links.download": None}})
 
     return config
-
-# NAYA FIX: 2x2 Grid Helper
+# --- NAYA FIX: 2x2 Grid Helper
 def build_grid_keyboard(buttons, items_per_row=2):
     keyboard = []
     row = []
@@ -755,31 +770,31 @@ async def _update_anime_timestamp(anime_name: str):
         logger.error(f"'{anime_name}' ka timestamp update karne me error: {e}")
 
 
-# --- Conversation States ---
-# NEW (SAHI) CODE
-(A_GET_NAME, A_GET_POSTER, A_GET_DESC, A_CONFIRM) = range(4) # <-- YEH LINE MISS HO GAYI THI
-(S_GET_ANIME, S_GET_NUMBER, S_GET_POSTER, S_GET_DESC, S_CONFIRM, S_ASK_MORE) = range(4, 10) # NAYA: S_ASK_MORE
-(E_GET_ANIME, E_GET_SEASON, E_GET_NUMBER, E_GET_480P, E_GET_720P, E_GET_1080P, E_GET_4K, E_ASK_MORE) = range(10, 18) # 9->10, 17->18
-(CD_GET_QR,) = range(18, 19) # 17->18, 18->19
-(CL_GET_LINK,) = range(20, 21) # 19->20, 20->21
-(PG_MENU, PG_GET_ANIME, PG_GET_SEASON, PG_GET_EPISODE, PG_GET_SHORT_LINK, PG_GET_CHAT) = range(23, 29) # 22->23, 28->29
-(DA_GET_ANIME, DA_CONFIRM) = range(29, 31) # 28->29, 30->31
-(DS_GET_ANIME, DS_GET_SEASON, DS_CONFIRM) = range(31, 34) # 30->31, 33->34
-(DE_GET_ANIME, DE_GET_SEASON, DE_GET_EPISODE, DE_CONFIRM) = range(34, 38) # 33->34, 37->38
-(M_GET_DONATE_THANKS, M_GET_FILE_WARNING) = range(40, 42) # 39->40, 41->42
-(CS_GET_DELETE_TIME,) = range(45, 46) # 44->45, 45->46
-(UP_GET_ANIME, UP_GET_TARGET, UP_GET_POSTER) = range(48, 51) # 47->48, 50->51
-(CA_GET_ID, CA_CONFIRM) = range(51, 53) # 50->51, 52->53
-(CR_GET_ID, CR_CONFIRM) = range(53, 55) # 52->53, 54->55
-(CPOST_GET_CHAT, CPOST_GET_POSTER, CPOST_GET_CAPTION, CPOST_GET_BTN_TEXT, CPOST_GET_BTN_URL, CPOST_CONFIRM) = range(55, 61) # 54->55, 60->61
-(EA_GET_ANIME, EA_GET_NEW_NAME, EA_CONFIRM) = range(61, 64) # 60->61, 63->64
-(ES_GET_ANIME, ES_GET_SEASON, ES_GET_NEW_NAME, ES_CONFIRM) = range(64, 68) # 63->64, 67->68
-(EE_GET_ANIME, EE_GET_SEASON, EE_GET_EPISODE, EE_GET_NEW_NUM, EE_CONFIRM) = range(68, 73) # 67->68, 72->73
-(M_MENU_MAIN, M_MENU_DL, M_MENU_GEN, M_MENU_POSTGEN, M_GET_MSG, M_MENU_ADMIN) = range(73, 79) # 72->73, 78->79
-(GL_MENU, GL_GET_ANIME, GL_GET_SEASON, GL_GET_EPISODE) = range(79, 83) # 78->79, 82->83
-# NAYA: Bot Appearance States
-(AP_MENU, AP_SET_FONT, AP_SET_STYLE) = range(83, 86) # 82->83, 85->86
-(CS_GET_MENU_PHOTO,) = range(86, 87) # 85->86, 86->87
+# --- Conversation States (v32) ---
+(A_GET_NAME, A_GET_POSTER, A_GET_DESC, A_CONFIRM) = range(4) 
+(S_GET_ANIME, S_GET_NUMBER, S_GET_POSTER, S_GET_DESC, S_CONFIRM, S_ASK_MORE) = range(4, 10) 
+(E_GET_ANIME, E_GET_SEASON, E_GET_NUMBER, E_GET_480P, E_GET_720P, E_GET_1080P, E_GET_4K, E_ASK_MORE) = range(10, 18) 
+(CD_GET_QR,) = range(18, 19) 
+(CL_GET_LINK,) = range(20, 21) 
+(PG_MENU, PG_GET_ANIME, PG_GET_SEASON, PG_GET_EPISODE, PG_GET_SHORT_LINK, PG_GET_CHAT) = range(23, 29) 
+(DA_GET_ANIME, DA_CONFIRM) = range(29, 31) 
+(DS_GET_ANIME, DS_GET_SEASON, DS_CONFIRM) = range(31, 34) 
+(DE_GET_ANIME, DE_GET_SEASON, DE_GET_EPISODE, DE_CONFIRM) = range(34, 38) 
+(M_GET_DONATE_THANKS, M_GET_FILE_WARNING) = range(40, 42) 
+(CS_GET_DELETE_TIME,) = range(45, 46) 
+(UP_GET_ANIME, UP_GET_TARGET, UP_GET_POSTER) = range(48, 51) 
+(CA_GET_ID, CA_CONFIRM) = range(51, 53) 
+(CR_GET_ID, CR_CONFIRM) = range(53, 55) 
+(CPOST_GET_CHAT, CPOST_GET_POSTER, CPOST_GET_CAPTION, CPOST_GET_BTN_TEXT, CPOST_GET_BTN_URL, CPOST_CONFIRM) = range(55, 61) 
+(EA_GET_ANIME, EA_GET_NEW_NAME, EA_CONFIRM) = range(61, 64) 
+(ES_GET_ANIME, ES_GET_SEASON, ES_GET_NEW_NAME, ES_CONFIRM) = range(64, 68) 
+(EE_GET_ANIME, EE_GET_SEASON, EE_GET_EPISODE, EE_GET_NEW_NUM, EE_CONFIRM) = range(68, 73) 
+(M_MENU_MAIN, M_MENU_DL, M_MENU_GEN, M_MENU_POSTGEN, M_GET_MSG, M_MENU_ADMIN) = range(73, 79) 
+(GL_MENU, GL_GET_ANIME, GL_GET_SEASON, GL_GET_EPISODE) = range(79, 83) 
+(AP_MENU, AP_SET_FONT, AP_SET_STYLE) = range(83, 86) 
+(CS_GET_MENU_PHOTO,) = range(86, 87) 
+# NAYA: Merge Seasons States
+(MS_GET_ANIME, MS_SELECT_SEASONS, MS_GET_NAME, MS_CONFIRM) = range(87, 91)
 
 
 # --- NAYA: Global Cancel Function ---
@@ -803,12 +818,12 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     except BadRequest as e:
         if "Message is not modified" not in str(e):
                 logger.warning(f"Cancel me edit nahi kar paya: {e}")
-                reply_text = await format_message(context, "admin_cancel_error_edit", {"e": e})
-                await query.edit_message_text(reply_text, parse_mode=ParseMode.HTML)
+                # reply_text = await format_message(context, "admin_cancel_error_edit", {"e": e}) # Yeh error dega
+                # await query.edit_message_text(reply_text, parse_mode=ParseMode.HTML)
     except Exception as e:
         logger.error(f"Cancel me error: {e}")
-        reply_text = await format_message(context, "admin_cancel_error_general", {"e": e})
-        await query.edit_message_text(reply_text, parse_mode=ParseMode.HTML)
+        # reply_text = await format_message(context, "admin_cancel_error_general", {"e": e}) # Yeh error dega
+        # await query.edit_message_text(reply_text, parse_mode=ParseMode.HTML)
 
     if await is_co_admin(user.id):
         await asyncio.sleep(0.1) 
@@ -919,6 +934,14 @@ async def back_to_appearance_menu(update: Update, context: ContextTypes.DEFAULT_
     await query.answer()
     await appearance_menu_start(update, context)
     return AP_MENU
+
+# NAYA: Update Photo Menu Fallback
+async def back_to_update_photo_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await update_photo_menu(update, context)
+    return ConversationHandler.END
+
 # --- Admin Conversations (Add, Delete, etc.) ---
 # --- Conversation: Add Anime ---
 async def add_anime_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1486,6 +1509,7 @@ async def ask_add_more_episodes(update: Update, context: ContextTypes.DEFAULT_TY
 async def add_more_episodes_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     User ne 'Yes (Add More)' dabaya. Agle episode ka number maango.
+    (FIXED IN v32)
     """
     query = update.callback_query
     await query.answer()
@@ -1527,8 +1551,6 @@ async def add_more_episodes_no(update: Update, context: ContextTypes.DEFAULT_TYP
     # Wapas 'Add Content' menu par bhej do
     await add_content_menu(update, context)
     return ConversationHandler.END
-
-
 # --- Conversation: Set Auto-Delete Time ---
 async def set_delete_time_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -2397,7 +2419,7 @@ async def delete_episode_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await manage_content_menu(update, context)
     return ConversationHandler.END
 
-# --- Conversation: Update Photo ---
+# --- Conversation: Update Photo (NAYA: Sub-menu) ---
 async def update_photo_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -2417,13 +2439,13 @@ async def update_photo_show_anime_list(update: Update, context: ContextTypes.DEF
         page=page,
         page_callback_prefix="upphoto_page_",
         item_callback_prefix="upphoto_anime_",
-        back_callback="admin_menu" 
+        back_callback="back_to_update_photo_menu" # NAYA: Back to sub-menu
     )
     
     if not animes and page == 0:
         text = await format_message(context, "admin_update_photo_no_anime")
     else:
-        text = await format_message(context, "admin_update_photo_select_anime", {"page": page + 1}) # NAYA: Text DB se
+        text = await format_message(context, "admin_update_photo_select_anime", {"page": page + 1})
 
     await query.edit_message_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
     return UP_GET_ANIME
@@ -3210,7 +3232,194 @@ async def appearance_save_style(update: Update, context: ContextTypes.DEFAULT_TY
     await appearance_menu_start(update, context)
     return AP_MENU
 
+# --- NAYA (v32): Conversation: Merge Seasons ---
+async def merge_seasons_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    return await merge_seasons_show_anime_list(update, context, page=0)
+
+async def merge_seasons_show_anime_list(update: Update, context: ContextTypes.DEFAULT_TYPE, page: int = 0):
+    query = update.callback_query
     
+    if query.data.startswith("merge_page_"):
+        page = int(query.data.split("_")[-1])
+        await query.answer()
+        
+    context.user_data['current_page'] = page 
+    
+    animes, keyboard = await build_paginated_keyboard(
+        collection=animes_collection,
+        page=page,
+        page_callback_prefix="merge_page_",
+        item_callback_prefix="merge_anime_",
+        back_callback="admin_menu" # Back to main admin menu
+    )
+    
+    if not animes and page == 0:
+        text = await format_message(context, "admin_merge_no_anime")
+    else:
+        text = await format_message(context, "admin_merge_select_anime", {"page": page + 1})
+    
+    await query.edit_message_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+    return MS_GET_ANIME
+
+async def merge_seasons_select_seasons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    # Initialize selections
+    if 'merge_selections' not in context.user_data:
+        context.user_data['merge_selections'] = []
+
+    if query.data.startswith("merge_anime_"):
+        anime_name = query.data.replace("merge_anime_", "")
+        context.user_data['anime_name'] = anime_name
+        context.user_data['merge_selections'] = [] # Reset on new anime select
+    elif query.data.startswith("merge_season_"):
+        season_name = query.data.replace("merge_season_", "")
+        if season_name in context.user_data['merge_selections']:
+            context.user_data['merge_selections'].remove(season_name) # Toggle off
+        else:
+            context.user_data['merge_selections'].append(season_name) # Toggle on
+    elif query.data == "merge_done":
+        if len(context.user_data['merge_selections']) < 2:
+            await query.answer(await format_message(context, "admin_merge_min_2"), show_alert=True)
+            return MS_SELECT_SEASONS # Stay on the same state
+        else:
+            return await merge_seasons_get_name(update, context) # Proceed to next step
+
+    anime_name = context.user_data['anime_name']
+    anime_doc = animes_collection.find_one({"name": anime_name})
+    seasons = anime_doc.get("seasons", {})
+    
+    season_keys = [s for s in seasons.keys() if not s.startswith("_")]
+    
+    if len(season_keys) < 2:
+        text = await format_message(context, "admin_merge_no_seasons", {"anime_name": anime_name})
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="admin_menu")]]), parse_mode=ParseMode.HTML)
+        return ConversationHandler.END
+
+    sorted_seasons = sorted(season_keys, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+    
+    buttons = []
+    selections = context.user_data['merge_selections']
+    for s in sorted_seasons:
+        prefix = "✅ " if s in selections else "◻️ "
+        buttons.append(InlineKeyboardButton(f"{prefix}Season {s}", callback_data=f"merge_season_{s}"))
+    
+    keyboard = build_grid_keyboard(buttons, 1)
+    
+    keyboard.append([InlineKeyboardButton("✅ Done (Merge)", callback_data="merge_done")])
+    
+    current_page = context.user_data.get('current_page', 0)
+    keyboard.append([InlineKeyboardButton("⬅️ Back to Animes", callback_data=f"merge_page_{current_page}")])
+
+    selected_list_str = ", ".join(sorted(selections)) if selections else "None"
+    
+    text = await format_message(context, "admin_merge_select_seasons", {
+        "anime_name": anime_name,
+        "selected_list": selected_list_str
+    })
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+    return MS_SELECT_SEASONS
+
+async def merge_seasons_get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    count = len(context.user_data['merge_selections'])
+    text = await format_message(context, "admin_merge_get_new_name", {"count": count})
+    await query.edit_message_text(text, parse_mode=ParseMode.HTML)
+    return MS_GET_NAME
+
+async def merge_seasons_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    new_name = update.message.text
+    anime_name = context.user_data['anime_name']
+    
+    anime_doc = animes_collection.find_one({"name": anime_name})
+    if new_name in anime_doc.get("seasons", {}):
+        text = await format_message(context, "admin_merge_name_exists", {"new_name": new_name})
+        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        return MS_GET_NAME
+        
+    context.user_data['new_season_name'] = new_name
+    
+    # Calculate total episodes
+    seasons_to_merge = context.user_data['merge_selections']
+    all_seasons_data = anime_doc.get("seasons", {})
+    
+    new_episode_dict = {}
+    ep_counter = 1
+    
+    sorted_seasons_to_merge = sorted(seasons_to_merge, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+    
+    for season_name in sorted_seasons_to_merge:
+        season_data = all_seasons_data.get(season_name, {})
+        episode_keys = [ep for ep in season_data.keys() if not ep.startswith("_")]
+        sorted_eps = sorted(episode_keys, key=lambda x: [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', x)])
+        
+        for ep_num in sorted_eps:
+            ep_data = season_data.get(ep_num, {})
+            if ep_data:
+                new_episode_dict[str(ep_counter)] = ep_data
+                ep_counter += 1
+
+    total_eps = len(new_episode_dict)
+    context.user_data['new_episode_dict'] = new_episode_dict # Save for final step
+    
+    seasons_list_str = "\n".join([f"- Season {s}" for s in sorted_seasons_to_merge])
+    
+    keyboard = [
+        [InlineKeyboardButton(f"✅ Haan, Merge Karo", callback_data="merge_confirm_yes")],
+        [InlineKeyboardButton("⬅️ Back", callback_data="admin_menu")]
+    ]
+    text = await format_message(context, "admin_merge_confirm", {
+        "anime_name": anime_name,
+        "new_name": new_name,
+        "seasons_list": seasons_list_str,
+        "total_eps": total_eps
+    })
+    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+    return MS_CONFIRM
+
+async def merge_seasons_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer("Merging...")
+    
+    anime_name = context.user_data['anime_name']
+    new_name = context.user_data['new_season_name']
+    new_episode_dict = context.user_data['new_episode_dict']
+    total_eps = len(new_episode_dict)
+    
+    try:
+        # Add default poster/desc from anime
+        anime_doc = animes_collection.find_one({"name": anime_name})
+        new_episode_dict["_poster_id"] = anime_doc.get("poster_id")
+        new_episode_dict["_description"] = anime_doc.get("description", "")
+
+        animes_collection.update_one(
+            {"name": anime_name},
+            {"$set": {
+                f"seasons.{new_name}": new_episode_dict,
+                "last_modified": datetime.now()
+            }}
+        )
+        logger.info(f"Seasons merged into '{new_name}' for anime '{anime_name}'")
+        text = await format_message(context, "admin_merge_success", {
+            "new_name": new_name,
+            "total_eps": total_eps
+        })
+        await query.edit_message_text(text, parse_mode=ParseMode.HTML)
+    except Exception as e:
+        logger.error(f"Season merge karne me error: {e}")
+        text = await format_message(context, "admin_merge_error")
+        await query.edit_message_text(text, parse_mode=ParseMode.HTML)
+    
+    context.user_data.clear()
+    await asyncio.sleep(3)
+    await admin_command(update, context, from_callback=True)
+    return ConversationHandler.END
+
 # --- Admin Panel: Sub-Menu Functions ---
 async def add_content_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -3410,6 +3619,18 @@ async def admin_settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
             await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
     else: 
         await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+
+# NAYA (v32): Update Photo Sub-Menu
+async def update_photo_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    keyboard = [
+        [InlineKeyboardButton("🖼️ Update Anime/Season Photo", callback_data="admin_update_photo_content")],
+        [InlineKeyboardButton("🖼️ Set User Menu Photo", callback_data="admin_set_menu_photo")],
+        [InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]
+    ]
+    text = await format_message(context, "admin_menu_update_photo")
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
 
     
 # --- User Handlers ---
@@ -3628,7 +3849,7 @@ async def user_show_donate_menu(update: Update, context: ContextTypes.DEFAULT_TY
         await query.answer("❌ Error! Dobara try karein.", show_alert=True)
 
 
-# --- Admin Panel ---
+# --- Admin Panel (v32 UPDATE) ---
 async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from_callback: bool = False):
     """Admin panel ka main menu"""
     user_id = update.effective_user.id
@@ -3644,19 +3865,22 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
     logger.info("Admin/Co-Admin ne /admin command use kiya.")
     
     if not await is_main_admin(user_id):
+        # Co-Admin Menu
         keyboard = [
             [InlineKeyboardButton("➕ Add Content", callback_data="admin_menu_add_content")],
             [InlineKeyboardButton("🗑️ Delete Content", callback_data="admin_menu_manage_content")], 
             [InlineKeyboardButton("✏️ Edit Content", callback_data="admin_menu_edit_content")], 
             [InlineKeyboardButton("✍️ Post Generator", callback_data="admin_post_gen")],
             [
-                InlineKeyboardButton("🖼️ Update Photo", callback_data="admin_update_photo"),
+                InlineKeyboardButton("🖼️ Photo Settings", callback_data="admin_menu_update_photo"), # NAYA
                 InlineKeyboardButton("🔗 Gen Link", callback_data="admin_gen_link") 
-            ]
+            ],
+            [InlineKeyboardButton("➕ Merge Seasons", callback_data="admin_merge_seasons")] # NAYA
         ]
         admin_menu_text = await format_message(context, "admin_panel_co")
     
     else:
+        # Main Admin Menu
         keyboard = [
             [InlineKeyboardButton("➕ Add Content", callback_data="admin_menu_add_content")],
             [
@@ -3672,11 +3896,11 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
                 InlineKeyboardButton("⏱️ Auto-Delete Time", callback_data="admin_set_delete_time") 
             ],
             [
-                InlineKeyboardButton("🖼️ Update Photo", callback_data="admin_update_photo"), 
+                InlineKeyboardButton("🖼️ Photo Settings", callback_data="admin_menu_update_photo"), # NAYA
                 InlineKeyboardButton("🔗 Gen Link", callback_data="admin_gen_link") 
             ],
             [
-                InlineKeyboardButton("🖼️ Set Menu Photo", callback_data="admin_set_menu_photo"),# NAYA
+                InlineKeyboardButton("➕ Merge Seasons", callback_data="admin_merge_seasons"), # NAYA
                 InlineKeyboardButton("🎨 Bot Appearance", callback_data="admin_menu_appearance")
             ],
             [InlineKeyboardButton("⚙ Bot Messages", callback_data="admin_menu_messages")], 
@@ -3709,7 +3933,7 @@ async def set_menu_photo_start(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
     text = await format_message(context, "admin_set_menu_photo_start")
-    await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="admin_menu")]]))
+    await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_update_photo_menu")]])) # NAYA
     return CS_GET_MENU_PHOTO
 
 async def set_menu_photo_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3851,7 +4075,9 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                 try:
                     # NAYA: Caption ko font ke saath format karo
                     caption_base = "🎬 <b>{anime_name}</b>\nS{season_name} - E{ep_num} ({quality})\n\n{warning_msg}" # <pre> hata diya
-                    caption_raw = caption_base.format(
+                    
+                    # FIX v32: Variables pehle replace karo
+                    caption_with_vars = caption_base.format(
                         anime_name=anime_name,
                         season_name=season_name,
                         ep_num=ep_num,
@@ -3861,7 +4087,7 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
                     
                     # File captions hamesha default font me honge
                     font_settings = {"font": "default", "style": "normal"}
-                    caption = await apply_font_formatting(caption_raw, font_settings)
+                    caption = await apply_font_formatting(caption_with_vars, font_settings)
 
                     sent_message = await context.bot.send_video(
                         chat_id=user_id, 
@@ -4127,7 +4353,7 @@ def run_async_bot_tasks(loop, app):
         loop.run_until_complete(app.stop())
         loop.close()
 
-# --- NAYA Main Bot Function (FINAL) ---
+# --- NAYA Main Bot Function (FINAL v32) ---
 def main():
     global bot_app
     PORT = int(os.environ.get("PORT", 8080))
@@ -4152,7 +4378,6 @@ def main():
     admin_menu_fallback = [CallbackQueryHandler(back_to_admin_menu, pattern="^admin_menu$"), global_cancel_handler]
     add_content_fallback = [CallbackQueryHandler(back_to_add_content_menu, pattern="^back_to_add_content$"), global_cancel_handler]
     add_season_fallback = [CallbackQueryHandler(back_to_add_content_menu, pattern="^back_to_add_content$"), add_season_cancel_handler]
-    # NAYA: Add Episode ke liye special fallback
     add_episode_fallback = [CallbackQueryHandler(back_to_add_content_menu, pattern="^back_to_add_content$"), add_ep_cancel_handler]
     
     manage_fallback = [CallbackQueryHandler(back_to_manage_menu, pattern="^back_to_manage$"), global_cancel_handler]
@@ -4165,6 +4390,8 @@ def main():
     admin_settings_fallback = [CallbackQueryHandler(back_to_admin_settings_menu, pattern="^back_to_admin_settings$"), global_cancel_handler]
     gen_link_fallback = [CallbackQueryHandler(gen_link_menu, pattern="^admin_gen_link$"), global_cancel_handler]
     appearance_fallback = [CallbackQueryHandler(back_to_appearance_menu, pattern="^back_to_appearance$"), global_cancel_handler]
+    # NAYA (v32): Update photo fallback
+    update_photo_fallback = [CallbackQueryHandler(back_to_update_photo_menu, pattern="^back_to_update_photo_menu$"), global_cancel_handler]
 
 
     add_anime_conv = ConversationHandler(
@@ -4194,8 +4421,8 @@ def main():
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_season_desc),
                 CommandHandler("skip", skip_season_desc)
             ],
-            S_CONFIRM: [CallbackQueryHandler(save_season, pattern="^save_season$")], # <-- YEH COMMA ADD KARO
-            S_ASK_MORE: [ # NAYA State
+            S_CONFIRM: [CallbackQueryHandler(save_season, pattern="^save_season$")],
+            S_ASK_MORE: [
                 CallbackQueryHandler(add_more_seasons_yes, pattern="^add_season_more_yes$"),
                 CallbackQueryHandler(add_more_seasons_no, pattern="^add_season_more_no$")
             ]
@@ -4204,7 +4431,6 @@ def main():
         allow_reentry=True 
     )
     
-    # NAYA: Updated Add Episode Conversation
     add_episode_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(add_episode_start, pattern="^admin_add_episode$")], 
         states={
@@ -4221,12 +4447,12 @@ def main():
             E_GET_720P: [MessageHandler(filters.ALL & ~filters.COMMAND, get_720p_file), CommandHandler("skip", skip_720p)],
             E_GET_1080P: [MessageHandler(filters.ALL & ~filters.COMMAND, get_1080p_file), CommandHandler("skip", skip_1080p)],
             E_GET_4K: [MessageHandler(filters.ALL & ~filters.COMMAND, get_4k_file), CommandHandler("skip", skip_4k)],
-            E_ASK_MORE: [ # NAYA State
+            E_ASK_MORE: [
                 CallbackQueryHandler(add_more_episodes_yes, pattern="^add_ep_more_yes$"),
                 CallbackQueryHandler(add_more_episodes_no, pattern="^add_ep_more_no$")
             ]
         }, 
-        fallbacks=global_fallbacks + add_episode_fallback, # NAYA: Special fallback
+        fallbacks=global_fallbacks + add_episode_fallback,
         allow_reentry=True 
     )
     
@@ -4312,8 +4538,10 @@ def main():
         fallbacks=global_fallbacks + manage_fallback,
         allow_reentry=True 
     )
+    
+    # NAYA (v32): Update Photo Conv (Updated Entry Point)
     update_photo_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(update_photo_start, pattern="^admin_update_photo$")],
+        entry_points=[CallbackQueryHandler(update_photo_start, pattern="^admin_update_photo_content$")],
         states={
             UP_GET_ANIME: [
                 CallbackQueryHandler(update_photo_show_anime_list, pattern="^upphoto_page_"),
@@ -4328,7 +4556,7 @@ def main():
                 MessageHandler(filters.ALL & ~filters.COMMAND & ~filters.PHOTO, update_photo_invalid_input)
             ]
         },
-        fallbacks=global_fallbacks + admin_menu_fallback,
+        fallbacks=global_fallbacks + update_photo_fallback, # NAYA
         allow_reentry=True
     )
     
@@ -4481,6 +4709,40 @@ def main():
         allow_reentry=True
     )
     
+    # NAYA (v32): Set Menu Photo Conv (Updated Entry Point)
+    set_menu_photo_conv = ConversationHandler(
+       entry_points=[CallbackQueryHandler(set_menu_photo_start, pattern="^admin_set_menu_photo$")],
+       states={
+           CS_GET_MENU_PHOTO: [
+               MessageHandler(filters.PHOTO, set_menu_photo_save),
+               CommandHandler("skip", skip_menu_photo)
+           ]
+       },
+       fallbacks=global_fallbacks + update_photo_fallback, # NAYA
+       allow_reentry=True
+    )
+    
+    # NAYA (v32): Merge Seasons Conv
+    merge_seasons_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(merge_seasons_start, pattern="^admin_merge_seasons$")],
+        states={
+            MS_GET_ANIME: [
+                CallbackQueryHandler(merge_seasons_show_anime_list, pattern="^merge_page_"),
+                CallbackQueryHandler(merge_seasons_select_seasons, pattern="^merge_anime_")
+            ],
+            MS_SELECT_SEASONS: [
+                CallbackQueryHandler(merge_seasons_select_seasons, pattern="^merge_season_"),
+                CallbackQueryHandler(merge_seasons_get_name, pattern="^merge_done$"),
+                CallbackQueryHandler(merge_seasons_show_anime_list, pattern="^merge_page_")
+            ],
+            MS_GET_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, merge_seasons_confirm)],
+            MS_CONFIRM: [CallbackQueryHandler(merge_seasons_do, pattern="^merge_confirm_yes$")]
+        },
+        fallbacks=global_fallbacks + admin_menu_fallback,
+        allow_reentry=True
+    )
+
+    
     # --- Saare handlers ko bot_app me add karo ---
     bot_app.add_handler(add_anime_conv)
     bot_app.add_handler(add_season_conv)
@@ -4491,7 +4753,7 @@ def main():
     bot_app.add_handler(del_anime_conv)
     bot_app.add_handler(del_season_conv)
     bot_app.add_handler(del_episode_conv)
-    bot_app.add_handler(update_photo_conv) 
+    bot_app.add_handler(update_photo_conv) # NAYA: Updated handler
     bot_app.add_handler(edit_anime_conv)
     bot_app.add_handler(edit_season_conv)
     bot_app.add_handler(edit_episode_conv)
@@ -4502,19 +4764,8 @@ def main():
     bot_app.add_handler(set_delete_time_conv) 
     bot_app.add_handler(set_messages_conv) 
     bot_app.add_handler(appearance_conv)
-
-    set_menu_photo_conv = ConversationHandler(
-       entry_points=[CallbackQueryHandler(set_menu_photo_start, pattern="^admin_set_menu_photo$")],
-       states={
-           CS_GET_MENU_PHOTO: [
-               MessageHandler(filters.PHOTO, set_menu_photo_save),
-               CommandHandler("skip", skip_menu_photo)
-           ]
-       },
-       fallbacks=global_fallbacks + admin_menu_fallback,
-       allow_reentry=True
-    )
-    bot_app.add_handler(set_menu_photo_conv)
+    bot_app.add_handler(set_menu_photo_conv) # NAYA: Updated handler
+    bot_app.add_handler(merge_seasons_conv) # NAYA: New feature
 
     # Standard commands
     bot_app.add_handler(CommandHandler("start", start_command)) 
@@ -4530,6 +4781,7 @@ def main():
     bot_app.add_handler(CallbackQueryHandler(other_links_menu, pattern="^admin_menu_other_links$"))
     bot_app.add_handler(CallbackQueryHandler(admin_settings_menu, pattern="^admin_menu_admin_settings$")) 
     bot_app.add_handler(CallbackQueryHandler(co_admin_list, pattern="^admin_list_co_admin$")) 
+    bot_app.add_handler(CallbackQueryHandler(update_photo_menu, pattern="^admin_menu_update_photo$")) # NAYA
 
     # User menu navigation (non-conversation)
     bot_app.add_handler(CallbackQueryHandler(user_show_donate_menu, pattern="^user_show_donate_menu$"))
@@ -4549,11 +4801,9 @@ def main():
     bot_thread = threading.Thread(target=run_async_bot_tasks, args=(bot_event_loop, bot_app))
     bot_thread.start()
     
-    # Start Flask app (Waitress)
+     # Start Flask app (Waitress)
     logger.info(f"Flask (Waitress) server {WEBHOOK_URL} port {PORT} par sun raha hai...")
     serve(app, host='0.0.0.0', port=PORT)
 
 if __name__ == "__main__":
     main()
-
-
