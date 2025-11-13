@@ -4051,6 +4051,7 @@ def main():
     global_cancel_handler = CommandHandler("cancel", cancel)
     # NAYA: Add Episode ke liye special cancel handler
     add_ep_cancel_handler = CommandHandler("cancel", cancel_add_episode)
+    add_season_cancel_handler = CommandHandler("cancel", cancel_add_season)
     
     global_fallbacks = [
         CommandHandler("start", cancel),
@@ -4060,6 +4061,7 @@ def main():
     ]
     admin_menu_fallback = [CallbackQueryHandler(back_to_admin_menu, pattern="^admin_menu$"), global_cancel_handler]
     add_content_fallback = [CallbackQueryHandler(back_to_add_content_menu, pattern="^back_to_add_content$"), global_cancel_handler]
+    add_season_fallback = [CallbackQueryHandler(back_to_add_content_menu, pattern="^back_to_add_content$"), add_season_cancel_handler]
     # NAYA: Add Episode ke liye special fallback
     add_episode_fallback = [CallbackQueryHandler(back_to_add_content_menu, pattern="^back_to_add_content$"), add_ep_cancel_handler]
     
@@ -4108,7 +4110,7 @@ def main():
                 CallbackQueryHandler(add_more_seasons_no, pattern="^add_season_more_no$")
             ]
         }, 
-        fallbacks=global_fallbacks + add_content_fallback,
+        fallbacks=global_fallbacks + add_season_fallback,
         allow_reentry=True 
     )
     
