@@ -1155,7 +1155,7 @@ async def save_season(update: Update, context: ContextTypes.DEFAULT_TYPE):
         caption = await format_message(context, "admin_add_season_save_error")
         await query.edit_message_caption(caption=caption, parse_mode=ParseMode.HTML)
     context.user_data.clear()
-    return ConversationHandler.END
+    return S_ASK_MORE # NAYA: Naye state par jao
 
 # NAYA: "Add More Seasons" flow
 async def add_more_seasons_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
