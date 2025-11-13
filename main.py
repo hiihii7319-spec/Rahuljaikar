@@ -1137,7 +1137,6 @@ async def save_season(update: Update, context: ContextTypes.DEFAULT_TYPE):
             }} 
         )
         
-        # NEW CODE
         # NAYA: Ask to add more seasons
         text = await format_message(context, "admin_add_season_ask_more", {
             "anime_name": anime_name,
@@ -1154,12 +1153,22 @@ async def save_season(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             await query.edit_message_media(None)
         except: pass
+        
+        # === FIX 1: Yeh ab 'try' block ke andar hai ===
+        return S_ASK_MORE # NAYA: Naye state par jao
+
     except Exception as e:
         logger.error(f"Season save karne me error: {e}")
         caption = await format_message(context, "admin_add_season_save_error")
         await query.edit_message_caption(caption=caption, parse_mode=ParseMode.HTML)
-    context.user_data.clear()
-    return S_ASK_MORE # NAYA: Naye state par jao
+        
+        # === FIX 2: Error aane par conversation ko end karo ===
+        context.user_data.clear() # Context yahan clear karo
+        await asyncio.sleep(3) # Taaki user error padh sake
+        await add_content_menu(update, context) # Wapas menu par bhej do
+        return ConversationHandler.END # Conversation khatam karo
+
+    # === FIX 3: Woh 2 lines yahan se delete kar di hain ===
 
 # NAYA: "Add More Seasons" flow
 async def add_more_seasons_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
