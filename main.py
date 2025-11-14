@@ -1,9 +1,9 @@
 # ============================================
-# ===       COMPLETE FINAL FIX (v33)       ===
+# ===       COMPLETE FINAL FIX (v34)       ===
 # ============================================
-# === (FEAT: Add 'Merge Anime' feature)    ===
-# === (FEAT: Add thumbnails to videos)     ===
-# === (FIX: Move Merge to Edit menu)       ===
+# === (FEAT: Add Broadcast feature)        ===
+# === (FEAT: Add User Statistics)          ===
+# === (FIX: Admin menu layout)             ===
 # ============================================
 import os
 import logging
@@ -27,7 +27,7 @@ from telegram.ext import (
     filters,
     Defaults
 )
-from telegram.error import BadRequest
+from telegram.error import BadRequest, Forbidden # NAYA: Broadcast ke liye
 # Flask server ke liye
 from flask import Flask, request 
 from waitress import serve 
@@ -236,6 +236,13 @@ try:
     animes_collection.create_index([("name", ASCENDING)])
     animes_collection.create_index([("created_at", DESCENDING)]) 
     animes_collection.create_index([("last_modified", DESCENDING)]) # NAYA: Smart sort ke liye
+    users_collection.create_index([("interaction_count", DESCENDING)]) # NAYA: Stats ke liye
+    
+    # NAYA v34: Purane users ke liye interaction_count add karo
+    users_collection.update_many(
+        {"interaction_count": {"$exists": False}},
+        {"$set": {"interaction_count": 0}}
+    )
     
     client.admin.command('ping') 
     logger.info("MongoDB se successfully connect ho gaya!")
@@ -254,6 +261,17 @@ async def is_co_admin(user_id: int) -> bool:
         return True
     config = await get_config()
     return user_id in config.get("co_admins", [])
+
+# --- NAYA v34: User Stats Helper ---
+async def increment_user_interaction(user_id: int):
+    """User ki interaction count badhayega."""
+    try:
+        users_collection.update_one(
+            {"_id": user_id},
+            {"$inc": {"interaction_count": 1}}
+        )
+    except Exception as e:
+        logger.error(f"User {user_id} ka interaction_count update karne me error: {e}")
 
 
 # --- NAYA: Message Formatting Helper (v32 FIX) ---
@@ -300,7 +318,7 @@ async def format_message(context: ContextTypes.DEFAULT_TYPE, key: str, variables
     return formatted_text
 
 
-# --- NAYA: Saare Default Messages Ek Jagah (v33 Update) ---
+# --- NAYA: Saare Default Messages Ek Jagah (v34 Update) ---
 async def get_default_messages():
     """
     Saare default messages ki list, <f> tags aur HTML ke saath.
@@ -342,10 +360,10 @@ async def get_default_messages():
         "admin_panel_co": "👑 <b><f>Salaam, Co-Admin!</f></b> 👑\n<f>Aapka content panel taiyyar hai.</f>",
 
         # === Admin: Set Menu Photo ===
-    "admin_set_menu_photo_start": "<f>User menu mein dikhaane ke liye <b>Photo</b> bhejo.</f>\n\n/skip - <f>Photo hata do.</f>\n/cancel - <f>Cancel.</f>",
-    "admin_set_menu_photo_error": "<f>Ye photo nahi hai. Please ek photo bhejo ya</f> /skip <f>karein.</f>",
-    "admin_set_menu_photo_success": "✅ <b><f>Success!</f></b> <f>Naya user menu photo set ho gaya hai.</f>",
-    "admin_set_menu_photo_skip": "✅ <b><f>Success!</f></b> <f>User menu photo hata diya gaya hai.</f>",
+        "admin_set_menu_photo_start": "<f>User menu mein dikhaane ke liye <b>Photo</b> bhejo.</f>\n\n/skip - <f>Photo hata do.</f>\n/cancel - <f>Cancel.</f>",
+        "admin_set_menu_photo_error": "<f>Ye photo nahi hai. Please ek photo bhejo ya</f> /skip <f>karein.</f>",
+        "admin_set_menu_photo_success": "✅ <b><f>Success!</f></b> <f>Naya user menu photo set ho gaya hai.</f>",
+        "admin_set_menu_photo_skip": "✅ <b><f>Success!</f></b> <f>User menu photo hata diya gaya hai.</f>",
 
         # === Admin: Add Content Menus ===
         "admin_menu_add_content": "➕ <b><f>Add Content</f></b> ➕\n\n<f>Aap kya add karna chahte hain?</f>",
@@ -503,7 +521,7 @@ async def get_default_messages():
         "admin_edit_anime_no_anime": "❌ <f>Error: Abhi koi anime add nahi hua hai.</f>",
         "admin_edit_anime_get_name": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Ab iska <b>Naya Naam</b> bhejo.</f>\n\n/cancel - <f>Cancel.</f>",
         "admin_edit_anime_save_exists": "⚠️ <b><f>Error!</f></b> <f>Naya naam</f> '{new_name}' <f>pehle se maujood hai. Koi doosra naam dein.</f>\n\n/cancel - <f>Cancel.</f>",
-        "admin_edit_anime_confirm": "<b><f>Confirm Karo:</f></b>\n\n<f>Purana Naam:</f> Code {old_name}</code>\n<f>Naya Naam:</f> <code>{new_name}</code>\n\n<b><f>Are you sure?</f></b>",
+        "admin_edit_anime_confirm": "<b><f>Confirm Karo:</f></b>\n\n<f>Purana Naam:</f> <code>{old_name}</code>\n<f>Naya Naam:</f> <code>{new_name}</code>\n\n<b><f>Are you sure?</f></b>",
         "admin_edit_anime_success": "✅ <b><f>Success!</f></b>\n<f>Anime</f> '{old_name}' <f>ka naam badal kar</f> '{new_name}' <f>ho gaya hai.</f>",
         "admin_edit_anime_error": "❌ <b><f>Error!</f></b> <f>Anime naam update nahi ho paya.</f>",
         
@@ -514,7 +532,7 @@ async def get_default_messages():
         "admin_edit_season_select_season": "<f>Aapne</f> <b>{anime_name}</b> <f>select kiya hai.</f>\n\n<f>Kaunsa <b>Season</b> ka naam edit karna hai?</f>",
         "admin_edit_season_get_name": "<f>Aapne</f> <b>{anime_name}</b> -> <b>Season {season_name}</b> <f>select kiya hai.</f>\n\n<f>Ab iska <b>Naya Naam/Number</b> bhejo.</f>\n\n/cancel - <f>Cancel.</f>",
         "admin_edit_season_save_exists": "⚠️ <b><f>Error!</f></b> <f>Naya naam</f> '{new_name}' <f>is anime mein pehle se maujood hai. Koi doosra naam dein.</f>\n\n/cancel - <f>Cancel.</f>",
-        "admin_edit_season_confirm": "<b><f>Confirm Karo:</f></b>\n\n<f>Anime:</f> Code {anime_name}</code>\n<f>Purana Season:</f> Code {old_name}</code>\n<f>Naya Season:</f> <code>{new_name}</code>\n\n<b><f>Are you sure?</f></b>",
+        "admin_edit_season_confirm": "<b><f>Confirm Karo:</f></b>\n\n<f>Anime:</f> <code>{anime_name}</code>\n<f>Purana Season:</f> <code>{old_name}</code>\n<f>Naya Season:</f> <code>{new_name}</code>\n\n<b><f>Are you sure?</f></b>",
         "admin_edit_season_success": "✅ <b><f>Success!</f></b>\n<f>Season</f> '{old_name}' <f>ka naam badal kar</f> '{new_name}' <f>ho gaya hai.</f>",
         "admin_edit_season_error": "❌ <b><f>Error!</f></b> <f>Season naam update nahi ho paya.</f>",
 
@@ -537,7 +555,7 @@ async def get_default_messages():
         "admin_co_admin_add_invalid_id": "<f>Yeh valid User ID nahi hai. Please sirf number bhejein.</f>\n\n/cancel - <f>Cancel.</f>",
         "admin_co_admin_add_is_main": "<f>Aap Main Admin hain, khud ko add nahi kar sakte.</f>\n\n/cancel - <f>Cancel.</f>",
         "admin_co_admin_add_exists": "<f>User</f> <code>{user_id}</code> <f>pehle se Co-Admin hai.</f>\n\n/cancel - <f>Cancel.</f>",
-        "admin_co_admin_add_confirm": "<f>Aap user ID</f> Code {user_id}</code> <f>ko <b>Co-Admin</b> banane wale hain.</f>\n\n<f>Woh content add, remove, aur post generate kar payenge.</f>\n\n<b><f>Are you sure?</f></b>",
+        "admin_co_admin_add_confirm": "<f>Aap user ID</f> <code>{user_id}</code> <f>ko <b>Co-Admin</b> banane wale hain.</f>\n\n<f>Woh content add, remove, aur post generate kar payenge.</f>\n\n<b><f>Are you sure?</f></b>",
         "admin_co_admin_add_success": "✅ <b><f>Success!</f></b>\n<f>User ID</f> <code>{user_id}</code> <f>ab Co-Admin hai.</f>",
         "admin_co_admin_add_error": "❌ <b><f>Error!</f></b> <f>Co-Admin add nahi ho paya.</f>",
         "admin_co_admin_remove_no_co": "<f>Abhi koi Co-Admin nahi hai.</f>",
@@ -572,6 +590,18 @@ async def get_default_messages():
         "admin_merge_anime_confirm": "⚠️ <b><f>FINAL CONFIRMATION</f></b> ⚠️\n\n<f>Aap <b>SOURCE</b> anime:</f>\n<code>{source_name}</code>\n<f>ke saare seasons ko <b>TARGET</b> anime:</f>\n<code>{target_name}</code>\n<f>mein move kar rahe hain.</f>\n\n<f>Total</f> <b>{count}</b> <f>seasons move honge.</f>\n<f>Source anime</f> (<code>{source_name}</code>) <f>delete ho jayega.</f>\n\n<b><f>Are you sure?</f></b>",
         "admin_merge_anime_success": "✅ <b><f>Success!</f></b>\n<f>Total</f> <b>{count}</b> <f>seasons ko</f> <code>{source_name}</code> <f>se</f> <code>{target_name}</code> <f>mein move kar diya gaya hai.</f>\n<f>Source anime delete ho gaya hai.</f>",
         "admin_merge_anime_error": "❌ <b><f>Error!</f></b> <f>Merge nahi ho paya. Dono anime check karein. Error:</f> {e}",
+        
+        # === Admin: User Stats (NAYA v34) ===
+        "admin_stats_loading": "⏳ <f>Stats calculate kar raha hoon...</f>",
+        "admin_stats_result": "📊 <b><f>User Statistics</f></b> 📊\n\n<f>Total Users:</f> <b>{total_users}</b>\n\n🥇 <b><f>Top 10 Active Users:</f></b>\n{top_users_list}",
+        "admin_stats_no_users": "<f>Abhi bot par koi top users nahi hain.</f>",
+        
+        # === Admin: Broadcast (NAYA v34) ===
+        "admin_broadcast_start": "📢 <b><f>Broadcast Message</f></b>\n\n<f>Ab woh message bhejo jo aap sabhi users ko bhejna chahte hain.</f>\n<f>(Text, Photo, Video, kuch bhi...)</f>\n\n/cancel - <f>Cancel.</f>",
+        "admin_broadcast_confirm": "⚠️ <b><f>Confirm Karo</f></b> ⚠️\n\n<f>Aap yeh message sabhi</f> <b>{user_count}</b> <f>users ko bhej rahe hain.</f>\n\n<b><f>Are you sure?</f></b>",
+        "admin_broadcast_sending": "⏳ <f>Broadcast shuru kar raha hoon... Total</f> <b>{user_count}</b> <f>users.</f>\n\n<f>Isme time lag sakta hai. Bot ko band na karein.</f>",
+        "admin_broadcast_success": "✅ <b><f>Broadcast Complete!</f></b>\n\n<f>Sent to:</f> <b>{sent_count}</b> <f>users</f>\n<f>Failed for:</f> <b>{failed_count}</b> <f>users</f>",
+        "admin_broadcast_error": "❌ <b><f>Broadcast Error!</f></b>\n<f>Error:</f> {e}",
     }
 # --- Config Helper (MAJOR REFACTOR) ---
 async def get_config():
@@ -771,7 +801,7 @@ async def _update_anime_timestamp(anime_name: str):
         logger.info(f"'{anime_name}' ka timestamp update ho gaya.")
     except Exception as e:
         logger.error(f"'{anime_name}' ka timestamp update karne me error: {e}")
-# --- Conversation States (v33) ---
+# --- Conversation States (v34) ---
 (A_GET_NAME, A_GET_POSTER, A_GET_DESC, A_CONFIRM) = range(4) 
 (S_GET_ANIME, S_GET_NUMBER, S_GET_POSTER, S_GET_DESC, S_CONFIRM, S_ASK_MORE) = range(4, 10) 
 (E_GET_ANIME, E_GET_SEASON, E_GET_NUMBER, E_GET_480P, E_GET_720P, E_GET_1080P, E_GET_4K, E_ASK_MORE) = range(10, 18) 
@@ -794,8 +824,9 @@ async def _update_anime_timestamp(anime_name: str):
 (GL_MENU, GL_GET_ANIME, GL_GET_SEASON, GL_GET_EPISODE) = range(79, 83) 
 (AP_MENU, AP_SET_FONT, AP_SET_STYLE) = range(83, 86) 
 (CS_GET_MENU_PHOTO,) = range(86, 87) 
-# NAYA v33: Merge Anime States
 (MA_GET_TARGET_ANIME, MA_GET_SOURCE_ANIME, MA_CONFIRM) = range(87, 90)
+# NAYA v34: Broadcast States
+(BC_GET_MESSAGE, BC_CONFIRM) = range(90, 92)
 
 
 # --- NAYA: Global Cancel Function ---
@@ -907,6 +938,8 @@ async def back_to_user_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
 async def user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"User {update.effective_user.id} ne /user dabaya.")
+    # NAYA v34: User interaction track karo
+    await increment_user_interaction(update.effective_user.id)
     await show_user_menu(update, context)
 
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1336,7 +1369,6 @@ async def get_anime_for_episode(update: Update, context: ContextTypes.DEFAULT_TY
     text = await format_message(context, "admin_add_ep_select_season", {"anime_name": anime_name})
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
     return E_GET_SEASON
-
 async def get_season_for_episode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -2008,7 +2040,6 @@ async def edit_season_select(update: Update, context: ContextTypes.DEFAULT_TYPE)
     text = await format_message(context, "admin_edit_season_select_season", {"anime_name": anime_name})
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
     return ES_GET_SEASON
-
 async def edit_season_get_new_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -3532,7 +3563,7 @@ async def post_gen_send_to_chat(update: Update, context: ContextTypes.DEFAULT_TY
     context.user_data.clear()
     return ConversationHandler.END
 
-# --- Conversation: Admin Settings (Co-Admin, Custom Post) ---
+# --- Conversation: Admin Settings (Co-Admin, Custom Post, Broadcast) ---
 async def co_admin_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -3587,7 +3618,6 @@ async def co_admin_add_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await asyncio.sleep(3)
     await admin_settings_menu(update, context)
     return ConversationHandler.END
-
 async def co_admin_remove_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -3761,6 +3791,100 @@ async def custom_post_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await admin_settings_menu(update, context)
     return ConversationHandler.END
+
+# --- NAYA (v34): Conversation: Broadcast ---
+async def broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    text = await format_message(context, "admin_broadcast_start")
+    await query.edit_message_text(
+        text,
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_to_admin_settings")]]))
+    return BC_GET_MESSAGE
+
+async def broadcast_get_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Message ko context me store karo
+    context.user_data['broadcast_message'] = update.message
+    
+    # User count fetch karo
+    user_count = users_collection.count_documents({})
+    context.user_data['user_count'] = user_count
+    
+    text = await format_message(context, "admin_broadcast_confirm", {"user_count": user_count})
+    keyboard = [
+        [InlineKeyboardButton(f"✅ Haan, {user_count} Users ko Bhejo", callback_data="broadcast_confirm_yes")],
+        [InlineKeyboardButton("⬅️ Back", callback_data="back_to_admin_settings")]
+    ]
+    
+    # Message ko "preview" ki tarah forward karo
+    try:
+        await update.message.forward(chat_id=update.effective_chat.id)
+    except Exception as e:
+        logger.warning(f"Broadcast preview forward nahi kar paya: {e}")
+        # Agar forward fail ho (jaise text), toh reply karo
+        await update.message.reply_text("<b>--- PREVIEW UPAR HAI ---</b>", parse_mode=ParseMode.HTML)
+
+    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+    return BC_CONFIRM
+
+async def broadcast_do_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer("Broadcasting...")
+    
+    message_to_send = context.user_data.get('broadcast_message')
+    user_count = context.user_data.get('user_count', 0)
+    
+    if not message_to_send:
+        await query.edit_message_text("Error! Message nahi mila. /cancel karke dobara try karein.")
+        return ConversationHandler.END
+
+    text = await format_message(context, "admin_broadcast_sending", {"user_count": user_count})
+    await query.edit_message_text(text, parse_mode=ParseMode.HTML)
+    
+    # Naya thread/task start karo broadcast ke liye taaki UI block na ho
+    asyncio.create_task(send_broadcast_task(context, message_to_send, query.from_user.id))
+
+    context.user_data.clear()
+    await asyncio.sleep(3)
+    await admin_settings_menu(update, context)
+    return ConversationHandler.END
+
+async def send_broadcast_task(context: ContextTypes.DEFAULT_TYPE, message: Update.message, admin_user_id: int):
+    """
+    Asynchronously sabhi users ko message bhejega.
+    """
+    all_users = users_collection.find({}, {"_id": 1})
+    sent_count = 0
+    failed_count = 0
+    
+    for user in all_users:
+        user_id = user["_id"]
+        try:
+            # Message ko copy karke bhejo
+            await message.copy(chat_id=user_id)
+            sent_count += 1
+        except Forbidden:
+            logger.warning(f"Broadcast fail: User {user_id} ne bot ko block kiya.")
+            failed_count += 1
+        except Exception as e:
+            logger.error(f"Broadcast fail: User {user_id} ko bhejte waqt error: {e}")
+            failed_count += 1
+        
+        # Rate limit se bachne ke liye thoda pause
+        await asyncio.sleep(0.1) # Har 100ms me ek message
+
+    logger.info(f"Broadcast complete. Sent: {sent_count}, Failed: {failed_count}")
+    
+    # Admin ko report bhejo
+    try:
+        text = await format_message(context, "admin_broadcast_success", {
+            "sent_count": sent_count,
+            "failed_count": failed_count
+        })
+        await context.bot.send_message(chat_id=admin_user_id, text=text, parse_mode=ParseMode.HTML)
+    except Exception as e:
+        logger.error(f"Admin ko broadcast report bhejte waqt error: {e}")
 
 
 # --- NAYA: Conversation: Bot Appearance ---
@@ -4039,6 +4163,7 @@ async def admin_settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
         [InlineKeyboardButton("🚫 Remove Co-Admin", callback_data="admin_remove_co_admin")],
         [InlineKeyboardButton("👥 List Co-Admins", callback_data="admin_list_co_admin")],
         [InlineKeyboardButton("🚀 Custom Post Generator", callback_data="admin_custom_post")],
+        [InlineKeyboardButton("📢 Broadcast Message", callback_data="admin_broadcast_start")], # NAYA v34
         [InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]
     ]
     text = await format_message(context, "admin_menu_admin_settings")
@@ -4063,10 +4188,56 @@ async def update_photo_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     text = await format_message(context, "admin_menu_update_photo")
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+
+# NAYA (v34): User Statistics
+async def show_user_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    loading_text = await format_message(context, "admin_stats_loading")
+    await query.edit_message_text(loading_text, parse_mode=ParseMode.HTML)
+    
+    try:
+        # Total users
+        total_users = users_collection.count_documents({})
+        
+        # Top 10 users
+        top_users_cursor = users_collection.find(
+            {"interaction_count": {"$gt": 0}}
+        ).sort("interaction_count", DESCENDING).limit(10)
+        
+        top_users_list = []
+        for i, user in enumerate(top_users_cursor):
+            user_id = user["_id"]
+            count = user["interaction_count"]
+            name = user.get("full_name") or user.get("first_name", f"User {user_id}")
+            # HTML escape user name
+            name_safe = name.replace('<', '&lt;').replace('>', '&gt;')
+            top_users_list.append(f"{i+1}. <code>{user_id}</code> - {name_safe} (<b>{count}</b> hits)")
+            
+        if not top_users_list:
+            list_str = await format_message(context, "admin_stats_no_users")
+        else:
+            list_str = "\n".join(top_users_list)
+            
+        text = await format_message(context, "admin_stats_result", {
+            "total_users": total_users,
+            "top_users_list": list_str
+        })
+        
+        keyboard = [[InlineKeyboardButton("⬅️ Back to Admin Menu", callback_data="admin_menu")]]
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+
+    except Exception as e:
+        logger.error(f"User stats dikhane me error: {e}")
+        await query.edit_message_text(f"Error: {e}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="admin_menu")]]))
+
 # --- User Handlers ---
 async def handle_deep_link_donate(user: User, context: ContextTypes.DEFAULT_TYPE):
     """Deep link se /start=donate ko handle karega"""
     logger.info(f"User {user.id} ne Donate deep link use kiya.")
+    # NAYA v34: User interaction track karo
+    await increment_user_interaction(user.id)
     try:
         config = await get_config()
         qr_id = config.get('donate_qr_id')
@@ -4095,6 +4266,9 @@ async def handle_deep_link_donate(user: User, context: ContextTypes.DEFAULT_TYPE
 async def handle_deep_link_download(user: User, context: ContextTypes.DEFAULT_TYPE, payload: str):
     """Deep link se /start=dl... ko handle karega"""
     logger.info(f"User {user.id} ne Download deep link use kiya: {payload}")
+    
+    # NAYA v34: User interaction track karo
+    await increment_user_interaction(user.id)
     
     class DummyChat:
         def __init__(self, chat_id):
@@ -4137,12 +4311,21 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user_data = users_collection.find_one({"_id": user_id})
     if not user_data:
-        users_collection.insert_one({"_id": user_id, "first_name": user.first_name, "full_name": full_name, "username": user.username}) # NAYA
+        users_collection.insert_one({
+            "_id": user_id, 
+            "first_name": user.first_name, 
+            "full_name": full_name, 
+            "username": user.username,
+            "interaction_count": 1 # NAYA v34
+        })
         logger.info(f"Naya user database me add kiya: {user_id}")
     else:
         users_collection.update_one(
             {"_id": user_id},
-            {"$set": {"first_name": user.first_name, "full_name": full_name, "username": user.username}} # NAYA
+            {
+                "$set": {"first_name": user.first_name, "full_name": full_name, "username": user.username},
+                "$inc": {"interaction_count": 1} # NAYA v34
+            }
         )
     
     args = context.args
@@ -4249,6 +4432,9 @@ async def show_user_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, fro
 async def user_show_donate_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/menu se Donate button ko handle karega (DM bhejega)"""
     query = update.callback_query
+    # NAYA v34: User interaction track karo
+    await increment_user_interaction(query.from_user.id)
+    
     config = await get_config()
     qr_id = config.get('donate_qr_id')
     
@@ -4279,7 +4465,7 @@ async def user_show_donate_menu(update: Update, context: ContextTypes.DEFAULT_TY
         await query.answer("❌ Error! Dobara try karein.", show_alert=True)
 
 
-# --- Admin Panel (v33 UPDATE) ---
+# --- Admin Panel (v34 UPDATE) ---
 async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from_callback: bool = False):
     """Admin panel ka main menu"""
     user_id = update.effective_user.id
@@ -4309,7 +4495,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
         admin_menu_text = await format_message(context, "admin_panel_co")
     
     else:
-        # Main Admin Menu
+        # Main Admin Menu (NAYA v34 LAYOUT)
         keyboard = [
             [InlineKeyboardButton("➕ Add Content", callback_data="admin_menu_add_content")],
             [
@@ -4329,9 +4515,13 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
                 InlineKeyboardButton("🔗 Gen Link", callback_data="admin_gen_link") 
             ],
             [
+                # NAYA LAYOUT (2x2)
                 InlineKeyboardButton("🎨 Bot Appearance", callback_data="admin_menu_appearance"),
-                InlineKeyboardButton("⚙ Bot Messages", callback_data="admin_menu_messages")
+                InlineKeyboardButton("📊 User Statistics", callback_data="admin_show_stats") # NAYA
             ],
+             # NAYA LAYOUT (1x1)
+            [InlineKeyboardButton("⚙ Bot Messages", callback_data="admin_menu_messages")],
+             # NAYA LAYOUT (1x1)
             [InlineKeyboardButton("🛠️ Admin Settings", callback_data="admin_menu_admin_settings")] 
         ]
         admin_menu_text = await format_message(context, "admin_panel_main")
@@ -4356,7 +4546,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE, from
     else:
         await update.message.reply_text(admin_menu_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
 
-# --- User Download Handler (CallbackQuery) (v33 THUMBNAIL UPDATE) ---
+# --- User Download Handler (CallbackQuery) (v34 STATS UPDATE) ---
 async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Callback data 'dl' se shuru hone wale sabhi buttons ko handle karega.
@@ -4364,6 +4554,10 @@ async def download_button_handler(update: Update, context: ContextTypes.DEFAULT_
     query = update.callback_query
     user = query.from_user
     user_id = user.id
+    
+    # NAYA v34: User interaction track karo
+    await increment_user_interaction(user_id)
+    
     config = await get_config() 
     
     is_deep_link = not hasattr(query.message, 'edit_message_caption')
@@ -4755,7 +4949,7 @@ def run_async_bot_tasks(loop, app):
         loop.run_until_complete(app.stop())
         loop.close()
 
-# --- NAYA Main Bot Function (FINAL v33) ---
+# --- NAYA Main Bot Function (FINAL v34) ---
 def main():
     global bot_app
     PORT = int(os.environ.get("PORT", 8080))
@@ -5065,6 +5259,17 @@ def main():
         fallbacks=global_fallbacks + admin_settings_fallback,
         allow_reentry=True
     )
+    # NAYA v34: Broadcast Conv
+    broadcast_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(broadcast_start, pattern="^admin_broadcast_start$")],
+        states={
+            BC_GET_MESSAGE: [MessageHandler(filters.ALL & ~filters.COMMAND, broadcast_get_message)],
+            BC_CONFIRM: [CallbackQueryHandler(broadcast_do_send, pattern="^broadcast_confirm_yes$")]
+        },
+        fallbacks=global_fallbacks + admin_settings_fallback,
+        allow_reentry=True
+    )
+    
     set_delete_time_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(set_delete_time_start, pattern="^admin_set_delete_time$")],
         states={CS_GET_DELETE_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_delete_time_save)]},
@@ -5160,7 +5365,8 @@ def main():
     bot_app.add_handler(gen_link_conv)
     bot_app.add_handler(add_co_admin_conv) 
     bot_app.add_handler(remove_co_admin_conv) 
-    bot_app.add_handler(custom_post_conv) 
+    bot_app.add_handler(custom_post_conv)
+    bot_app.add_handler(broadcast_conv) # NAYA v34
     bot_app.add_handler(set_delete_time_conv) 
     bot_app.add_handler(set_messages_conv) 
     bot_app.add_handler(appearance_conv)
@@ -5182,6 +5388,7 @@ def main():
     bot_app.add_handler(CallbackQueryHandler(admin_settings_menu, pattern="^admin_menu_admin_settings$")) 
     bot_app.add_handler(CallbackQueryHandler(co_admin_list, pattern="^admin_list_co_admin$")) 
     bot_app.add_handler(CallbackQueryHandler(update_photo_menu, pattern="^admin_menu_update_photo$")) # NAYA
+    bot_app.add_handler(CallbackQueryHandler(show_user_stats, pattern="^admin_show_stats$")) # NAYA v34
 
     # User menu navigation (non-conversation)
     bot_app.add_handler(CallbackQueryHandler(user_show_donate_menu, pattern="^user_show_donate_menu$"))
